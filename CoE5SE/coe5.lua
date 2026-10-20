@@ -264,6 +264,7 @@ function require(name) end
 ---| "classLeader"           # index 0 to classLastIndex, string: the class leader's monster name. Read-only.
 ---| "classLastIndex"        # integer. Read-only.
 ---| "terrainName"           # index 0 to terrainLastIndex, string. Read-only.
+---| "fortPartWord"          # index 0 to 31, a fort part bit, string: the terrain word that sets it ("irongate" for 11, the bit of 2048), from the game's terrain reader; nil for a bit none sets. Read-only.
 ---| "terrainLastIndex"      # integer. Read-only.
 ---| "terrainIncome"         # index: a terrain (as terrainName), then a resource 0-13, integer: the terrain's own income of the resource per month, as its .c5m gives it (gold, iron, trade, herbs, fungus, weed, sacr, hands), before seasons, class bonuses and enchantments; nil for Gems (7-10, a square's squareGems), Relics and Lifeforce, which no terrain field gives. Read-only.
 ---| "ritualName"            # index 0 to ritualLastIndex, string. Read-only.

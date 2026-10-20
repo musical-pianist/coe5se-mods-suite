@@ -2226,6 +2226,9 @@
 #define RVA_TERRAIN_COUNT_IN_BOX               ADDR(        0x335440,          MAC_NOT_LOOKED_UP)
 #define RVA_ENCHANT_FIND                       ADDR(        0x2c1a80,          0x10055b470)
 #define RVA_SQUARE_FORT_PARTS                  ADDR(        0x12b380,          0x1004753f0)
+#define RVA_FORT_WORD_MATCH                    ADDR(        0x1c87f0,          0x100539ad0)
+#define RVA_FORT_WORD_CALLS                    ADDR(        0x1c54cf,          0x1005388fc)
+#define FORT_WORD_CALLS_SIZE                   0x100
 #define RVA_FIND_UNIT_WITH_ABILITY_AT          ADDR(        0x116ed0,          0x1004810cc)
 #define RVA_UNIT_RESISTANCES                   ADDR(        0x32a7a0,          0x10056768c)
 #define RVA_UNIT_BENEFITS                      ADDR(        0x320f60,          0x1005679f8)

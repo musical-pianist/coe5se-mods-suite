@@ -166,7 +166,7 @@ end)
 
 -- Note 30: The ritual screen readout. Hold the pointer on a ritual's row for RITUAL_HOVER_MS and its
 -- hover text, at the bottom of the screen, gets a list of what the ritual needs to cast under the
--- game's own reason. The "ritual_needs" setting picks Off (the default), the plain list, or the plain
+-- game's own reason. The "ritual_needs" setting picks Off, the plain list (the default), or the plain
 -- list plus the raw data a modder wants ("Advanced"); "ritual_needs_rows" picks greyed rows only (the
 -- default) or every row. Every name in it comes from the game's own tables while the game runs
 -- (resourceName, ritualTerrainName, planeName, monsterName, effectName), so a mod's resources,
@@ -351,6 +351,19 @@ local function promotionText(slot, count)
   return "Owned " .. orList(groups) .. " here" .. (count > 1 and (", up to " .. count) or "")
 end
 
+-- Note 68: The fort parts in a fortreq or nofortreq value, each by the terrain word that sets its
+-- bit (walls, irongate, ...), which CoE5SE reads from the game's terrain reader; a bit no word sets
+-- shows its number.
+local function fortPartWords(value)
+  local words = {}
+  for bit = 0, 31 do
+    if value & (1 << bit) ~= 0 then
+      table.insert(words, coe5.get("fortPartWord", bit) or ("fort part " .. (1 << bit)))
+    end
+  end
+  return words
+end
+
 -- A plane by its name on this map, or by number when it has none.
 local function planeCalled(plane)
   local name = plane >= 0 and plane <= 11 and coe5.get("planeName", plane) or ""
@@ -372,8 +385,8 @@ local RULE_LINES = {
   [973] = function(v) if v > 0 then return "No unit with ability " .. v .. " here" end end,            -- nofxherereq
   [974] = function(v, _, slot) if v ~= 0 then return promotionText(slot, v) end end,                     -- promotion
   [980] = function(v) if v > 0 then return "Enchantment " .. v .. " here" end end,                     -- enchherereq
-  [986] = function(v) if v ~= 0 then return "No fort parts " .. v .. " here" end end,                  -- nofortreq
-  [987] = function(v) if v ~= 0 then return "Fort parts " .. v .. " here" end end,                     -- fortreq
+  [986] = function(v) if v ~= 0 then return "No " .. orList(fortPartWords(v)) .. " here" end end,       -- nofortreq
+  [987] = function(v) if v ~= 0 then return table.concat(fortPartWords(v), " and ") .. " here" end end, -- fortreq
   [993] = function(v) if v ~= 0 then return "Owned portal" end end,                                    -- hasportalreq
   [998] = function(v) if v > 0 then return "No portal here" end end,                                   -- noportalreq
   [1034] = function(v) if v ~= 999 then return "Not in " .. planeCalled(v) end end,                     -- noplanereq

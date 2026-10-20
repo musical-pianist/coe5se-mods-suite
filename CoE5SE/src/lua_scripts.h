@@ -387,6 +387,7 @@ enum {
     T_COMMANDER_SPELL_LEVEL,
     T_SQUARE_LIBRARY_LEVEL,
     T_MONSTER_ABILITY,
+    T_FORT_PART_WORD,
 };
 typedef struct {
     const char *name;
@@ -490,6 +491,7 @@ typedef struct { const char *name; int count3, stride3, list, nameBack; uintptr_
 #define CEREMONY_LAST_TYPE T_CEREMONY_LAST
 #endif
 #define CEREMONY_INDEXES (CEREMONY_LAST + 1)
+#define FORT_PART_BITS 32
 // @platform-split slot_income: slotIncome reads nil on Mac (the income functions player_turn_start calls not looked up)
 // A player's income at its next turn start: Windows only.
 #ifdef __APPLE__
@@ -714,6 +716,8 @@ static const GameVar GAME_VARS[] = {
     {"ceremonyName",   0,                                 CEREMONY_NAME_TYPE, CEREMONY_INDEXES, 0, 0, 0, 0, 0, 0},
     {"ceremonyCost",   0,                                 CEREMONY_COST_TYPE, CEREMONY_INDEXES, 0, 0, 1, SITE_CEREMONY_COSTS, 0, 0},
     {"ceremonyLastIndex", 0,                              CEREMONY_LAST_TYPE, 1, 0, 0, 0, 0, 0, 0},
+    // The terrain word for fort part bit n (walls, irongate, ...), as the game's terrain reader has it.
+    {"fortPartWord",   0,                                 T_FORT_PART_WORD, FORT_PART_BITS, 0, 0, 0, 0, 0, 0},
 };
 static const GameVarShape GAME_VAR_SHAPES[] = {
     {"classRecruitName", 0, 0, LIST_TO_EMPTY_NAME, RECRUIT_MONSTER_NAME, 0, 0},
@@ -1518,6 +1522,79 @@ static int ritualEffectMetAt(const unsigned char *record, int i, int commander) 
     return rule < 5 ? count == 0 : count > 0;
 }
 
+// Fort part words. The game keeps no table of them: its terrain reader passes each word and its bit
+// to RVA_FORT_WORD_MATCH, so they are read from that code, once, and a word a game update adds needs
+// no change here.
+static const char *fortPartWords[FORT_PART_BITS];
+static int fortPartWordsRead;
+
+// The bit number of a value with one bit set, or -1.
+static int singleBitIndex(uint32_t value) {
+    if (!value || (value & (value - 1))) return -1;
+    int n = 0;
+    while (!(value & 1)) value >>= 1, n++;
+    return n;
+}
+
+// Windows: each `mov edx, bit / lea rcx, [rip+word] / mov r8d, 1 / add ebx, eax / call match` in
+// code[0..size), which sits at `at`. Returns how many words it stored in words[bit number].
+static __attribute__((unused)) int readFortWordsX64(const unsigned char *code, size_t size, uintptr_t at, uintptr_t match, const char **words) {
+    static const unsigned char MID[] = {0x41, 0xb8, 0x01, 0x00, 0x00, 0x00, 0x03, 0xd8};
+    int found = 0;
+    for (size_t i = 20; i + 5 <= size; i++) {
+        if (code[i] != 0xe8 || code[i - 20] != 0xba || memcmp(code + i - 15, "\x48\x8d\x0d", 3) || memcmp(code + i - 8, MID, sizeof MID)) continue;
+        int32_t rel, disp;
+        uint32_t bit;
+        memcpy(&rel, code + i + 1, 4);
+        if (at + i + 5 + (intptr_t)rel != match) continue;
+        memcpy(&bit, code + i - 19, 4);
+        memcpy(&disp, code + i - 12, 4);
+        int n = singleBitIndex(bit);
+        if (n < 0) continue;
+        words[n] = (const char *)(at + i - 8 + (intptr_t)disp);
+        found++;
+    }
+    return found;
+}
+
+// Mac: each `adrp x0, page / add x0, x0, #low / mov w1, #bit / bl match` in code[0..size), at `at`.
+static __attribute__((unused)) int readFortWordsArm64(const unsigned char *code, size_t size, uintptr_t at, uintptr_t match, const char **words) {
+    int found = 0;
+    for (size_t i = 12; i + 4 <= size; i += 4) {
+        uint32_t adrp, add, mov, bl;
+        memcpy(&adrp, code + i - 12, 4);
+        memcpy(&add, code + i - 8, 4);
+        memcpy(&mov, code + i - 4, 4);
+        memcpy(&bl, code + i, 4);
+        if ((bl & 0xfc000000) != 0x94000000 || (adrp & 0x9f00001f) != 0x90000000 || (add & 0xffc003ff) != 0x91000000 ||
+            (mov & 0xff80001f) != 0x52800001) continue;
+        int32_t offset = (int32_t)(bl << 6) >> 4;
+        if (at + i + (intptr_t)offset != match) continue;
+        int64_t pageImm = (int64_t)(((uint64_t)((adrp >> 5) & 0x7ffff) << 2 | ((adrp >> 29) & 3)) << 43) >> 31;
+        uintptr_t page = ((at + i - 12) & ~(uintptr_t)0xfff) + (intptr_t)pageImm;
+        int n = singleBitIndex(((mov >> 5) & 0xffff) << (16 * ((mov >> 21) & 3)));
+        if (n < 0) continue;
+        words[n] = (const char *)(page + ((add >> 10) & 0xfff));
+        found++;
+    }
+    return found;
+}
+
+// The terrain word for fort part bit `bit`, or NULL for a bit no word sets.
+static const char *fortPartWord(int bit) {
+    if (!fortPartWordsRead) {
+        fortPartWordsRead = 1;
+        const unsigned char *code = GAME_PTR(RVA_FORT_WORD_CALLS);
+#ifdef __APPLE__
+        int found = readFortWordsArm64(code, FORT_WORD_CALLS_SIZE, (uintptr_t)code, (uintptr_t)GAME_PTR(RVA_FORT_WORD_MATCH), fortPartWords);
+#else
+        int found = readFortWordsX64(code, FORT_WORD_CALLS_SIZE, (uintptr_t)code, (uintptr_t)GAME_PTR(RVA_FORT_WORD_MATCH), fortPartWords);
+#endif
+        writeLog("fort_part_words_read", "found=%d", found);
+    }
+    return bit >= 0 && bit < FORT_PART_BITS ? fortPartWords[bit] : NULL;
+}
+
 // The game's own name for Voice of El ceremony `ceremony`.
 static unsigned int ceremonyNameRva(int ceremony) {
     switch (ceremony) {
@@ -1701,6 +1778,12 @@ static int lGet(lua_State *L) {
         break;
     }
     case T_CEREMONY_LAST: lua_pushinteger(L, CEREMONY_LAST); break;
+    case T_FORT_PART_WORD: {
+        const char *word = fortPartWord((int)lua_tointeger(L, 2));
+        if (!word) lua_pushnil(L);
+        else lua_pushstring(L, word);
+        break;
+    }
     case T_UNIT_MOVE_FLAGS:
     case T_UNIT_FLAG_WORDS: {
         unsigned long long flags;

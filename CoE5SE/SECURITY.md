@@ -22,10 +22,10 @@ Their SHA-256 hashes:
 ```
 bcc0491698280804364f95bcf3e199c36af92590daf68b150e345c87030c3793  glu32.dll
 98d2178228765c1d22004e71afd2b37d3a7900227666054984d4ecd9af0e06f4  coe5se_loader.dll
-36cbc959153e0fd1058b2b8838afb68ef540f6f3d06dbb3c0c3e62db8e54b7f8  coe5se.c5plugin.dll
+4a5750d30cddd23fd621d29ce7b2a0f8abcddb6eaadf7c39aad118f23717c080  coe5se.c5plugin.dll
 bce82c49540715f23ab458bcae568eaeca92acf1fe2335e1175250b2a9489b8b  coe5se.dylib
 e86548e7caf466bb3709eb51e450bcffb9079c7fd57761d013526a18f909f0ca  coe5se_loader.dylib
-b699de19cfa75010c77fd4bd274cbf7026edbb11a3a4757bfb71c16e5cc2b62b  coe5se.c5plugin.dylib
+5e127c15df4e3ba54f8e621fc67ef2c141c1739d44498f40e6cfa1dca47ca7aa  coe5se.c5plugin.dylib
 ```
 
 The same list is `SHA256.txt`, in the format `shasum -a 256 -c SHA256.txt` and `sha256sum -c SHA256.txt` read.

@@ -38,7 +38,7 @@ tip "Deletes that save after the game asks to confirm."
 # the "Rituals" title themselves (a header before a choice would title nothing).
 newsetting ritual_needs
 choice
-default 0
+default 1
 label "Rituals"
 option 0 "Off"
 optiontip 0 "The ritual screen shows only the game's own hover text."
