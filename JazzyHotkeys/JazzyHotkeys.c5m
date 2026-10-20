@@ -1,0 +1,5 @@
+icon "banner.tga"
+description "Every key of the game's Keyboard Shortcuts list as a line in Mod Settings, one page per screen. The game's texts and the Keyboard Shortcuts list name the keys picked. Esc also opens the Game Menu on the map, beside F10. A Lua script; needs CoE5SE from Nexus Mods."
+needs_glu32.dll_and_CoE5SE_enabled_at_launch
+# CoE5SE takes the line above and does nothing with it. Without CoE5SE running, the game stops at
+# it with its Mod Error, which names the line, instead of loading this mod without CoE5SE.

@@ -1,0 +1,71 @@
+# Jazzy UI Tweaks' Mod Settings. CoE5SE reads this file right after JazzyUITweaks.c5m.
+
+# JazzyUITweaks.lua reads each of these with coe5.setting and follows it live.
+newsettingheader "Main menu"
+
+newsetting hide_read_tip
+onoff
+default 1
+label "Hide Read Tip"
+tip "The buttons below it move up to close the gap."
+
+newsetting keep_mod_banners
+onoff
+default 1
+label "Keep mod banners on screen"
+tip "The column of mod banners stays instead of fading away. The menu buttons' fade is the game's own Preferences setting."
+
+newsetting mod_banners
+choice
+default 1
+label "Mod banner size"
+option 0 "Full size"
+optiontip 0 "The enabled mods' banners on the right of the menu screens, at full size."
+option 1 "Half size"
+optiontip 1 "The enabled mods' banners on the right of the menu screens, at half size."
+option 2 "Hidden"
+optiontip 2 "No mod banners on the menu screens."
+
+newsettingheader "Load Game"
+
+newsetting save_delete
+onoff
+default 1
+label "<del> on each save"
+tip "Deletes that save after the game asks to confirm."
+
+# A choice is a box of its own, titled with its label, so the ritual screen's two settings carry
+# the "Rituals" title themselves (a header before a choice would title nothing).
+newsetting ritual_needs
+choice
+default 0
+label "Rituals"
+option 0 "Off"
+optiontip 0 "The ritual screen shows only the game's own hover text."
+option 1 "Plain needs"
+optiontip 1 "Ritual hover, 2 seconds: cast requirements under the game's text. White met, grey not met."
+option 2 "Advanced"
+optiontip 2 "The plain list, then the ritual's raw data for modders: reason codes, slot, school, level, flags, terrain code, base and charged costs, effects by their mod command, casts, and its strings."
+
+newsetting ritual_needs_rows
+choice
+default 0
+label "Needs readout on"
+option 0 "Greyed rows"
+optiontip 0 "Only the rituals the caster can't cast now."
+option 1 "All rows"
+optiontip 1 "Every ritual on the ritual screen."
+
+newsettingheader "Map editor"
+
+newsetting map_editor_grid
+onoff
+default 1
+label "Grid"
+tip "Show grid and Hide grid in the map editor's toolbox: square edges and map coordinates, x,y. Off at each start of the editor."
+
+newsetting map_editor_grid_key
+key
+default "x"
+label "Grid key"
+tip "Shows or hides the map editor's grid."

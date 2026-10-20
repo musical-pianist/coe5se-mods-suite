@@ -1,0 +1,2 @@
+# coe5config layouts: <version> <byte where the enabled mod list starts>
+# The CoE5SE stub and loader read this only for versions above 129 (0x81).

@@ -1,0 +1,5 @@
+icon "banner.tga"
+description "Load Game and Restart lines in the Game Menu, single player only. Load Game ends the game and loads a save from the game's own list. Restart ends the game and starts a new world with the same settings: map, society, options, players, classes, teams, colors, and names. Only a Random class or a Random society is rolled again. A Lua script; needs CoE5SE from Nexus Mods."
+needs_glu32.dll_and_CoE5SE_enabled_at_launch
+# CoE5SE takes the line above and does nothing with it. Without CoE5SE running, the game stops at
+# it with its Mod Error, which names the line, instead of loading this mod without CoE5SE.

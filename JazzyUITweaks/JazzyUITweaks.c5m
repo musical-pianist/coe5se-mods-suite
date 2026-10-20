@@ -1,0 +1,5 @@
+icon "banner.tga"
+description "Small changes to the game's own screens. A delete line on each save in Load Game. No Read Tip button on the main menu. Mod banners at half size, full size, or hidden, and kept on screen instead of fading. On the ritual screen, a list of what a ritual needs to cast in its hover text. In the map editor, a grid with each square's map coordinates. Each change has its own line in Mod Settings. A Lua script; needs CoE5SE from Nexus Mods."
+needs_glu32.dll_and_CoE5SE_enabled_at_launch
+# CoE5SE takes the line above and does nothing with it. Without CoE5SE running, the game stops at
+# it with its Mod Error, which names the line, instead of loading this mod without CoE5SE.

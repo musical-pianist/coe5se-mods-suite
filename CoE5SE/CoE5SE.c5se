@@ -1,0 +1,22 @@
+# CoE5SE's own Mod Settings. CoE5SE reads this file right after CoE5SE.c5m.
+
+newsetting auto_approve
+onoff
+default 1
+label "Approve new and changed DLLs automatically"
+tip "Off: each new or changed DLL waits for approval, asked at startup or given here. Takes effect next launch."
+
+newsetting script_log
+onoff
+default 0
+label "Enable copious logs"
+tip "Mods' own lines in coe5mod.log too. For a mod author's bug report."
+
+newsettingheader "Mac only"
+
+newsetting mac_workshop_list
+onoff
+default 1
+restart
+label "List subscribed Workshop mods on the Mods screen"
+tip "Mac only. CoE5SE lists Workshop mods for the game, which can't ask Steam. Off: only mods in ~/.coe5/mods."

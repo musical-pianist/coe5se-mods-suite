@@ -1,0 +1,21 @@
+icon "banner.tga"
+description "Adds the Adeptus Mechanicus class. Its Machine Cult spells need CoE5SE."
+
+# The tech-priests. Their magic is in the .c5se.
+newmonster "Tech-Priest"
+copystats "Captain"
+copyspr "Illusionist"
+
+newmonster "Archmagos"
+copystats "Captain"
+copyspr "Illusionist"
+
+newclass
+setclassname "Adeptus Mechanicus"
+classdescr "The Machine Cult's tech-priests, who wield the rites of the Omnissiah."
+classabdescr "Tech-priests cast the Machine Cult's spells (with CoE5SE)."
+hometerr 156
+setmaincom "Archmagos"
+addstartcom "Tech-Priest"
+addstartunits "Spearman" 5
+stdtroops

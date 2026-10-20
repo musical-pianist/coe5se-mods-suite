@@ -1,0 +1,5 @@
+icon "banner.tga"
+description "Whole new-game setups as presets, from map size and society to every player. Before Random Map Settings, a chosen preset fills in both setup screens; Setup Participants gets Save as preset, and each Ok there keeps the setup as Last game. A random classes checklist sets the classes an AI player's Random can roll. In a game, Extended Game Settings in the Game Menu changes battle reports, score graphs, common cause, and AI difficulty. A Lua script; needs CoE5SE from Nexus Mods."
+needs_glu32.dll_and_CoE5SE_enabled_at_launch
+# CoE5SE takes the line above and does nothing with it. Without CoE5SE running, the game stops at
+# it with its Mod Error, which names the line, instead of loading this mod without CoE5SE.

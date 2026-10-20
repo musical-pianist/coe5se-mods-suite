@@ -1,0 +1,1269 @@
+# Jazzy Hotkeys' Mod Settings. CoE5SE reads this file right after JazzyHotkeys.c5m.
+
+# One key setting per key of each line of the game's Keyboard Shortcuts list, named after its key
+# action (map_end_turn is coe5.keyAction.mapEndTurn), on a page per list section. Each group is
+# one screen, so no two lines of a screen hold the same key. No player can pick Esc, so every
+# line that has Esc is fixed; Esc opens the Game Menu on the map beside F10.
+# JazzyHotkeys.lua finds each setting by its key action's name, so a renamed setting is a key
+# the script never reads.
+
+newsettingpage map
+label "Map"
+
+newsetting map_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "map"
+
+newsetting map_recruit
+key
+default "r"
+label "Recruit"
+group "map"
+
+newsetting map_end_turn
+key
+default "y"
+label "End turn"
+group "map"
+
+newsetting map_messages
+key
+default "m"
+label "View messages"
+group "map"
+
+newsetting map_next_commander
+key
+default "n"
+label "Next commander"
+group "map"
+
+newsetting map_previous_commander
+key
+default "j"
+label "Previous commander"
+group "map"
+
+newsetting map_commander_done
+key
+default "Space"
+label "Commander is done for this turn"
+group "map"
+
+newsetting map_transfer
+key
+default "t"
+label "Transfer troops"
+group "map"
+
+newsetting map_special_power
+key
+default "p"
+label "Use commander's special power"
+group "map"
+
+newsetting map_unit_overview
+key
+default "F1"
+label "Unit overview"
+group "map"
+
+newsetting map_player_overview
+key
+default "F2"
+label "Player overview"
+group "map"
+
+newsetting map_class_description
+key
+default "F3"
+label "Class description"
+group "map"
+
+newsetting map_score_graphs
+key
+default "F5"
+label "View score graphs"
+group "map"
+
+newsetting map_active_mods
+key
+default "F6"
+label "View active mods"
+group "map"
+
+newsetting map_game_menu_f10
+key
+default "F10"
+label "Game Menu"
+group "map"
+fixed
+tip "F10 always opens the Game Menu, so no other map key can have it."
+
+newsetting map_game_menu
+key
+default "Esc"
+label "Game Menu"
+group "map"
+fixed
+tip "Esc always opens the Game Menu on the map, as F10 does, so no other map key can have it."
+
+newsetting map_square_info
+key
+default "i"
+label "Square terrain info"
+group "map"
+
+newsetting map_commander_stats
+key
+default "v"
+label "View commander stats"
+group "map"
+
+newsetting map_trade
+key
+default "l"
+label "Trade administration"
+group "map"
+
+newsetting map_sentry
+key
+default "s"
+label "Sentry commander"
+group "map"
+
+newsetting map_location_power
+key
+default "o"
+label "Use location's special power"
+group "map"
+
+newsetting map_burn_forest_screen
+key
+default "b"
+label "Burn forest screen"
+group "map"
+
+newsetting map_burn_forest_now
+key
+default "B"
+label "Burn forest immediately"
+group "map"
+
+newsetting map_hunt_slaves
+key
+default "h"
+label "Hunt for slaves"
+group "map"
+
+newsetting map_plane_shift
+key
+default "u"
+label "Plane shift"
+group "map"
+
+newsetting map_continue
+key
+default ","
+label "Continue moving"
+group "map"
+
+newsetting map_continue_all
+key
+default "."
+label "Continue moving for all commanders"
+group "map"
+
+newsetting map_square_details
+key
+default "ctrl+i"
+label "Detailed square info"
+group "map"
+
+newsetting map_astrology
+key
+default "ctrl+a"
+label "Astrology reading"
+group "map"
+
+newsetting map_repeat_orders
+key
+default "ctrl+r"
+label "Execute all repeat orders now"
+group "map"
+
+newsetting map_scry
+key
+default "alt+s"
+label "Scry"
+group "map"
+
+newsetting map_center
+key
+default "Home"
+label "Center map on starting citadel"
+group "map"
+
+newsetting map_hide_icons
+key
+default "Tab"
+label "Hide map icons (hold)"
+group "map"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_zoom_in
+key
+default "PgUp"
+label "Zoom in"
+group "map"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_zoom_out
+key
+default "PgDn"
+label "Zoom out"
+group "map"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_scroll_up
+key
+default "Up"
+label "Scroll map up"
+group "map"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_scroll_down
+key
+default "Down"
+label "Scroll map down"
+group "map"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_scroll_left
+key
+default "Left"
+label "Scroll map left"
+group "map"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_scroll_right
+key
+default "Right"
+label "Scroll map right"
+group "map"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_move_up_left
+key
+default "q"
+label "Move commander up-left"
+group "map"
+tip "The game moves commanders with letter keys only while Preferences has Key movement QWE/AD/ZXC on. The keypad and the number keys always move them."
+
+newsetting map_move_up
+key
+default "w"
+label "Move commander up"
+group "map"
+tip "The game moves commanders with letter keys only while Preferences has Key movement QWE/AD/ZXC on. The keypad and the number keys always move them."
+
+newsetting map_move_up_right
+key
+default "e"
+label "Move commander up-right"
+group "map"
+tip "The game moves commanders with letter keys only while Preferences has Key movement QWE/AD/ZXC on. The keypad and the number keys always move them."
+
+newsetting map_move_left
+key
+default "a"
+label "Move commander left"
+group "map"
+tip "The game moves commanders with letter keys only while Preferences has Key movement QWE/AD/ZXC on. The keypad and the number keys always move them."
+
+newsetting map_move_right
+key
+default "d"
+label "Move commander right"
+group "map"
+tip "The game moves commanders with letter keys only while Preferences has Key movement QWE/AD/ZXC on. The keypad and the number keys always move them."
+
+newsetting map_move_down_left
+key
+default "z"
+label "Move commander down-left"
+group "map"
+tip "The game moves commanders with letter keys only while Preferences has Key movement QWE/AD/ZXC on. The keypad and the number keys always move them."
+
+newsetting map_move_down
+key
+default "x"
+label "Move commander down"
+group "map"
+tip "The game moves commanders with letter keys only while Preferences has Key movement QWE/AD/ZXC on. The keypad and the number keys always move them."
+
+newsetting map_move_down_right
+key
+default "c"
+label "Move commander down-right"
+group "map"
+tip "The game moves commanders with letter keys only while Preferences has Key movement QWE/AD/ZXC on. The keypad and the number keys always move them."
+
+newsetting map_look_up_left
+key
+default "Q"
+label "Info on the square up-left"
+group "map"
+
+newsetting map_look_up
+key
+default "W"
+label "Info on the square up"
+group "map"
+
+newsetting map_look_up_right
+key
+default "E"
+label "Info on the square up-right"
+group "map"
+
+newsetting map_look_left
+key
+default "A"
+label "Info on the square to the left"
+group "map"
+
+newsetting map_look_right
+key
+default "D"
+label "Info on the square to the right"
+group "map"
+
+newsetting map_look_down_left
+key
+default "Z"
+label "Info on the square down-left"
+group "map"
+
+newsetting map_look_down
+key
+default "X"
+label "Info on the square down"
+group "map"
+
+newsetting map_look_down_right
+key
+default "C"
+label "Info on the square down-right"
+group "map"
+
+newsetting map_look_here
+key
+default "S"
+label "Info on the commander's square"
+group "map"
+
+newsettingpage army
+label "Transfer troops"
+
+newsetting army_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "army"
+
+newsetting army_select_all
+key
+default "a"
+label "Select/deselect all units"
+group "army"
+
+newsetting army_select_afflicted
+key
+default "b"
+label "Select units with battle afflictions"
+group "army"
+
+newsetting army_deselect_slow_ap
+key
+default "c"
+label "Deselect units with fewer AP left"
+group "army"
+
+newsetting army_select_fast
+key
+default "f"
+label "Select all fast units"
+group "army"
+
+newsetting army_select_horror
+key
+default "h"
+label "Select horror marked units"
+group "army"
+
+newsetting army_show_items
+key
+default "i"
+label "Highlight units with magic items"
+group "army"
+
+newsetting army_deselect_landlubbers
+key
+default "l"
+label "Deselect all landlubbers"
+group "army"
+
+newsetting army_select_type
+key
+default "m"
+label "Select the type under the pointer"
+group "army"
+
+newsetting army_select_slow
+key
+default "s"
+label "Select all slow units"
+group "army"
+
+newsetting army_select_wounded
+key
+default "w"
+label "Select all wounded units"
+group "army"
+
+newsetting army_select_ten
+key
+default "+"
+label "Select 10 of the type under the pointer"
+group "army"
+
+newsetting army_deselect_ten
+key
+default "-"
+label "Deselect 10 of the type under the pointer"
+group "army"
+
+newsetting army_scroll_up
+key
+default "Up"
+label "Scroll battlefield up"
+group "army"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting army_scroll_down
+key
+default "Down"
+label "Scroll battlefield down"
+group "army"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting army_scroll_left
+key
+default "Left"
+label "Scroll battlefield left"
+group "army"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting army_scroll_right
+key
+default "Right"
+label "Scroll battlefield right"
+group "army"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting army_select_menu
+key
+default "F2"
+label "Select units menu"
+group "army"
+
+newsetting army_exit
+key
+default "Esc"
+label "Exit screen"
+group "army"
+fixed
+tip "The game gives this line Esc, and Esc can't change."
+
+newsettingpage battle
+label "Battle"
+
+newsetting battle_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "battle"
+
+newsetting battle_scroll_left
+key
+default "Left"
+label "Scroll battlefield left"
+group "battle"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting battle_scroll_right
+key
+default "Right"
+label "Scroll battlefield right"
+group "battle"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting battle_messages_up
+key
+default "-"
+label "Scroll battle messages back"
+group "battle"
+
+newsetting battle_messages_down
+key
+default "+"
+label "Scroll battle messages forward"
+group "battle"
+
+newsetting battle_messages_page_up
+key
+default "PgUp"
+label "Scroll battle messages a page back"
+group "battle"
+
+newsetting battle_messages_page_down
+key
+default "PgDn"
+label "Scroll battle messages a page forward"
+group "battle"
+
+newsetting battle_pause
+key
+default "Space"
+label "Pause battle"
+group "battle"
+
+newsetting battle_terrain_only
+key
+default "Tab"
+label "View terrain only (hold)"
+group "battle"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting battle_slow_motion
+key
+default "z"
+label "Slow motion"
+group "battle"
+
+newsetting battle_normal_speed
+key
+default "n"
+label "Normal speed"
+group "battle"
+
+newsetting battle_fast_forward
+key
+default "f"
+label "Fast forward"
+group "battle"
+
+newsetting battle_speed_up
+key
+default "s"
+label "Speed up one notch"
+group "battle"
+
+newsetting battle_skip
+key
+default "q"
+label "Skip entire battle"
+group "battle"
+
+newsetting battle_log
+key
+default "l"
+label "Hide/show battle log"
+group "battle"
+
+newsetting battle_grid
+key
+default "g"
+label "Hide/show grid"
+group "battle"
+
+newsetting battle_terrain
+key
+default "t"
+label "Hide/show terrain"
+group "battle"
+
+newsetting battle_unit_list
+key
+default "F1"
+label "View unit list"
+group "battle"
+
+newsettingpage map_editor
+label "Map editor"
+
+newsetting map_editor_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "map_editor"
+
+newsetting map_editor_menu
+key
+default "Tab"
+label "Hide/show menu"
+group "map_editor"
+
+newsetting map_editor_pencil_1
+key
+default "1"
+label "Pencil size 1"
+group "map_editor"
+
+newsetting map_editor_pencil_2
+key
+default "2"
+label "Pencil size 2"
+group "map_editor"
+
+newsetting map_editor_pencil_3
+key
+default "3"
+label "Pencil size 3"
+group "map_editor"
+
+newsetting map_editor_clear_square
+key
+default "c"
+label "Clear special attributes for square"
+group "map_editor"
+
+newsetting map_editor_name_square
+key
+default "n"
+label "Name square"
+group "map_editor"
+
+newsetting map_editor_gateway
+key
+default "g"
+label "Create gateway"
+group "map_editor"
+
+newsetting map_editor_overlay
+key
+default "o"
+label "Toggle overlay on/off"
+group "map_editor"
+
+newsetting map_editor_quit
+key
+default "q"
+label "Quit map editor"
+group "map_editor"
+
+newsetting map_editor_random_world
+key
+default "r"
+label "Recreate random world"
+group "map_editor"
+
+newsetting map_editor_terrain_list
+key
+default "t"
+label "Select terrain from a list"
+group "map_editor"
+
+newsetting map_editor_unflood
+key
+default "u"
+label "Unflood all squares"
+group "map_editor"
+
+newsetting map_editor_fixed_temp
+key
+default "E"
+label "Set fixed temp on entire map"
+group "map_editor"
+
+newsetting map_editor_remove_fancy
+key
+default "F"
+label "Remove all fancy terrains"
+group "map_editor"
+
+newsetting map_editor_load_overlay
+key
+default "O"
+label "Load overlay image"
+group "map_editor"
+
+newsetting map_editor_fix_temps
+key
+default "T"
+label "Fix temperatures"
+group "map_editor"
+
+newsetting map_editor_circular_temp
+key
+default "ctrl+u"
+label "Circular temperature on map"
+group "map_editor"
+
+newsetting map_editor_load
+key
+default "ctrl+l"
+label "Load map"
+group "map_editor"
+
+newsetting map_editor_draw_temp
+key
+default "ctrl+e"
+label "Enter temperature to draw with"
+group "map_editor"
+
+newsetting map_editor_resize
+key
+default "ctrl+r"
+label "Resize map (scale)"
+group "map_editor"
+
+newsetting map_editor_save
+key
+default "ctrl+s"
+label "Save map"
+group "map_editor"
+
+newsetting map_editor_remove_cold
+key
+default "ctrl+t"
+label "Remove all cold temperatures"
+group "map_editor"
+
+newsetting map_editor_reduce_square
+key
+default "alt+r"
+label "Reduce square"
+group "map_editor"
+
+newsetting map_editor_destroy_square
+key
+default "alt+d"
+label "Destroy square"
+group "map_editor"
+
+newsetting map_editor_move_up
+key
+default "U"
+label "Move entire map up"
+group "map_editor"
+
+newsetting map_editor_move_left
+key
+default "H"
+label "Move entire map left"
+group "map_editor"
+
+newsetting map_editor_move_down
+key
+default "J"
+label "Move entire map down"
+group "map_editor"
+
+newsetting map_editor_move_right
+key
+default "K"
+label "Move entire map right"
+group "map_editor"
+
+newsetting map_editor_zoom_in
+key
+default "PgUp"
+label "Zoom in"
+group "map_editor"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_editor_zoom_out
+key
+default "PgDn"
+label "Zoom out"
+group "map_editor"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_editor_scroll_up
+key
+default "Up"
+label "Scroll map up"
+group "map_editor"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_editor_scroll_down
+key
+default "Down"
+label "Scroll map down"
+group "map_editor"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_editor_scroll_left
+key
+default "Left"
+label "Scroll map left"
+group "map_editor"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_editor_scroll_right
+key
+default "Right"
+label "Scroll map right"
+group "map_editor"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_editor_plane_above
+key
+default "<"
+label "Plane above"
+group "map_editor"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_editor_plane_below
+key
+default ">"
+label "Plane below"
+group "map_editor"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting map_editor_refresh
+key
+default "F5"
+label "Refresh map"
+group "map_editor"
+
+newsettingpage battle_editor
+label "Battle map editor"
+
+newsetting battle_editor_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "battle_editor"
+
+newsetting battle_editor_ground_mode
+key
+default "Tab"
+label "Switch to/from ground edit mode"
+group "battle_editor"
+
+newsetting battle_editor_center_line
+key
+default "ctrl+w"
+label "Show center line"
+group "battle_editor"
+
+newsetting battle_editor_replacer
+key
+default "r"
+label "Replacer"
+group "battle_editor"
+
+newsetting battle_editor_draw
+key
+default "q"
+label "Draw normally"
+group "battle_editor"
+
+newsetting battle_editor_load
+key
+default "ctrl+l"
+label "Load"
+group "battle_editor"
+
+newsetting battle_editor_save
+key
+default "ctrl+s"
+label "Save"
+group "battle_editor"
+
+newsetting battle_editor_monster
+key
+default "m"
+label "Select monster"
+group "battle_editor"
+
+newsetting battle_editor_clear
+key
+default "C"
+label "Clear all"
+group "battle_editor"
+
+newsetting battle_editor_scroll_up
+key
+default "u"
+label "Scroll terrain up"
+group "battle_editor"
+
+newsetting battle_editor_scroll_left
+key
+default "h"
+label "Scroll terrain left"
+group "battle_editor"
+
+newsetting battle_editor_scroll_down
+key
+default "j"
+label "Scroll terrain down"
+group "battle_editor"
+
+newsetting battle_editor_scroll_right
+key
+default "k"
+label "Scroll terrain right"
+group "battle_editor"
+
+newsetting battle_editor_no_deploy
+key
+default "alt+b"
+label "No deploy mark"
+group "battle_editor"
+
+newsetting battle_editor_catapult
+key
+default "alt+c"
+label "Catapult mark"
+group "battle_editor"
+
+newsetting battle_editor_effigy
+key
+default "alt+e"
+label "Effigy mark"
+group "battle_editor"
+
+newsetting battle_editor_mage
+key
+default "alt+m"
+label "Mage mark"
+group "battle_editor"
+
+newsetting battle_editor_melee
+key
+default "alt+s"
+label "Melee soldier mark"
+group "battle_editor"
+
+newsetting battle_editor_demon_hand
+key
+default "alt+d"
+label "Demon hand mark"
+group "battle_editor"
+
+newsetting battle_editor_demon_head
+key
+default "alt+h"
+label "Demon head mark"
+group "battle_editor"
+
+newsetting battle_editor_firewall
+key
+default "alt+v"
+label "Firewall mark"
+group "battle_editor"
+
+newsetting battle_editor_no_trees
+key
+default "alt+t"
+label "No random trees/bushes here"
+group "battle_editor"
+
+newsetting battle_editor_clear_no_trees
+key
+default "alt+y"
+label "Clear no random trees/bushes mark"
+group "battle_editor"
+
+newsettingpage recruit
+label "Recruitment"
+
+newsetting recruit_clear_here
+key
+default "c"
+label "Clear auto-recruitment at this location"
+group "recruit"
+
+newsetting recruit_clear_all
+key
+default "v"
+label "Clear auto-recruitment everywhere"
+group "recruit"
+
+newsetting recruit_location_1
+key
+default "1"
+label "Recruitment location 1"
+group "recruit"
+
+newsetting recruit_location_2
+key
+default "2"
+label "Recruitment location 2"
+group "recruit"
+
+newsetting recruit_location_3
+key
+default "3"
+label "Recruitment location 3"
+group "recruit"
+
+newsetting recruit_location_4
+key
+default "4"
+label "Recruitment location 4"
+group "recruit"
+
+newsetting recruit_location_5
+key
+default "5"
+label "Recruitment location 5"
+group "recruit"
+
+newsetting recruit_location_6
+key
+default "6"
+label "Recruitment location 6"
+group "recruit"
+
+newsetting recruit_location_7
+key
+default "7"
+label "Recruitment location 7"
+group "recruit"
+
+newsetting recruit_location_8
+key
+default "8"
+label "Recruitment location 8"
+group "recruit"
+
+newsetting recruit_location_9
+key
+default "9"
+label "Recruitment location 9"
+group "recruit"
+
+newsetting recruit_previous
+key
+default "Left"
+label "Previous recruitment location"
+group "recruit"
+
+newsetting recruit_next
+key
+default "Right"
+label "Next recruitment location"
+group "recruit"
+
+newsetting recruit_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "recruit"
+
+newsetting recruit_exit
+key
+default "Esc"
+label "Exit recruitment"
+group "recruit"
+fixed
+tip "The game gives this line Esc, and Esc can't change."
+
+newsetting recruit_exit_enter
+key
+default "Enter"
+label "Exit recruitment, second key"
+group "recruit"
+
+newsettingpage participants
+label "Setup participants"
+
+newsetting participants_add
+key
+default "n"
+label "Add new player"
+group "participants"
+
+newsetting participants_colors
+key
+default "r"
+label "Randomize player colors by team"
+group "participants"
+
+newsetting participants_all_human
+key
+default "H"
+label "Set all players to human controlled"
+group "participants"
+
+newsetting participants_all_ai
+key
+default "A"
+label "Set all players to AI controlled"
+group "participants"
+
+newsetting participants_ai_up
+key
+default "+"
+label "Increase all AI levels by 1"
+group "participants"
+
+newsetting participants_ai_down
+key
+default "-"
+label "Decrease all AI levels by 1"
+group "participants"
+
+newsetting participants_remove
+key
+default "Backspace"
+label "Remove last player"
+group "participants"
+
+newsetting participants_ok
+key
+default "Enter"
+label "Ok"
+group "participants"
+
+newsetting participants_cancel
+key
+default "Esc"
+label "Cancel"
+group "participants"
+fixed
+tip "The game gives this line Esc, and Esc can't change."
+
+newsettingpage view_army
+label "Army on the battlefield"
+
+newsetting view_army_show_items
+key
+default "i"
+label "Highlight units with magic items"
+group "view_army"
+
+newsetting view_army_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "view_army"
+
+newsetting view_army_scroll_left
+key
+default "Left"
+label "Scroll battlefield left"
+group "view_army"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting view_army_scroll_right
+key
+default "Right"
+label "Scroll battlefield right"
+group "view_army"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting view_army_terrain_only
+key
+default "Tab"
+label "View terrain only (hold)"
+group "view_army"
+tip "Held key. Shifted symbols such as ? not read."
+
+newsetting view_army_exit
+key
+default "Enter"
+label "Exit screen"
+group "view_army"
+
+newsetting view_army_exit_esc
+key
+default "Esc"
+label "Exit screen, second key"
+group "view_army"
+fixed
+tip "The game gives this line Esc, and Esc can't change."
+
+newsettingpage unit_list
+label "Battle unit list"
+
+newsetting unit_list_commanders
+key
+default "c"
+label "Only show commanders"
+group "unit_list"
+
+newsetting unit_list_show_all
+key
+default "A"
+label "Show all (terrain units too)"
+group "unit_list"
+
+newsetting unit_list_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "unit_list"
+
+newsetting unit_list_exit
+key
+default "Enter"
+label "Exit screen"
+group "unit_list"
+
+newsetting unit_list_exit_esc
+key
+default "Esc"
+label "Exit screen, second key"
+group "unit_list"
+fixed
+tip "The game gives this line Esc, and Esc can't change."
+
+newsettingpage file_browser
+label "Load game"
+
+newsetting file_browser_delete
+key
+default "Delete"
+label "Delete save file under pointer"
+group "file_browser"
+
+newsetting file_browser_delete_ctrl
+key
+default "ctrl+d"
+label "Delete save file, second key"
+group "file_browser"
+
+newsetting file_browser_sort_time
+key
+default "ctrl+t"
+label "Sort by time"
+group "file_browser"
+
+newsetting file_browser_sort_name
+key
+default "ctrl+n"
+label "Sort by name"
+group "file_browser"
+
+newsetting file_browser_shortcuts_list
+key
+default "?"
+label "List keyboard shortcuts"
+group "file_browser"
+
+newsetting file_browser_cancel
+key
+default "Esc"
+label "Cancel"
+group "file_browser"
+fixed
+tip "The game gives this line Esc, and Esc can't change."
