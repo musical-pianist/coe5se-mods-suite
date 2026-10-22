@@ -18,7 +18,7 @@ irm https://gitlab.com/musical_pianist/coe5se_mods_suite/-/raw/main/install.ps1 
 curl -fsSL https://gitlab.com/musical_pianist/coe5se_mods_suite/-/raw/main/install.sh | bash
 ```
 
-On Mac, one step is left after it finishes: in Steam, click the gear on Conquest of Elysium 5's page, then Properties, General, and set Launch Options to `/usr/bin/env DYLD_INSERT_LIBRARIES=coe5se.dylib %command%`. The script prints this line too.
+On Mac, the first install leaves one step: in Steam, click the gear on Conquest of Elysium 5's page, then Properties, General, and set Launch Options to `/usr/bin/env DYLD_INSERT_LIBRARIES=coe5se.dylib %command%`. The script prints this step only while Launch Options still need it, so an update doesn't ask again.
 
 Then start the game. The first time, CoE5SE turns itself on and tells you so. Turn on the Jazzy mods you want on the Mods screen.
 
