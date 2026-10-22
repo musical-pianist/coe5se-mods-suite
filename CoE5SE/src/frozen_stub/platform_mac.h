@@ -1,7 +1,4 @@
-// Mac versions of the Win32 calls the plugins use, so one source builds for both platforms. Only
-// the calls the plugins make are here, each with the Windows behavior they rely on (file patterns
-// and INI keys ignore case, a missing INI key gives the default). An HMODULE is the image's Mach-O
-// header, and a plugin's DllMain runs from a constructor when the dylib loads.
+// Mac versions of the Win32 calls the plugins use, so one source builds for both platforms.
 #pragma once
 #include <ctype.h>
 #include <dirent.h>
@@ -120,8 +117,7 @@ static PLATFORM_UNUSED BOOL FindClose(HANDLE h) {
 }
 
 // ---- Profile (INI) files -------------------------------------------------------------------------
-// Reads the value of `key` in `[section]` into `out`, with spaces around it trimmed. Returns 1 if
-// the key was found.
+// Reads the value of `key` in `[section]` into `out`, with spaces around it trimmed.
 static PLATFORM_UNUSED int iniRead(const char *file, const char *section, const char *key, char *out, size_t size) {
     FILE *f = fopen(file, "r");
     if (!f) return 0;
@@ -162,16 +158,13 @@ static PLATFORM_UNUSED UINT GetPrivateProfileIntA(const char *section, const cha
     return iniRead(file, section, key, text, sizeof text) ? (UINT)strtol(text, NULL, 10) : (UINT)fallback;
 }
 
-// Rewrites the file with `key` set to `value` in `[section]`. A new key goes at the end of its
-// section, and a new section at the end of the file. A NULL `value` deletes the key, as on Windows.
-// The file is written to a .tmp copy first and then renamed over the old one.
+// Rewrites the file with `key` set to `value` in `[section]`; NULL deletes the key.
 static PLATFORM_UNUSED BOOL WritePrivateProfileStringA(const char *section, const char *key, const char *value, const char *file) {
     char *old = NULL;
     size_t oldLen = 0;
     FILE *f = fopen(file, "r");
     if (f) {
-        // A file whose size can't be read fails the write, since going on would replace it with
-        // only the new key.
+        // A file whose size can't be read fails the write.
         long size = fseek(f, 0, SEEK_END) == 0 ? ftell(f) : -1;
         if (size < 0 || fseek(f, 0, SEEK_SET) != 0) { fclose(f); return FALSE; }
         oldLen = (size_t)size;
@@ -227,8 +220,7 @@ static PLATFORM_UNUSED HMODULE mainExecutableHeader(void) {
     return NULL;
 }
 
-// With NULL, returns the game. Otherwise returns the loaded image whose file name (the last part
-// of its path) or full path is `name`, ignoring case.
+// The game with NULL, else the loaded image named `name`, ignoring case.
 static PLATFORM_UNUSED HMODULE GetModuleHandleA(const char *name) {
     if (!name) return mainExecutableHeader();
     for (uint32_t i = 0; i < _dyld_image_count(); i++) {
@@ -262,10 +254,7 @@ static PLATFORM_UNUSED BOOL GetModuleHandleExA(DWORD flags, LPCSTR address, HMOD
     return *out != NULL;
 }
 
-// Calls DllMain with DLL_PROCESS_ATTACH when the dylib loads, as Windows does, if the dylib has
-// one: a plugin that starts through coe5sePluginLoad needn't. It is looked up in this dylib's own
-// exports, because a reference to a DllMain the dylib doesn't define wouldn't link. The loader has
-// no DllMain, so it defines PLATFORM_NO_DLLMAIN to leave this out.
+// Calls DllMain with DLL_PROCESS_ATTACH when the dylib loads, if it has one.
 #ifndef PLATFORM_NO_DLLMAIN
 BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved);
 __attribute__((constructor)) static void platformRunDllMain(void) {

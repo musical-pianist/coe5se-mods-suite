@@ -70,8 +70,7 @@ static int addNameToList(int index, const char *name) {
     return 1;
 }
 
-// Reads a word's quoted text into `out`; returns its length, or -1 (refused, logged) when it has none
-// or it is longer than `max`.
+// Reads a word's quoted text into `out`; returns its length, or -1 when refused.
 static int readNameText(const char *word, const char *args, char *out, size_t size, size_t max, int mod) {
     const char *p = args;
     int len = readSpellQuoted(&p, out, size);
@@ -165,8 +164,7 @@ static const char *nameListLineHook(const char *line, size_t len, int mod, int l
     return nametypeLineFor(word, nameListType(index), mod, text);
 }
 
-// The same for declinedModCommandHook, when no plugin loaded: a quoted nametype is skipped, or the game
-// would read it as -1. Returns 1 to skip the line.
+// The same when no plugin loaded; returns 1 to skip the line.
 static int declinedNameListLine(const char *line, size_t len, int level) {
     if (level != 2 || !spellWordIs(line, len, NAMETYPE_WORD)) return 0;
     const char *args = line + len;

@@ -1,10 +1,4 @@
-// The game's user folder (userDir), and in it the approved plugin DLLs:
-//   coe5se/approved.txt   one "<sha256>  <dll file name>" line per approved DLL (sha256sum's format)
-// The players' Mod Settings picks, auto_approve among them, are settings_files.h's.
-// The stubs include this file and players keep their copy for good, so what they use of it can only
-// grow in ways old copies still read.
-// Include build_path.h first. A file that defines USER_DIR_FROM_INCLUDER first writes userDir
-// itself (CoE5SE, which reads the game's own answer once the game has one).
+// The game's user folder, and in it the approved plugin DLLs (coe5se/approved.txt).
 
 #pragma once
 #ifdef _WIN32
@@ -20,11 +14,7 @@
 #define SHA256_HEX_LEN 64
 
 // ---- The game's user folder -------------------------------------------------------------------------
-// The game picks it once at startup (RVA_SETUP_DIRS, decompiled on both builds): the default,
-// "%APPDATA%/coe5" on Windows and "~/.coe5" on Mac, expanded (expandGamePath); if COE5_SAVE is set,
-// its value, expanded, instead. It makes that folder (makeGameDir), and when it can't, it uses
-// "coe5fallback", relative to the working folder; when that can't be made either, the game stops.
-// coe5config, mods, saves, settings, and approvals all live in it.
+// The game picks its user folder once at startup.
 #ifdef _WIN32
 #define USER_DIR_ENV     "APPDATA"
 #define USER_DIR_FMT     "%s\\coe5"
@@ -52,11 +42,7 @@ static __attribute__((unused)) void joinGamePath(char *out, size_t size, const c
     out[n] = '\0';
 }
 
-// The game's expand_path (RVA_EXPAND_PATH), on `path`, which holds `size` bytes: a leading %NAME%
-// becomes getenv(NAME), or "." when NAME isn't set (no closing % leaves it as it is); then, when
-// HOME is set, "~" and "~/" become HOME and a leading "~/" becomes HOME + "/"; then trailing slashes
-// and backslashes go (a path of one character keeps its own); then, with `backslashes` (Windows),
-// every slash becomes a backslash. A result longer than `size` is cut, as the game's is.
+// The game's expand_path on `path`, which holds `size` bytes.
 static __attribute__((unused)) void expandGamePath(char *path, size_t size, int backslashes) {
     char name[GAME_PATH_SIZE], rest[GAME_PATH_SIZE];
     if (path[0] == '%') {
@@ -82,8 +68,7 @@ static __attribute__((unused)) void expandGamePath(char *path, size_t size, int 
         if (*c == '/') *c = '\\';
 }
 
-// The game's make_dir (RVA_MAKE_DIR): 0 when the folder is there, 1 once made (with any missing
-// folders above it), -1 when it can't be made.
+// The game's make_dir: 0 when the folder is there, 1 once made, -1 when it can't be made.
 static __attribute__((unused)) int makeGameDir(const char *path) {
     char dir[GAME_PATH_SIZE];
     size_t len = strlen(path);
@@ -103,9 +88,7 @@ static __attribute__((unused)) int makeGameDir(const char *path) {
     return CreateDirectoryA(dir, NULL) ? 1 : -1;
 }
 
-// Writes the folder the game will use as its user folder to `out`, made as the game makes it, by
-// the rule above. Returns 0, with the reason in *reason, when there is none: no_user_dir (the game
-// stops then) or path_too_long (it doesn't fit in `size`; buildPath logs it).
+// Writes the folder the game will use as its user folder to `out`.
 static __attribute__((unused)) int findGameUserDir(char *out, size_t size, const char **reason) {
     char dir[GAME_PATH_SIZE];
 #ifdef _WIN32
@@ -135,23 +118,19 @@ static __attribute__((unused)) int findGameUserDir(char *out, size_t size, const
     return 1;
 }
 
-// Writes the user folder that stubs up to version 7 read to `out`: USER_DIR_ENV's value, or "."
-// when it isn't set, plus "\coe5" or "/.coe5". The loader uses it for those stubs, so they keep
-// reading the folder they always read. Returns 0 when it doesn't fit (buildPath logs it).
+// Writes the user folder that stubs up to version 7 read to `out`.
 static __attribute__((unused)) int legacyUserDir(char *out, size_t size) {
     const char *root = getenv(USER_DIR_ENV);
     return buildPath(out, size, __func__, USER_DIR_FMT, root ? root : ".");
 }
 
-// The user folder this process uses, once set: the stub sets it with findGameUserDir, the loader
-// from the stub's LoaderStart, CoE5SE as userDir says.
+// The user folder this process uses, once set.
 static char userDirPath[MAX_PATH];
 
 #ifdef USER_DIR_FROM_INCLUDER
 static const char *userDir(void);
 #else
-// The user folder: userDirPath, found by the game's rule the first time when nothing set it
-// (USER_DIR_FALLBACK when even that fails, which is the folder the game would try last).
+// The user folder, found by the game's rule when nothing set it.
 static __attribute__((unused)) const char *userDir(void) {
     const char *reason;
     if (!userDirPath[0] && !findGameUserDir(userDirPath, sizeof userDirPath, &reason))
@@ -161,7 +140,6 @@ static __attribute__((unused)) const char *userDir(void) {
 #endif
 
 // Writes the full path of `file` in CoE5SE's folder to `out`, creating the folder first if needed.
-// Returns 0, with `out` empty, when the path doesn't fit (buildPath logs it).
 static __attribute__((unused)) int coe5seUserFile(const char *file, char *out, size_t size) {
     if (!buildPath(out, size, __func__, "%s" USER_DIR_SEP COE5SE_USER_DIR, userDir())) return 0;
     CreateDirectoryA(out, NULL);
@@ -169,15 +147,9 @@ static __attribute__((unused)) int coe5seUserFile(const char *file, char *out, s
 }
 
 // ---- CoE5SE's files left in the folder older stubs read --------------------------------------------
-// A player who used CoE5SE with COE5_SAVE set under a stub up to version 7 has CoE5SE's own files
-// (coe5se/, jazzy_mod_settings/) in legacyUserDir's folder, not in the game's folder, which a version 8
-// stub and CoE5SE use. Each such file the user folder doesn't have is read from the old folder, and
-// copied into the user folder before its first write there, so no approval, pick, or untick is lost.
-// The old folder is never written or deleted. With no COE5_SAVE the two folders are one, and nothing
-// here does anything.
+// The user folder that a stub up to version 7 read, when it differs from the game's.
 
-// Writes the old folder's path of `file` in its subfolder `folder` to `out`, and returns 1, when the
-// old folder isn't the user folder and has the file.
+// Writes the old folder's path of `file` to `out`, when the old folder has the file.
 static __attribute__((unused)) int oldUserFile(const char *folder, const char *file, char *out, size_t size) {
     char old[MAX_PATH];
     if (!legacyUserDir(old, sizeof old) || !strcmp(old, userDir())) return 0;   // Logged by buildPath, or the same folder
@@ -185,8 +157,7 @@ static __attribute__((unused)) int oldUserFile(const char *folder, const char *f
            GetFileAttributesA(out) != INVALID_FILE_ATTRIBUTES;
 }
 
-// Writes the path to read `file` (in the user folder's subfolder `folder`) from to `out`: the user
-// folder's, or the old folder's when only that has it. Returns 0 when the path doesn't fit.
+// Writes the path to read `file` from to `out`: the user folder's, or the old folder's.
 static __attribute__((unused)) int userFileToRead(const char *folder, const char *file, char *out, size_t size) {
     char old[MAX_PATH];
     if (!buildPath(out, size, __func__, "%s" USER_DIR_SEP "%s" USER_DIR_SEP "%s", userDir(), folder, file)) return 0;
@@ -215,9 +186,7 @@ static __attribute__((unused)) int copyUserFile(const char *from, const char *to
     return ok;
 }
 
-// Writes the user folder's path of `file` in its subfolder `folder` to `out`, making the subfolder,
-// and first copying the old folder's file there when only that has it (logged
-// user_file_copied, or user_file_not_copied). Returns 0 when the path doesn't fit.
+// Writes the user folder's path of `file` to `out`, copying the old folder's file there first if needed.
 static __attribute__((unused)) int userFileToWrite(const char *folder, const char *file, char *out, size_t size) {
     char old[MAX_PATH];
     if (!buildPath(out, size, __func__, "%s" USER_DIR_SEP "%s", userDir(), folder)) return 0;
@@ -245,8 +214,7 @@ static __attribute__((unused)) int isHashApproved(const char *hash) {
     return approved;
 }
 
-// Adds the hash to approved.txt (the old folder's approvals copied in first, when only it has them).
-// Returns 0 if it couldn't be written.
+// Adds the hash to approved.txt.
 static __attribute__((unused)) int approveHash(const char *hash, const char *dllName) {
     char path[MAX_PATH];
     if (!userFileToWrite(COE5SE_USER_DIR, "approved.txt", path, sizeof path)) return 0;

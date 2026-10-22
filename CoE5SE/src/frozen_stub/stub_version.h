@@ -1,7 +1,4 @@
-// The stubs' versions, each logged as loader_version on every launch's first line (stub.h). Raise
-// one with any change to its stub's bytes or a header it includes: players copy the stub once, so
-// a new one means every player copies it again, or says Yes when CoE5SE offers it (stub_update.h).
-// CoE5SE reads them as the versions its release ships.
+// The stubs' versions, each logged as loader_version on every launch's first line.
 
 #pragma once
 

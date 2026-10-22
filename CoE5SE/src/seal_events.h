@@ -96,8 +96,10 @@ static unsigned char *generatedSiteTarget(CallSite site) {
 
 // installSite's step before it checks a site's calls.
 static int checkSplitMinUnitsCode(void);
+static int checkGameStartOnceCode(void);
 static int prepareSiteCode(CallSite site) {
     if (site == SITE_GAME_SAVE) return hookSaveFileOpens();
+    if (site == SITE_GAME_START) return checkGameStartOnceCode();
     if (site == SITE_AI_SPLIT_ARMY) return checkSplitMinUnitsCode();
     if (site == SITE_SEAL_EVENT) return patchSealEventStep();
     return 1;

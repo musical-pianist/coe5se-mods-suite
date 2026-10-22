@@ -700,17 +700,19 @@ lineColour = wrapped and lineColour
 -- edges and each square's map coordinates, x,y, in its bottom right corner; "Hide grid" and the key
 -- take it away. Zoomed far out, where a label in every square would be too small to read and too
 -- many to draw, the coordinates run along the top and left edges of the map instead, like a table's
--- headers. The numbers are the ones a map file uses: x and y counted from the plane's own first
--- square. The grid is off each time the editor opens. Everything it looks like is set here:
+-- headers; in between, the labels fade out as the headers fade in. Labels and headers keep one size
+-- at every zoom, so only their places move while the zoom glides. The numbers are the ones a map
+-- file uses: x and y counted from the plane's own first square. The grid is off each time the
+-- editor opens. Everything it looks like is set here:
 local GRID_R, GRID_G, GRID_B = 1, 1, 1   -- the lines' and labels' colour, white, each 0 to 1
-local GRID_ALPHA = 0.3                   -- the labels' opacity, and the lines' at first: 0 invisible, 1 solid
-local LINE_ALPHA_STEP = 0.1              -- each click of "Grid lines +" or "Grid lines -" moves the lines' opacity this much...
+local GRID_ALPHA = 0.3                   -- the edge headers' opacity, and the lines' and square labels' at first: 0 invisible, 1 solid
+local LINE_ALPHA_STEP = 0.1              -- each click of "Grid lines +" or "Grid lines -" moves the lines' and square labels' opacity this much...
 local LINE_ALPHA_MIN, LINE_ALPHA_MAX = 0.1, 1   -- ...within these
 local GRID_LINE_WIDTH = 1                -- the lines' width in screen pixels
-local LABEL_MIN_ZOOM = 36                -- squares at least this many UI units wide get a label each; smaller ones get the edge headers
-local LABEL_SIZE_PER_ZOOM = 0.2          -- a square's label is this share of the square's width high...
-local LABEL_SIZE_MIN, LABEL_SIZE_MAX = 9, 13   -- ...but never smaller or bigger than these
-local HEADER_SIZE = 9                    -- the edge headers' height
+local LABEL_MIN_ZOOM = 36                -- squares wider than this many UI units get a label each; up to it, only the edge headers
+local LABEL_FULL_ZOOM = 48               -- from LABEL_MIN_ZOOM to here the labels fade in and the headers out; wider squares get only the labels
+local TEXT_SIZE = 10                     -- the labels' and edge headers' height, the same at every zoom
+local HEADER_STEPS = {1, 2, 5, 10, 20, 50}   -- the edge headers number every 1st, 2nd, 5th... column or row, the smallest of these that keeps them apart
 local LABEL_PAD = 2                      -- the gap between a label and its square's edges
 local CHAR_WIDTH = 0.35                  -- a character's width as a share of the text size, to right-align the labels
 local PLANE_BAR = 25                     -- the plane buttons along the top of the screen, which the headers stay under
@@ -729,9 +731,10 @@ local showGrid = coe5.addMapEditorLine{label = "Show grid", tooltip = "Square ed
 local hideGrid = coe5.addMapEditorLine{label = "Hide grid", tooltip = "Square edges and map coordinates, x,y",
   visible = function() return gridAllowed() and gridOn end, onClick = function() gridOn = false end}
 
--- Note 66: The lines' opacity, which the player sets with "Grid lines +" and "Grid lines -" and which
--- stays from one editor and one launch to the next in the data file editor_grid.ini. It is kept in
--- tenths, a whole number, so ten clicks up and ten down land exactly where they started.
+-- Note 66: The opacity of the lines and of each square's label, which the player sets with "Grid
+-- lines +" and "Grid lines -" and which stays from one editor and one launch to the next in the data
+-- file editor_grid.ini. It is kept in tenths, a whole number, so ten clicks up and ten down land
+-- exactly where they started.
 local LINE_ALPHA_FILE = "editor_grid"
 local lineTenths = math.floor(GRID_ALPHA * 10 + 0.5)
 local saved = coe5.readIni(LINE_ALPHA_FILE)
@@ -749,9 +752,9 @@ end
 
 -- Note 67: The two opacity lines, right under "Hide grid" (lines show in the order they were added),
 -- only while the grid is on.
-local linesUp = coe5.addMapEditorLine{label = "Grid lines +", tooltip = "Grid lines more opaque",
+local linesUp = coe5.addMapEditorLine{label = "Grid lines +", tooltip = "Grid lines and coordinates more opaque",
   visible = function() return gridAllowed() and gridOn end, onClick = function() changeLineAlpha(1) end}
-local linesDown = coe5.addMapEditorLine{label = "Grid lines -", tooltip = "Grid lines less opaque",
+local linesDown = coe5.addMapEditorLine{label = "Grid lines -", tooltip = "Grid lines and coordinates less opaque",
   visible = function() return gridAllowed() and gridOn end, onClick = function() changeLineAlpha(-1) end}
 
 -- Note 60: MAP_EDITOR runs the whole editor: next returns when the player quits it. The grid starts
@@ -779,8 +782,16 @@ local editorKey = coe5.wrap("MAP_EDITOR_WAIT", function(next, block, mode)
 end)
 
 -- Note 62: The label for one number pair, right-aligned so its last digit ends at `right`.
-local function drawRight(text, right, y, size)
-  coe5.ui.drawText(right - #text * size * CHAR_WIDTH, y, size, text, GRID_R, GRID_G, GRID_B, GRID_ALPHA)
+local function drawRight(text, right, y, size, alpha)
+  coe5.ui.drawText(right - #text * size * CHAR_WIDTH, y, size, text, GRID_R, GRID_G, GRID_B, alpha)
+end
+
+-- The smallest of HEADER_STEPS that is at least `needed` columns or rows (the last one past them).
+local function roundStep(needed)
+  for _, step in ipairs(HEADER_STEPS) do
+    if step >= needed then return step end
+  end
+  return HEADER_STEPS[#HEADER_STEPS]
 end
 
 -- Note 63: Draws the grid. coe5.mapView says where the squares are: square (x, y) is `zoom` UI units
@@ -801,36 +812,40 @@ local function drawGrid()
     local uy = v.originY - y * s
     coe5.ui.drawLine(left, uy, right, uy, GRID_R, GRID_G, GRID_B, alpha, GRID_LINE_WIDTH)
   end
-  if s >= LABEL_MIN_ZOOM then
-    -- A label in each square's bottom right corner.
-    local size = math.max(LABEL_SIZE_MIN, math.min(LABEL_SIZE_MAX, s * LABEL_SIZE_PER_ZOOM))
+  -- How far the labels have faded in: 0 up to LABEL_MIN_ZOOM, 1 from LABEL_FULL_ZOOM. The headers
+  -- fade out by the same amount.
+  local labelsIn = math.max(0, math.min(1, (s - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM)))
+  if labelsIn > 0 then
+    -- A label in each square's bottom right corner, as opaque as the lines.
     for x = v.firstX, v.lastX do
       local squareRight = v.originX + (x + 1) * s - LABEL_PAD
       for y = v.firstY, v.lastY do
-        drawRight((x - v.planeX) .. "," .. (y - v.planeY), squareRight, v.originY - (y + 1) * s + LABEL_PAD, size)
+        drawRight((x - v.planeX) .. "," .. (y - v.planeY), squareRight, v.originY - (y + 1) * s + LABEL_PAD, TEXT_SIZE, alpha * labelsIn)
       end
     end
-    return
   end
+  if labelsIn >= 1 then return end
   -- Note 64: The edge headers: x along the top, y down the left, each over its column or row, just
   -- outside the map where the screen has room, else on the map's own edge squares. A number goes on
-  -- every `step`th column or row, so they never overlap.
+  -- every `step`th column or row, so they never overlap, and the steps are round ones, so the
+  -- numbers shown stay put while the zoom glides until the step changes.
+  local headerAlpha = GRID_ALPHA * (1 - labelsIn)
   local digits = #tostring(math.max(v.planeW, v.planeH))
-  local step = math.ceil((digits * HEADER_SIZE * CHAR_WIDTH + LABEL_PAD) / s)
-  local headerY = math.min(top + LABEL_PAD, v.screenH - PLANE_BAR - HEADER_SIZE)
+  local step = roundStep((digits * TEXT_SIZE * CHAR_WIDTH + LABEL_PAD) / s)
+  local headerY = math.min(top + LABEL_PAD, v.screenH - PLANE_BAR - TEXT_SIZE)
   for x = v.firstX, v.lastX do
     if (x - v.planeX) % step == 0 then
-      drawRight(tostring(x - v.planeX), v.originX + (x + 1) * s - 1, headerY, HEADER_SIZE)
+      drawRight(tostring(x - v.planeX), v.originX + (x + 1) * s - 1, headerY, TEXT_SIZE, headerAlpha)
     end
   end
-  local rowStep = math.ceil((HEADER_SIZE + 1) / s)
+  local rowStep = roundStep((TEXT_SIZE + 1) / s)
   for y = v.firstY, v.lastY do
     if (y - v.planeY) % rowStep == 0 then
       local rowBottom = v.originY - (y + 1) * s
       local text = tostring(y - v.planeY)
-      local edge = math.max(left - LABEL_PAD, #text * HEADER_SIZE * CHAR_WIDTH)
-      if toolboxShown and rowBottom + s > TOOLBOX_BOTTOM then edge = math.max(edge, TOOLBOX_RIGHT + #text * HEADER_SIZE * CHAR_WIDTH) end
-      drawRight(text, edge, rowBottom + (s - HEADER_SIZE) / 2, HEADER_SIZE)
+      local edge = math.max(left - LABEL_PAD, #text * TEXT_SIZE * CHAR_WIDTH)
+      if toolboxShown and rowBottom + s > TOOLBOX_BOTTOM then edge = math.max(edge, TOOLBOX_RIGHT + #text * TEXT_SIZE * CHAR_WIDTH) end
+      drawRight(text, edge, rowBottom + (s - TEXT_SIZE) / 2, TEXT_SIZE, headerAlpha)
     end
   end
 end

@@ -1,9 +1,4 @@
-// How coe5mod.log writes a byte that would break a line: every entry is one line of the file, so a
-// byte below 0x20 or 0x7f in an entry's text (a \n or \r a mod's text holds, a terminal escape) is
-// written escaped, \n, \r, and \t as those two characters, the rest as \xNN. No text a mod supplies
-// (a script's coe5.log text, a name it passes, a mod or file name) can then start a line that looks
-// like another plugin's. A backslash is written as it is, so a Windows path reads as it is.
-// common.h's writeLog uses it, and the loader's (startup_log.h).
+// How coe5mod.log writes a byte that would break a line.
 #pragma once
 #include <stddef.h>
 
@@ -20,8 +15,7 @@ static __attribute__((unused)) size_t logEscapeGrowth(const char *text, size_t l
     return extra;
 }
 
-// Escapes text[0..length) in place, from the back, into text[0..length + extra), where extra is
-// logEscapeGrowth(text, length). The buffer must hold length + extra bytes.
+// Escapes text[0..length) in place, from the back.
 static __attribute__((unused)) void escapeLogText(char *text, size_t length, size_t extra) {
     static const char hex[] = "0123456789abcdef";
     for (size_t i = length, j = length + extra; i != j;) {

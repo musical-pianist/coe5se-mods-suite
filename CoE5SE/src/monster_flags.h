@@ -43,9 +43,11 @@ static int isFlagOff(const char *args) {
 // Sets or clears `bit` on the parser's current monster and item.
 static int setMonsterFlag(unsigned long long bit, int on) {
     int monster = G32(RVA_MONSTER_CURRENT), item = G32(RVA_ITEM_CURRENT), changed = 0;
+    unsigned char *record = monsterRecord(monster);
     unsigned long long *flags[2] = {
-        monster >= 0 && monster < MONSTER_TABLE_MAX ? (unsigned long long *)(gameBase + RVA_MONSTER_FLAGS + (size_t)monster * MONSTER_SIZE) : NULL,
-        item >= 0 && item < ITEM_TABLE_MAX ? (unsigned long long *)(gameBase + RVA_ITEM_FLAGS + (size_t)item * ITEM_SIZE) : NULL,
+        record ? (unsigned long long *)(record + (RVA_MONSTER_FLAGS - RVA_MONSTER_TABLE)) : NULL,
+        item >= 0 && item < tableRecords(TABLE_ITEM)
+            ? (unsigned long long *)(tableAddress(TABLE_ITEM) + (RVA_ITEM_FLAGS - RVA_ITEM_TABLE) + (size_t)item * ITEM_SIZE) : NULL,
     };
     for (int i = 0; i < 2; i++) {
         if (!flags[i]) continue;

@@ -1,7 +1,4 @@
-// What the loader does before loading a plugin DLL: lock the file, hash it, and check the hash
-// against approved.txt (approvals.h), asking the player when auto-approve is off. The stubs use only
-// loadDllFile: from version 8 they load the loader without a hash check.
-// Include after startup_log.h, which brings writeLog and buildPath.
+// Locks a plugin DLL, hashes it, and checks the hash against approved.txt.
 #pragma once
 #ifdef _WIN32
 #include <bcrypt.h>
@@ -13,9 +10,7 @@
 #include "approvals.h"
 
 #ifdef _WIN32
-// Opens a DLL so nobody can change, replace, or delete it while the handle is open. Reads are
-// shared, so LoadLibrary can still read it. Hash through this handle and keep it open until the load
-// is done, so the DLL that loads is the one that was hashed.
+// Opens a DLL so nobody can change, replace, or delete it while the handle is open.
 static __attribute__((unused)) HANDLE lockDllFile(const char *path) {
     return CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 }
@@ -43,8 +38,7 @@ static __attribute__((unused)) int hashFileSha256(HANDLE file, char *hex) {
     return ok;
 }
 #else
-// macOS can't lock a file against writers, so the handle is a plain read-only descriptor: only a
-// process that can already write to the mods folder could swap the file between hash and load.
+// macOS can't lock a file against writers, so the handle is a plain read-only descriptor.
 static __attribute__((unused)) HANDLE lockDllFile(const char *path) {
     int fd = open(path, O_RDONLY);
     return fd < 0 ? INVALID_HANDLE_VALUE : (HANDLE)(intptr_t)fd;
@@ -71,9 +65,7 @@ static __attribute__((unused)) int hashFileSha256(HANDLE file, char *hex) {
 }
 #endif
 
-// Asks the player, before the game window opens, whether to load `path`, a DLL of the mod `mod`
-// whose hash isn't approved. `isCoe5se` is 1 for CoE5SE's own DLLs, without which no mod DLL loads.
-// Returns 1 for Yes. No is the default button, and on Mac an alert that can't be shown counts as No.
+// Asks the player whether to load `path`, a DLL whose hash isn't approved.
 static __attribute__((unused)) int askApproval(const char *mod, const char *path, const char *hash, int isCoe5se) {
     char text[2048];
     // The file path and hash are in coe5mod.log (loader_plugin_*).
@@ -98,9 +90,7 @@ static __attribute__((unused)) int askApproval(const char *mod, const char *path
 #endif
 }
 
-// Checks the DLL `name` of `mod`, found in `source` at `path` with SHA-256 `hash`: an approved hash
-// passes, and a new one is approved when `autoApprove` is on or the player says Yes, then recorded in
-// approved.txt. Returns 1 when the DLL may load. Each outcome is logged.
+// Checks the DLL `name`'s hash: approved, or approved now by auto-approve or the player.
 static __attribute__((unused)) int approveDll(const char *name, const char *mod, const char *source, const char *path, const char *hash,
                       int autoApprove, int isCoe5se) {
     if (isHashApproved(hash)) return 1;
@@ -120,8 +110,6 @@ static __attribute__((unused)) int approveDll(const char *name, const char *mod,
 static __attribute__((unused)) void *loadDllFile(const char *path, char *error, size_t errorSize) {
 #ifdef _WIN32
     // With the altered search path, Windows looks for the DLLs it imports in its own folder first.
-    // SEM_FAILCRITICALERRORS: a damaged DLL fails the load with an error code, instead of Windows'
-    // "Bad Image" box, which held the game with no window.
     DWORD oldMode = 0;
     SetThreadErrorMode(SEM_FAILCRITICALERRORS, &oldMode);
     HMODULE module = LoadLibraryExA(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);

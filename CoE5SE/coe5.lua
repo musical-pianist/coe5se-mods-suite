@@ -59,6 +59,9 @@
 --   Keep the map from a click      coe5.set("mouseButtons", 0)   (the same wrap)
 --   Send an AI explorer elsewhere  coe5.wrap("AI_EXPLORE", function(next, c, comstr) local s, x, y = next(c, comstr) return s, x, y end)   (Windows only)
 --   A square's plane and portal    coe5.get("squarePlane", x, y), coe5.get("squarePortal", x, y), coe5.portalExits(x, y)
+--   Tint a plane's map             coe5.setPlaneTint("Inferno", 1, 0.5, 0, 0.2), coe5.clearPlaneTint("Inferno"); local r, g, b, s = coe5.get("planeTint", 4)
+--   Draw a mod terrain like a game one  coe5.setTerrainLooks{terrain = "Dungeon Wall", ground = "Cave Wall", picture = "./wall.tga"}   (at load)
+--   Change a square as the world is built  coe5.wrap("PLAY_GAME_NEW_WORLD", function(next, mode) local r = next(mode) coe5.set("squareTerrain", x, y, t) coe5.set("squareName", x, y, "Old Tower") return r end)
 --   A commander's square           local u = coe5.get("commanderUnit", c); coe5.get("unitX", u), coe5.get("unitY", u)
 --   Can an AI commander get there  coe5.route(c, x, y)   (nil for no route; only inside an AI site's wrap)
 --   A square's army, unit by unit  for _, u in ipairs(coe5.squareUnits(x, y)) do local s = coe5.get("unitStrength", coe5.get("unitOwner", u), u) end   (Windows only for the strength)
@@ -217,7 +220,7 @@ function require(name) end
 ---| "northPart"             # integer: Random Map Settings' North/South box, the north part in percent; -1 is the default, 25. -1 to 100, what the game stores. Not saved.
 ---| "southPart"             # integer: the south part in percent; -1 is the default, 35. -1 to 100. Not saved.
 ---| "slotController"        # per slot, integer: coe5.controller.human, .ai, or .removed; .independent once the world is built.
----| "slotClass"             # per slot, integer: the class's `newclass` number (1 Baron, 2 Necromancer, ...). Below 1 is Random until the classes are rolled. At most 199, the class table's last record.
+---| "slotClass"             # per slot, integer: the class's `newclass` number (1 Baron, 2 Necromancer, ...). Below 1 is Random until the classes are rolled. At most the class table's last record: 249 on Windows, 199 on Mac.
 ---| "slotAi"                # per slot, integer: AI difficulty, 2 (Jester) by default. Read at each turn start and saved, so a change in a game counts. At most 10: the game stops on a level outside 1 to 10 at an AI's turn.
 ---| "slotTeam"              # per slot, integer: below 0 is no team.
 ---| "slotName"              # per slot, string, up to 31 characters. Humans' names are filled in after PLAY_GAME_NEW_WORLD's next.
@@ -283,8 +286,11 @@ function require(name) end
 ---| "squareArmy"            # index: x 0-999, then y 0-159, integer: the square's army size, 0 for none, -1 while two players at war share it. Read-only.
 ---| "squareArmyOwner"       # index: x 0-999, then y 0-159, integer: the player whose army stands on the square (the one with the most units), -1 for none or a square outside the world. Read-only.
 ---| "squareOwner"           # index: x 0-999, then y 0-159, integer: the player who owns the square, -1 for none. Read-only.
----| "squareTerrain"         # index: x 0-999, then y 0-159, integer: the square's terrain type (terrainName takes it). Read-only.
----| "squarePortal"          # index: x 0-999, then y 0-159, integer: the square's portal number, 0 for none. Above 0 it is an entrance, and coe5.portalExits lists where it leads; below 0 only an exit. Read-only.
+---| "squareTerrain"         # index: x 0-999, then y 0-159, integer: the square's terrain type (terrainName takes it). Writable only while the world is built (see squareName): 0 to the last terrain, through the game's own terrain change, which also sets the square's gems, its owner's bookkeeping and its ground (set squareGround after it).
+---| "squarePortal"          # index: x 0-999, then y 0-159, integer: the square's portal number, 0 for none. Above 0 it is an entrance, and coe5.portalExits lists where it leads; below 0 only an exit. Squares with the same number (either sign) link, on any plane, as a map file's portal x y n makes them. Writable only while the world is built (see squareName): -32768 to 32767.
+---| "squareGround"          # index: x 0-999, then y 0-159, integer: the square's ground, what a map file's groundrow writes; the game sets it from the terrain and the plane. Writable only while the world is built (see squareName): 0 to 28.
+---| "squareTemperature"     # index: x 0-999, then y 0-159, integer: the square's temperature, what a map file's temprow writes; below 1 is cold (snow ground and the game's cold rules), above 49 hot; at 25 or less, the game's temperature step and a plane's map file also give the square the cold flag, which draws conifers in its forest. Writable only while the world is built (see squareName): -32768 to 32767.
+---| "squareName"            # index: x 0-999, then y 0-159, string: the square's name, what a map file's squarename writes, up to 31 characters (a longer one is cut, as squarename cuts it). The square values are writable only while the world is built: inside a wrap of PLAY_GAME_NEW_WORLD (the whole world), or a plane's generator (only that plane's squares). Elsewhere coe5.set is refused (not_world_building, or outside_plane for a square outside the area being built), as is a value the game never stores there (out_of_range).
 ---| "squarePlane"           # index: x 0-999, then y 0-159, integer: the plane the square lies on (planeName takes it), -1 for none, as the game finds it. Read-only.
 ---| "commanderLastIndex"    # integer: the last commander record in use or once used; a loop runs 0 to it. Read-only.
 ---| "commanderUnit"         # index 0-9989, integer: the commander's unit (unitOwner, unitHp, unitMonster take it), below 0 for an empty record. Read-only.
@@ -324,8 +330,9 @@ function require(name) end
 ---| "unitApUsed"            # index 0-98999, integer: the unit's action points used this turn, the number unitApLeft subtracts; moving and the game's other actions add to it. Set it to 0 to give the unit every action point back.
 ---| "unitAbility"           # index: a unit, then an ability 0-1501, integer: the unit's total of that ability, its monster's, items', and temporary ones, as the game adds them. A ritual's ritualRitpow is the ability that gives the caster's mastery level in its school. Read-only.
 ---| "tooltipLineHeight"     # number: the hover box's line height in UI units (14). The box's bottom sits at 16 less 2 a line, so a text past about 8 lines starts below the screen. Read-only.
----| "planeName"             # index 0-11, string: a plane of this world ("Elysium"), by the number a ritual's planereq names (squarePlane gives it); nil past planeLastIndex. Read-only.
----| "planeLastIndex"        # integer: the world's last plane, as the game counts them; planeName runs 0 to it. Read-only.
+---| "planeName"             # index 0-18, string: a plane of this world ("Elysium"), by the number a ritual's planereq names (squarePlane gives it); mods' planes from 11 (coe5.addPlane); nil past planeLastIndex. Read-only.
+---| "planeLastIndex"        # integer: the world's last plane, as the game counts them, 10 without a mod's plane and up to 18 with them; planeName runs 0 to it. Read-only.
+---| "planeTint"             # index 0-18, four numbers r, g, b, strength, each 0 to 1: the colour the map lays over the screen while the plane is in view, as the plane's record holds it (red at 0.15 on Elysium and the Sky while a Blood Sun is up); strength 0 while none is laid; nil past planeLastIndex. Read-only: coe5.setPlaneTint writes it.
 ---| "ticksMs"               # integer: the game's millisecond clock. Only the difference between two reads means anything, and it can jump back when it wraps. Read-only.
 ---| "traceLevel"            # integer: the game's debug trace level, 0 in a player's game (each -d on the command line adds 1). At 1 the game writes its trace (log.txt in the game folder on Windows, standard output on Mac), at 2 and 3 more of it; above 0 the game also shows a few debug details (a unit of no one named with its number). coe5.keepTraceLines picks the lines. 0 to 3.
 ---| "bugChecksOff"          # boolean: true skips the game's bug checks, as its --nochecks switch does. At trace level 2 and 3 the game runs them at many places a turn (each over every unit), and they also fix some of what they find. Nil on Mac, where setting it is refused (lua_refused reason=windows_only).
@@ -381,6 +388,58 @@ function require(name) end
 ---@field tooltip? string cut to 255 characters
 ---@field visible? fun(): boolean Shows the line while it returns true, checked every frame. In Lua, 0 counts as true: return a boolean.
 ---@field onClick fun() runs when the line, or a key bound to its id, is clicked
+
+---A mod's plane, for coe5.addPlane.
+---@class coe5.Plane
+---@field name string the plane's name, 1 to 31 characters, unlike every other plane's (a game plane's full or short name included)
+---@field w? integer its width in squares, 1 to 999; leave w and h out with like "Sky", "Agartha", "Hades" or "Inferno" to take that plane's size in each world (Elysium's, the Inferno 4 more each way)
+---@field h? integer its height in squares, 1 to 159
+---@field icon? string its plane button's picture, a file in your mod's folder: "./plane.tga" or "./art/plane.png" (64 x 64 like the game's plane icons); without it, the icons of the plane it is `like`, else a coloured square
+---@field fill? integer the terrain on every square before anything else (terrainName takes it); one past terrainLastIndex is laid as 0, logged. Needed without like and generate; 0 (Plain) when left out with them
+---@field like? string build it with that game plane's recipe, CoE5SE's copy of the game's random map generator for it (plane_recipes.lua): "Celestial", "Sky", "Agartha", "Inferno", "Hades", "Elemental" or "Void". A step the plane is too small for is skipped and logged (lua_refused reason=plane_too_small with its minimum); nothing is scaled down
+---@field populate? string|false the game plane whose independents the game places on it ("Elysium" to "Void"), or false for none; like's plane by default, none without like. The game places independents by terrain number, so another plane's independents appear only on terrains both planes have
+---@field swap? table<integer, integer> terrain = the terrain that replaces it, after the independents are placed (so they are placed by the first terrain); up to 64 pairs
+---@field generate? fun(plane: coe5.PlaneBuild) runs at each world build after the recipe, with coe5.gen's tools and square writes open on the plane
+---@field pieces? coe5.PlanePiece[] set pieces stamped after the recipe and generate: fixed squares first (center, x and y), then nearportal, then random, the largest first; never on another piece (plane_piece_skipped)
+---@field zones? coe5.PlaneZone[] areas around the pieces with their own swap and monsters
+---@field units? coe5.PlaneUnits[] the plane's own list: only these monsters are placed on it (outside the zones with a list or populate = false), never populate's
+
+---A set piece of coe5.addPlane: a single-plane map file in your mod's folder, in the game's format.
+---@class coe5.PlanePiece
+---@field file string "./citadel.coem"; its mapsize is the piece's size, at most the plane's
+---@field place? "center"|"centre"|"random"|"nearportal" the middle; count random spots on no portal, other piece or square kept for the gateway (100 draws each); or beside the plane's entrance
+---@field count? integer copies for "random", 1 to 32 (1)
+---@field x? integer with y and no place: its top left square, from the plane's top left (0, 0)
+---@field y? integer
+
+---A zone of coe5.addPlane: every square within radius of a copy of the piece `around`, by the game's square distance (the larger of the x and y distances). A square in two zones is the first one's.
+---@class coe5.PlaneZone
+---@field name string 1 to 31 bytes, unlike the plane's other zones
+---@field around string a pieces entry's file
+---@field radius integer 0 to 999 (0: the piece alone)
+---@field swap? table<integer, integer> terrain = the terrain it becomes, in the zone, after the rare special terrain and before the independents; up to 32 pairs
+---@field units? coe5.PlaneUnits[] only these monsters are placed in the zone
+---@field populate? false no monsters in the zone; without it or units, the plane's own
+
+---One monster of a unit list: {name, count, chance}. On each open square of its area (no army, no player's, no apcost 99 wall; water only for a monster with the water movement command, land only without noland) it rolls chance percent for count independents, doubled with Wilder on as the game's own dice are.
+---@class coe5.PlaneUnits
+---@field [1] string the monster's name, as the game names its own independents (a name several monsters share places one of them at random)
+---@field [2] integer how many with Wilder off, 1 to 1000
+---@field [3] integer the chance per square, 1 to 100
+
+---The plane being built, as a recipe's steps and a generate function get it.
+---@class coe5.PlaneBuild
+---@field name string
+---@field index integer its plane number in this world
+---@field x integer its first column in world squares
+---@field y integer its first row
+---@field w integer
+---@field h integer
+---@field like? string the recipe's plane
+---@field mod string the declaring mod
+---@field elysiumW integer Elysium's width, for steps that read Elysium at the same offset
+---@field elysiumH integer Elysium's height
+---@field platform "windows"|"mac" the build, for a step whose random draws the two builds make in another order
 
 ---The map view, from coe5.mapView. UI units: x from the left, y up from the bottom.
 ---@class coe5.MapView
@@ -472,11 +531,14 @@ function coe5.get(name, slot, index, index3) end
 ---An integer the game itself never holds there (past a table the game indexes by it, or outside what
 ---the game stores, as the name's note says, or too big for the game's field) changes nothing and is
 ---refused (reason=out_of_range). A slot's colour takes what the name's note says; bannerFade takes any
----number, and one too big for a float is stored as an infinity.
+---number, and one too big for a float is stored as an infinity. A square's terrain, portal, ground,
+---temperature, and name are written only while the world is built (squareName's note says when);
+---elsewhere the write is refused (reason=not_world_building, or outside_plane for a square outside
+---the area being built).
 ---@param name coe5.Variable
 ---@param value integer|string|boolean
 ---@overload fun(name: coe5.Variable, slot: integer, value: integer|string|boolean)
----@overload fun(name: coe5.Variable, slot: integer, index: integer, value: integer)
+---@overload fun(name: coe5.Variable, slot: integer, index: integer, value: integer|string)
 function coe5.set(name, value) end
 
 ---Runs `fn` around a game call. `fn` gets `next` first, then the call's arguments; call `next` with
@@ -711,7 +773,7 @@ function coe5.shopOffers(player) end
 ---A class's recruitment list (addunitrec, addmercrec, addcomrec, in its order): every offer the
 ---class can get, before the month's chance rolls. The standard troops of stdtroops aren't in it
 ---(classStandardTroops). Refused (lua_refused reason=bad_class, an empty list) for a class outside
----0-199.
+---0-249 (0-199 on Mac).
 ---@param class integer slotClass's number
 ---@return coe5.Offer[] offers
 function coe5.classRecruits(class) end
@@ -800,6 +862,81 @@ function coe5.terrainMatch(code, x, y) end
 ---@return boolean set false when refused (lua_refused reason=not_a_list, not_a_string, empty_word, leading_space, bad_character, out_of_memory; windows_only on Mac; site_unavailable when the game's trace functions aren't the code CoE5SE knows, logged as trace_filter_installed)
 function coe5.keepTraceLines(words) end
 
+---Declares a plane of the mod's, at script load only. At each new world CoE5SE adds it beside the
+---game planes (between the Void and Elysium2, plane 10), or, when the world's width (mapDepth, at
+---most 1000 squares) is used up, under a smaller game plane (Celestial to the Void); a plane with no
+---room is left out (plane_skipped, and a line on the CoE5SE page). It is filled with one terrain, then
+---built by like's recipe (CoE5SE's copy of the game's random map generator for that plane) and
+---generate, then its pieces are stamped. After the game places its rare special terrain, the recipe
+---places its own, the zones' swaps run, and a plane with no portal to another plane gets an entrance:
+---a gateway on a flat square of Elysium and one on a land square of the plane, joined both ways,
+---never on a wall, a portal or a piece. With no such land square after 100 draws, the plane's gateway
+---goes on any square of it an army can enter, water included; with none, it gets no gateway
+---(plane_entrance_missing). When the game places independents, populate's plane places them (or only
+---its units list), each zone with a units list only from it and each populate = false zone not at
+---all, then swap applies. Its plane number is handed out at each new world and load, from 11, in the
+---order the planes were declared: every mod's newplane blocks first, then the scripts' planes, in the
+---order the scripts run; coe5.planeIndex reads it. Up to 8 planes, all mods together. The plane gets a
+---button after the game's own on the map's top bar, the map editor's plane bar and a chooseloc
+---ritual's target location screen (its icon, greyed until the player has seen a square of it), and on
+---the Game Over map view, never greyed. A save holding one loads only where every plane it holds is
+---declared again; a game without CoE5SE refuses it. A .c5se's newplane block declares the same plane
+---without a script (the reference guide's "New Planes").
+---@param plane coe5.Plane
+---@return boolean declared false when refused (lua_refused reason=not_at_load, bad_name, name_taken, bad_size, bad_terrain, unknown_plane, no_recipe, bad_swap, too_many_swaps, recipes_not_loaded, bad_icon, icon_not_found, icon_wrong_case, icon_link, path_too_long, too_many_planes, plane_table_not_moved, hooks_not_installed)
+function coe5.addPlane(plane) end
+
+---Gives a monster a shape on a mod's plane, at script load only: a unit of that monster turns into
+---shapeMonster there, as elysiumshape..voidshape do on the game planes, and it turns back by
+---shapeMonster's own shapechanging commands. A monster with no shape on a mod's plane keeps its form
+---there, as a monster with no agarthashape keeps its form on Agartha. A name finds a monster as the
+---game's commands do, with an optional offset ("2:Hound" for the third); the names resolve at each new
+---world and load, and one that doesn't is refused then (lua_refused reason=no_such_plane,
+---no_such_monster, no_such_shape). A later call for the same monster and plane wins. A monster
+---block's planeshape line in a .c5se declares the same.
+---@param monster string
+---@param planeName string a mod's plane (coe5.addPlane), from any mod
+---@param shapeMonster? string nil for none
+---@return boolean declared false when refused (lua_refused reason=not_at_load, bad_name, bad_plane, game_plane for a game plane by its full or short name ("Celestial Plane", "Celestial"), out_of_memory)
+function coe5.setPlaneShape(monster, planeName, shapeMonster) end
+
+---The plane number of the plane with that name in this world (a mod's plane or a game plane), or
+---nil when the world has none; planeName and squarePlane use the same numbers.
+---@param name string
+---@return integer|nil index
+function coe5.planeIndex(name) end
+
+---Lays a colour over the map while a plane is in view, as the game lays red at 0.15 over Elysium and
+---the Sky while a Blood Sun is up: one rectangle over the whole screen, over the ground and under the
+---units. Any plane, the game's included, by its number or name (a game plane's full or short name,
+---"Elysium2", or a mod's plane in this world). It wins over the game's own tint, and over the Blood
+---Sun copy a plane like "Sky" gets, until coe5.clearPlaneTint, a load or the game's end; it isn't
+---saved, so set it again from your own events. coe5.get("planeTint", plane) reads it back. Not in
+---network games, where scripts don't run.
+---@param plane integer|string
+---@param r number 0 to 1
+---@param g number 0 to 1
+---@param b number 0 to 1
+---@param strength number 0 to 1: how much of the colour covers the map (the Blood Sun's 0.15)
+---@return boolean set false when refused (lua_refused reason=no_such_plane, out_of_range, hooks_not_installed)
+function coe5.setPlaneTint(plane, r, g, b, strength) end
+
+---Drops your tint on a plane: from the game's next tint update (each map screen, after each ritual)
+---the plane has the game's own tint again.
+---@param plane integer|string
+---@return boolean cleared false when refused (lua_refused reason=no_such_plane)
+function coe5.clearPlaneTint(plane) end
+
+---Draws a mod's terrain (a number past 355) on the world map with a game terrain's looks, at script
+---load only, as a terrainlooks block does. `ground`: the game terrain whose ground it takes (its
+---place in the blend order and its edges); `picture` ("./file.tga", sides powers of two) is drawn
+---instead of that ground's picture on this terrain's squares only. `decor`: the game terrain whose
+---decorations it takes, exactly; `sprites` = {[40] = "./pool.tga"} draws tree.trs sprite 40 of them
+---as the picture (a .tga or .png), on this terrain only. Terrains by number or name.
+---@param looks {terrain: integer|string, ground: integer|string|nil, picture: string|nil, decor: integer|string|nil, sprites: table<integer, string>|nil}
+---@return boolean set false when refused (lua_refused reason=not_at_load, no_terrain, unknown_terrain, not_a_mod_terrain, not_a_game_terrain, no_looks, no_decor, no_ground, looks_taken, bad_sprite, too_many_sprites, not_a_tga, size_not_power_of_two, icon_not_found, hook_not_installed)
+function coe5.setTerrainLooks(looks) end
+
 ---Names a subfolder of your mod's area for your data files. The area is coe5se_data\<your mod's
 ---name> in the game's user folder (%APPDATA%\coe5 on Windows, ~/.coe5 on Mac); without this call
 ---your files go in the area itself. The subfolder is always inside the area: no mod reaches
@@ -877,6 +1014,248 @@ function coe5.restartPhase() end
 ---    end
 ---@class coe5.ui
 coe5.ui = {}
+
+---The game's own random map generator steps, one per function, for a plane's recipe or generate function
+---(coe5.addPlane). They work only while a mod's plane is being built, and only on it: a square off
+---the plane is refused (lua_refused reason=outside_plane), a rectangle is cut to the plane, and
+---outside a build every call is refused (not_world_building). A refused call returns nil.
+---The map generator draws with marks: a walk, blob, rectangle or neighbour pass writes a mark number
+---(1 to 32767) on squares, and a marks-to-terrain pass turns marked squares into a terrain. The marks
+---are the plane's own for the build: empty at its start, gone after it.
+---@class coe5.gen
+coe5.gen = {}
+
+---The game's own random draw, 0 to n - 1, as its map generator draws (0 for n below 2, with no draw).
+---@param n integer
+---@return integer
+function coe5.gen.random(n) end
+
+---A square's mark, 0 for none.
+---@param x integer
+---@param y integer
+---@return integer
+function coe5.gen.markAt(x, y) end
+
+---Sets a square's mark (0 clears it).
+---@param x integer
+---@param y integer
+---@param mark integer
+function coe5.gen.setMark(x, y, mark) end
+
+---The map generator's own terrain write: the terrain only; the square's gems, its owner's citadel and
+---income, and its ground stay as they were (setGround sets the ground after, as the generator does;
+---coe5.set("squareTerrain", ...) is the in-game change).
+---@param x integer
+---@param y integer
+---@param terrain integer 0 to terrainLastIndex
+function coe5.gen.setTerrain(x, y, terrain) end
+
+---A terrain's flag bits: 4 water, 0x2000 forest, 0x10000 mountain, among others. Works outside a build.
+---@param terrain integer
+---@return integer
+function coe5.gen.terrainFlags(terrain) end
+
+---The squares within radius of (x, y), on its plane, holding the terrain or in the terrain group.
+---@param x integer
+---@param y integer
+---@param code integer a terrain number, or a terrain group (a negative terrain number)
+---@param radius integer
+---@return integer
+function coe5.gen.terrainNear(x, y, code, radius) end
+
+---Marks a rectangle, cut to the plane.
+---@param x integer
+---@param y integer
+---@param w integer
+---@param h integer
+---@param mark integer
+function coe5.gen.markRect(x, y, w, h, mark) end
+
+---The map generator's random walk ("markmapcave") from a square of the plane, marking count new squares;
+---with a terrain each step keeps to squares whose whole 3 x 3 is that terrain, with -1 it goes anywhere.
+---Gives up after 1,000,000 steps.
+---@param x integer
+---@param y integer
+---@param terrain integer a terrain, or -1
+---@param count integer 1 to the plane's squares
+---@param mark integer
+function coe5.gen.markWalk(x, y, terrain, count, mark) end
+
+---The map generator's round blob from a square of the plane, size squares.
+---@param x integer
+---@param y integer
+---@param size integer 1 to the plane's squares
+---@param mark integer
+function coe5.gen.markBlob(x, y, size, mark) end
+
+---Marks the cheapest path between two squares of the plane (the game's river path): mode 0 any
+---ground, 1 through Cave Wall and Magma River, 2 around Cave Wall; it stops at water.
+---@param x1 integer
+---@param y1 integer
+---@param x2 integer
+---@param y2 integer
+---@param mark integer
+---@param mode integer 0 to 2
+---@return integer
+function coe5.gen.markRiver(x1, y1, x2, y2, mark, mode) end
+
+---Every square of the plane with the mark and terrain from becomes to ("mmct").
+---@param mark integer
+---@param from integer
+---@param to integer
+---@return integer changed
+function coe5.gen.marksToTerrain(mark, from, to) end
+
+---Every square of the plane with the mark becomes terrain at percent, whatever its terrain ("mm2t";
+---one draw per marked square).
+---@param mark integer
+---@param terrain integer
+---@param percent integer 0 to 100
+---@return integer changed
+function coe5.gen.marksToTerrainChance(mark, terrain, percent) end
+
+---Marks every square of terrain with code next to it ("mmnbors").
+---@param terrain integer
+---@param code integer a terrain number or terrain group
+---@param mark integer
+---@return integer marked the plane's squares with that mark
+function coe5.gen.markNearTerrain(terrain, code, mark) end
+
+---Marks every Void square with code within radius (Celestial's clouds and flames).
+---@param code integer
+---@param mark integer
+---@param radius integer
+---@return integer marked the plane's squares with that mark
+function coe5.gen.markVoidNear(code, mark, radius) end
+
+---A random Cave Wall square 1 in from the plane's edge with at least need Cave Walls in its 3 x 3
+---(its 5 x 5 above 9), 100,000 tries.
+---@param need integer 0 to 25
+---@return integer|nil x nil when none
+---@return integer|nil y
+function coe5.gen.findCaveSpot(need) end
+
+---Temperature 25 on the rectangle ("setfixtemp").
+---@param x integer
+---@param y integer
+---@param w integer
+---@param h integer
+function coe5.gen.setFixedTemperature(x, y, w, h) end
+
+---The game's own temperature step: 25, -10 on Frozen Waste, the heat of mountains, deserts and jungles, the cold flags.
+---@param x integer
+---@param y integer
+---@param w integer
+---@param h integer
+function coe5.gen.setTemperatures(x, y, w, h) end
+
+---The ground kinds of the rectangle from each square's terrain, only on squares of terrain unless -1.
+---@param x integer
+---@param y integer
+---@param w integer
+---@param h integer
+---@param terrain integer a terrain, or -1
+function coe5.gen.setGround(x, y, w, h, terrain) end
+
+---One flooding pass: the plane's open squares joined to water flood (Agartha's sea).
+---@return integer flooded
+function coe5.gen.floodPlane() end
+
+---Cave Wall next to water becomes Moist Cave Wall.
+function coe5.gen.updateMoistWalls() end
+
+---Rock Ground touching open ground only at a corner becomes Cave Wall, until none is left.
+---@return integer
+function coe5.gen.fixDiagonals() end
+
+---tries times, a random neighbour holding terrain onto takes the square's terrain (the Sky's cloud forests).
+---@param x integer
+---@param y integer
+---@param tries integer
+---@param onto integer
+---@return integer changed
+function coe5.gen.spreadTerrain(x, y, tries, onto) end
+
+---Elysium's terrain blob: n squares of t1 or t2 grown from (x, y), wx and wy weighting east-west and
+---north-south growth (forests 40 to 99 each way, deserts 999 and 999). a, b, c are the game's last
+---three numbers (forests 0, 0, 0; deserts 0, 0, 1). Squares grown off the plane are put back.
+---@param x integer
+---@param y integer
+---@param wx integer
+---@param wy integer
+---@param n integer
+---@param t1 integer
+---@param t2 integer
+---@param a? integer
+---@param b? integer
+---@param c? integer
+function coe5.gen.specBlob(x, y, wx, wy, n, t1, t2, a, b, c) end
+
+---Elysium's river from one square of the plane to another: River on the cheapest path.
+---@param x integer
+---@param y integer
+---@param tx integer
+---@param ty integer
+function coe5.gen.drawRiver(x, y, tx, ty) end
+
+---Elysium's random special terrain for one square by its terrain (villages, farms, mines, ports; towers, castles and
+---ruins only on Elysium).
+---@param x integer
+---@param y integer
+function coe5.gen.decorateSquare(x, y) end
+
+---count random items lying on the square, at level (Agartha's statue: 2 to 6 at 25).
+---@param x integer
+---@param y integer
+---@param count integer 1 to 50
+---@param level integer
+function coe5.gen.addGroundItems(x, y, count, level) end
+
+---A random square of the plane holding the terrain or in the terrain group (randloc's search,
+---500,000 tries).
+---@param code integer
+---@return integer|nil x nil when none
+---@return integer|nil y
+function coe5.gen.randomSquareOfTerrain(code) end
+
+---A portal from a square of the plane to a square of any plane: n on the first, n (two ways) or -n
+---(one way) on the second. A portal pairs with every square holding its number.
+---@param x1 integer
+---@param y1 integer
+---@param x2 integer
+---@param y2 integer
+---@param twoway boolean
+---@param n integer 1 to 32767
+---@return integer n
+function coe5.gen.setPortalPair(x1, y1, x2, y2, twoway, n) end
+
+---setPortalPair with a number no square holds yet, picked as the game picks one (1000 to 10999).
+---@param x1 integer
+---@param y1 integer
+---@param x2 integer
+---@param y2 integer
+---@param twoway boolean
+---@return integer n
+function coe5.gen.linkNewPortal(x1, y1, x2, y2, twoway) end
+
+---For a step with a minimum plane size: true when the plane being built is at least minW x minH; else false, and
+---the log names the step and its minimum (lua_refused reason=plane_too_small).
+---@param step string
+---@param minW integer
+---@param minH integer
+---@return boolean
+function coe5.gen.refuseSmallPlane(step, minW, minH) end
+
+---Stamps a map file from your mod's folder ("./citadel.coem", the game's single-plane format) with
+---its top left square at (x, y), through the game's map reader, as a newplane block's planepiece does:
+---the plane's square names, portals and special square flags (squarespec) under it are cleared first. Its whole mapsize
+---must be on the plane (outside_plane). The pieces coe5.addPlane declares, stamped after generate,
+---never go on it.
+---@param file string
+---@param x integer
+---@param y integer
+---@return boolean|nil stamped nil when refused (lua_refused reason=outside_plane, not_world_building, no_plane, no_mod_folder, bad_file, file_not_found, file_wrong_case, file_link, path_too_long, no_mapsize, too_many_pieces, hook_not_installed)
+function coe5.gen.stampPiece(file, x, y) end
 
 ---Clears the screen and draws the title. Each text the coe5.ui calls draw is cut to the game's
 ---buffer for it, the most the game draws (logged as api_cut): 99 characters for a title, 4999 for
@@ -989,7 +1368,9 @@ function coe5.ui.nameBox(title, prompt, sprite, maxLength) end
 function coe5.ui.monsterRow(id, monster, text, line2) end
 
 ---Draws one line from (x1, y1) to (x2, y2) at UI coordinates, in r, g, b (each 0 to 1) at `alpha`
----(0 clear, 1 solid), `width` screen pixels wide. Only inside a MAP_EDITOR_DRAW wrap; anywhere
+---(0 clear, 1 solid), `width` screen pixels wide. A line straight across or straight up the screen
+---is drawn on whole pixels, a pixel it covers in part at that part of `alpha`, so it moves by
+---fractions of a pixel with the map while the zoom glides. Only inside a MAP_EDITOR_DRAW wrap; anywhere
 ---else it draws nothing (lua_refused reason=not_drawing). NaN or an infinity draws nothing
 ---(not_finite), and so does a width of 0 or less (out_of_range).
 ---@param x1 number

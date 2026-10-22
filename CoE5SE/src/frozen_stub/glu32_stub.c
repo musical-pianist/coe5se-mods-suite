@@ -1,13 +1,4 @@
-// glu32.dll, the Windows stub: the file the player copies into the game folder once. CoE5 imports
-// glu32.dll and doesn't ship one, so Windows loads this file instead of System32's. Every glu32
-// export is a one-instruction jump into the real System32 glu32.dll.
-//
-// This file passes every GLU call through, and starts the stub's steps (stub.h) on the game's main
-// thread: it points CoE5.exe's import of SDL2's SDL_SetMainReady at itself, so they run right before
-// SDL_main, outside Windows' loader lock (deferToMainReady): the import of any DLL whose name starts
-// with SDL (SDL2.dll today, SDL3.dll if an update renames it). If System32's glu32.dll won't load, the
-// game can't start, since it imports glu32; every other failure logs loader_inactive and the game
-// runs vanilla.
+// glu32.dll, the Windows stub: the file the player copies into the game folder once.
 
 #include <windows.h>
 #include <sys/stat.h>
@@ -24,8 +15,7 @@
 #include "stub.h"
 #include "stub_version.h"   // GLU32_VERSION
 
-// For each export: a pointer, filled in from the real glu32.dll, and the export itself, a thunk
-// "name: jmp *real_name" that jumps through it.
+// For each export: a pointer to the real one, and a thunk that jumps through it.
 #define GLU_EXPORT(name, ordinal) \
     void *real_##name; \
     __asm__(".text\n.globl " #name "\n" #name ":\n    jmp *real_" #name "(%rip)\n");
@@ -52,12 +42,7 @@ static int resolveRealGlu32(void) {
     return 1;
 }
 
-// CoE5.exe's WinMain calls SDL_SetMainReady once, on the main thread, right before SDL_main: before
-// any game code, and before the game first looks at the mods. Windows holds its loader lock while it
-// runs this DLL's DllMain, and loading DLLs, showing the approval box, or starting plugins under it
-// risks a deadlock, so DllMain only points the exe's import slot at startAtMainReady. The patch
-// finds the import by name, so it needs no game address. If the exe doesn't import it, the loader
-// starts in DllMain instead.
+// The stub starts at SDL_SetMainReady, which CoE5.exe calls once right before SDL_main.
 static void (*realSetMainReady)(void);
 
 static void startAtMainReady(void) {
@@ -66,9 +51,7 @@ static void startAtMainReady(void) {
     realSetMainReady();
 }
 
-// Points the exe's import slot for SDL_SetMainReady, from a DLL whose name starts with SDL (any
-// case), at startAtMainReady. The function's name is matched exactly. Returns 0, changing nothing,
-// if the exe doesn't import it by name.
+// Points the exe's import slot for SDL_SetMainReady at startAtMainReady; 0 when it can't.
 static int deferToMainReady(void) {
     unsigned char *base = (unsigned char *)GetModuleHandleA(NULL);
     IMAGE_NT_HEADERS64 *nt = (IMAGE_NT_HEADERS64 *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);

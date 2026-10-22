@@ -1,9 +1,4 @@
-// Turning the CoE5SE mod on once, for a player who copied the stub and never ticked CoE5SE. The
-// stub runs before the game reads coe5config, so a name it adds there is enabled on that same
-// launch, with no restart. Its files, in CoE5SE's user folder, are below: the done file keeps it to
-// once, so a player who unticks CoE5SE keeps it off. The stub writes the done file before it changes
-// coe5config and deletes it only when the change failed, so a crash or a full disk part way leaves
-// it marked: a later launch never turns CoE5SE on after the player turned it off.
+// Turning the CoE5SE mod on once, for a player who copied the stub and never ticked CoE5SE.
 
 #pragma once
 #include <stdio.h>

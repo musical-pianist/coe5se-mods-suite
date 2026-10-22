@@ -1,9 +1,4 @@
-// buildPath: builds a file path into a fixed buffer, and refuses a path that doesn't fit instead of
-// cutting it. A cut path fails in quiet ways: a lookup misses with no log line, and a cut search
-// pattern can match other files ("dir\*.c5m" cut to "dir\*" matches every file in dir).
-//
-// The file that includes this header must define writeLog(event, fmt, ...) first. common.h defines
-// it for the plugins, and glu32_stub.c and coe5se_loader.c define their own.
+// buildPath: builds a file path into a fixed buffer, refusing one that doesn't fit.
 #pragma once
 #include <stdarg.h>
 #include <stdio.h>
@@ -16,9 +11,7 @@
 #endif
 #endif
 
-// Writes the path that fmt and its arguments give into `out`, which holds `size` bytes, and returns
-// 1. When the whole path doesn't fit, it returns 0, leaves `out` empty, and logs path_refused.
-// `call` names the calling function; pass __func__.
+// Writes the path that fmt and its arguments give into `out`, which holds `size` bytes.
 static __attribute__((unused)) PRINTF_FORMAT(4, 5) int buildPath(char *out, size_t size, const char *call,
                                                                 const char *fmt, ...) {
     va_list ap;

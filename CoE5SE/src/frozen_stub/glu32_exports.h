@@ -1,6 +1,4 @@
-// Every export of 64-bit Windows' C:\Windows\System32\glu32.dll, with its ordinal, listed from that
-// file. glu32_stub.c turns each GLU_EXPORT line into a jump to the real export. glu32.def lists
-// the same names and ordinals for the linker, so change the two files together.
+// Every export of 64-bit Windows' System32 glu32.dll, with its ordinal.
 
 GLU_EXPORT(gluBeginCurve, 1)
 GLU_EXPORT(gluBeginPolygon, 2)

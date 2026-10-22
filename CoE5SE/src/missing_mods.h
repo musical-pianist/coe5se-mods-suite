@@ -89,7 +89,7 @@ static void scanModLine(const char *line, ModFileScan *scan) {
 }
 
 // Reads the file at `path` into `scan`.
-static int scanModFile(const char *path, ModFileScan *scan) {
+static int scanModFile(const char *path, ModFileScan *scan, int c5m) {
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
     static char line[MOD_LINE_MAX + 2];
@@ -103,7 +103,10 @@ static int scanModFile(const char *path, ModFileScan *scan) {
             scan->contentFree = 0;
             hashContentLine(line, &scan->hash);
             scan->longLine = !ends;
-        } else scanModLine(line, scan);
+        } else {
+            const char *own = c5m ? sidecarLineText(line) : NULL;
+            scanModLine(own ? own : line, scan);
+        }
     }
     fclose(f);
     scan->longLine = 0;
@@ -114,7 +117,7 @@ static int scanModFile(const char *path, ModFileScan *scan) {
 static int scanMod(int mod, ModFileScan *scan) {
     *scan = (ModFileScan){.contentFree = 1, .hash = CONTENT_HASH_START};
     char path[MAX_PATH];
-    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s" MOD_FILE_SUFFIX, modFolder(mod), modName(mod)) || !scanModFile(path, scan)) {
+    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s" MOD_FILE_SUFFIX, modFolder(mod), modName(mod)) || !scanModFile(path, scan, 1)) {
         scan->contentFree = 0;
         return 0;
     }
@@ -122,7 +125,7 @@ static int scanMod(int mod, ModFileScan *scan) {
         scan->contentFree = 0;
         return 0;
     }
-    scanModFile(path, scan);
+    scanModFile(path, scan, 0);
     return 1;
 }
 
@@ -444,6 +447,8 @@ static int isSkippableMissingMod(const char *name) {
     return 0;
 }
 
+static void readLoadedSavePlanes(const char *path);
+
 // The save's fopen in load_game.
 static void *openLoadedSave(const char *path, void *file) {
     playerModStates.noted = 0;
@@ -452,6 +457,7 @@ static void *openLoadedSave(const char *path, void *file) {
         readSavedModContent(path, &savedMods, &savedModHashes);
         writeLog("save_mod_record_read", "result=%s mods=%d", savedMods.result, savedMods.count);
         writeLog("save_mod_hashes_read", "result=%s mods=%d", savedModHashes.result, savedModHashes.count);
+        readLoadedSavePlanes(path);
     }
     return file;
 }

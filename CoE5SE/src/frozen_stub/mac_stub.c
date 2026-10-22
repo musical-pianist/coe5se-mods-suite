@@ -1,7 +1,4 @@
-// coe5se.dylib, the Mac stub and the counterpart of glu32.dll (glu32_stub.c): the file the player
-// copies into the game folder once. The game loads it through CoE5's Steam launch options,
-//   /usr/bin/env DYLD_INSERT_LIBRARIES=coe5se.dylib %command%
-// and dyld runs its constructor before the game's main, which runs the stub's steps (stub.h).
+// coe5se.dylib, the Mac stub: the file the player copies into the game folder once.
 
 #define PLATFORM_NO_DLLMAIN
 #include "platform_mac.h"

@@ -118,11 +118,10 @@ local function log(fmt, ...) coe5.log(string.format(fmt, ...)) end
 -- the class name and look the index up again when they load. (A dashed line like the one above is
 -- only a comment that marks a part of the file.)
 
--- Note 26: Returns class c's name, or nil if c isn't a class in the table. math.min gives the
--- smaller of two numbers: the game's class table stops at index 199, so c may be no higher than
--- either the last class in use or 199. `or` passes when either test passes.
+-- Note 26: Returns class c's name, or nil if c isn't a class in the table: c runs from 1 to the
+-- last class in use, classLastIndex. `or` passes when either test passes.
 local function classNameAt(c)
-  if c < 1 or c > math.min(coe5.get("classLastIndex"), 199) then return nil end
+  if c < 1 or c > coe5.get("classLastIndex") then return nil end
   return coe5.get("className", c)
 end
 
@@ -131,7 +130,7 @@ end
 -- the first 63 characters. Saved names were cut to 63 (Note 37), so each class name is cut the same
 -- way before the two are compared. `return c` ends the loop and the function at once.
 local function findClassByName(name)
-  for c = 1, math.min(coe5.get("classLastIndex"), 199) do
+  for c = 1, coe5.get("classLastIndex") do
     if coe5.get("className", c):sub(1, CLASS_NAME_MAX) == name then return c end
   end
   return nil
@@ -905,7 +904,7 @@ log("setup_hooks_installed waits=%d of 3 map_screen=%d init_participants=%d save
 -- with every class on (Note 78's wrap).
 
 local RANDOM_CLASSES_ID = 901      -- Note 141: the line's id on Setup Participants, beside SAVE_PRESET_ID (Note 15)
-local CLASS_LINE_BASE = 100        -- Note 142: the checklist's line for class c is CLASS_LINE_BASE + c (c is at most 199)
+local CLASS_LINE_BASE = 100        -- Note 142: the checklist's line for class c is CLASS_LINE_BASE + c (c is at most 249)
 local ALL_ON, ALL_OFF, NEXT_PAGE, PREVIOUS_PAGE = 10, 11, 12, 13   -- the checklist's other lines (Note 14's form)
 local CLASSES_PER_PAGE = 18        -- Note 143: the game's screens are 600 high, so a long list is split into pages
 local NAMES_IN_TOOLTIP = 8         -- Note 144: the line's hover text names at most this many unchecked classes
@@ -921,7 +920,7 @@ local HAS_CLASS_ABILITY = coe5.classAbility ~= nil and pcall(coe5.get, "classAbi
 -- and its name, cut to 63 characters as presets store it (Note 37).
 local function listedClasses()
   local list = {}
-  for c = 1, math.min(coe5.get("classLastIndex"), 199) do
+  for c = 1, coe5.get("classLastIndex") do
     local name = coe5.get("className", c)
     if name and name ~= "" and coe5.get("classAbility", c, coe5.classAbility.aiClass) >= 0 then
       list[#list + 1] = {index = c, name = name:sub(1, CLASS_NAME_MAX)}

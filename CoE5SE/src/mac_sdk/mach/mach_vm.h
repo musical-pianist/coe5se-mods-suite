@@ -1,6 +1,4 @@
-// The mach_vm calls our Mac dylibs make, declared as in Apple's SDK. zig cc's own macOS
-// headers have the types (mach/mach_types.h) and its libSystem stub has the functions, but not this
-// header. A build with Apple's clang finds the SDK's own header first.
+// The mach_vm calls our Mac dylibs make, declared as in Apple's SDK.
 #ifndef COE5SE_MAC_SDK_MACH_VM_H
 #define COE5SE_MAC_SDK_MACH_VM_H
 

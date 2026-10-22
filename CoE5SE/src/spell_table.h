@@ -9,7 +9,6 @@ _Static_assert(MOD_SPELL_CAP_MAX == MOD_SPELL_TARGET, "the moved table has room 
 #define SPELL_END_PATH        (-999)
 #define SPELL_NAME_MAX        47
 #define SPELL_LEVEL_MAX       3
-#define WEAPON_SLOTS          5000
 #define WEAPON_NAME_MAX       63
 
 // The game's flags, one bit each.
@@ -417,7 +416,7 @@ static void weaponLine(const char *args, int mod, int level) {
         if (!len) reason = "bad_weapon";
         else if (len > WEAPON_NAME_MAX || (weapon = spellFindWeapon(name)) < 0) reason = "unknown_weapon";
     } else if (readSpellNumber(&p, &number)) {
-        if (number < 0 || number >= WEAPON_SLOTS || !*(const char *)(gameBase + RVA_WEAPON_TABLE + (size_t)number * WEAPON_SIZE))
+        if (number < 0 || number >= tableRecords(TABLE_WEAPON) || !*(const char *)(tableAddress(TABLE_WEAPON) + (size_t)number * WEAPON_SIZE))
             reason = "unknown_weapon";
         else
             weapon = (int)number;

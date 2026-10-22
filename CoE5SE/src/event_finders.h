@@ -37,7 +37,7 @@ static void eventFindersLineEnd(void) {
 
 // Builds the square lists from the units now.
 static int buildFinderLists(void) {
-    int width = G32(RVA_MAP_X_BOUND), height = G32(RVA_MAP_H), last = G32(RVA_UNIT_COUNT);
+    int width = G32(RVA_MAP_DEPTH), height = G32(RVA_MAP_H), last = G32(RVA_UNIT_COUNT);
     if (last >= UNIT_TABLE_MAX) return 0;
     if (width > MAP_COLUMNS_MAX) width = MAP_COLUMNS_MAX;
     if (height > MAP_COLUMN_SQUARES) height = MAP_COLUMN_SQUARES;
@@ -67,11 +67,11 @@ static int finderUnitMatches(int kind, int u, int player, const char *name) {
     if (kind == EVENT_FINDER_UNIT) {
         if (!name[0]) return 1;
         long monster = (short)G16(RVA_UNIT_MONSTER + at);
-        return !strcmp((const char *)(gameBase + RVA_MONSTER_TABLE + monster * MONSTER_SIZE), name);
+        return !strcmp((const char *)(tableAddress(TABLE_MONSTER) + monster * MONSTER_SIZE), name);
     }
     for (int i = 0; i < UNIT_ITEM_SLOTS; i++) {
         short item = (short)G16(RVA_UNIT_ITEMS + at + (size_t)i * 2);
-        if (item >= 0 && !strcmp((const char *)(gameBase + RVA_ITEM_TABLE + (size_t)item * ITEM_SIZE), name)) return 1;
+        if (item >= 0 && !strcmp((const char *)(tableAddress(TABLE_ITEM) + (size_t)item * ITEM_SIZE), name)) return 1;
     }
     return 0;
 }
@@ -135,7 +135,7 @@ __declspec(dllexport) const EventFinderCounts *coe5seEventFinderShadow(EventFind
 // @platform-split event_finder_army_test: Mac runs CoE5SE's copy of the army test its finders inline
 // RVA_ARMY_AT_FOR_PLAYER and RVA_SAME_TEAM as the game's code has them.
 static int armyHereForPlayer(int player, int x, int y) {
-    if (x < 0 || y < 0 || x >= G32(RVA_MAP_X_BOUND) || y >= G32(RVA_MAP_H)) return 0;
+    if (x < 0 || y < 0 || x >= G32(RVA_MAP_DEPTH) || y >= G32(RVA_MAP_H)) return 0;
     size_t square = (size_t)x * MAP_COLUMN_SQUARES + (size_t)y;
     short army = (short)G16(RVA_SQUARE_ARMY + square * 2);
     if (!army) return 0;

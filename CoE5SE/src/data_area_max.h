@@ -49,11 +49,15 @@ static void setStorageAreaMegabytes(const char *mod, int megabytes) {
     if (now != was) writeLog("data_area_max", "mod=%s mb=%d", mod, now);
 }
 
-// Called around the reading of mod `mod`'s sidecar at level 2.
+// Called around the reading of mod `mod`'s .c5m and sidecar at level 2.
 static void maxdataReadingAt(int mod, int start) {
-    if (start) {
+    if (start == 1) {
         maxdataReading.mod = mod;
         maxdataReading.lines = maxdataReading.megabytes = 0;
+        return;
+    }
+    if (start < 0) {
+        maxdataReading.mod = -1;
         return;
     }
     setStorageAreaMegabytes(modName(mod), maxdataReading.mod == mod ? maxdataReading.megabytes : 0);
@@ -81,7 +85,7 @@ static void maxdataLine(const char *args, int mod, int level) {
     if (level != 2) return;
     const char *name = spellModName(mod);
     int line = G32(RVA_MOD_LINE), megabytes = 0;
-    if (!readingSidecarOf(mod)) {
+    if (!readingSidecarOf(mod) && !readingPrefixedLine()) {
         refuseC5mLine(MAXDATA_WORD, name, "maxdata_in_c5m", "line=%d", line);
         return;
     }

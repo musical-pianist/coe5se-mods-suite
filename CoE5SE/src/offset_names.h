@@ -24,8 +24,9 @@ static int isMonsterOffsetWord(const char *line, size_t len) {
 
 // A monster's value of an ability.
 static int monsterAbility(int monster, int ability) {
-    if (monster < 0 || monster >= MONSTER_TABLE_MAX) return 0;
-    const int *pairs = (const int *)(gameBase + RVA_MONSTER_TABLE + (size_t)monster * MONSTER_SIZE + MONSTER_ABILITIES);
+    const unsigned char *record = monsterRecord(monster);
+    if (!record) return 0;
+    const int *pairs = (const int *)(record + MONSTER_ABILITIES);
     for (int i = 0; i < MONSTER_ABILITY_PAIRS && pairs[2 * i]; i++)
         if (pairs[2 * i] == ability) return pairs[2 * i + 1];
     return 0;
@@ -49,9 +50,10 @@ static int monsterByName(const char *text) {
     }
     int found[FIND_MONSTER_MATCHES_MAX], count = 0;
     for (int pass = 0; pass < 2 && !count; pass++) {
-        for (int m = 0; m < MONSTER_TABLE_MAX && count < FIND_MONSTER_MATCHES_MAX; m++) {
-            if (G32(RVA_MONSTER_SPRITES + (size_t)m * MONSTER_SIZE) == -1) break;
-            if (!recordNameIs(gameBase + RVA_MONSTER_TABLE + (size_t)m * MONSTER_SIZE, MONSTER_NAME_SIZE, name)) continue;
+        for (int m = 0; m < tableRecords(TABLE_MONSTER) && count < FIND_MONSTER_MATCHES_MAX; m++) {
+            const unsigned char *record = monsterRecord(m);
+            if (*(const int *)(record + (RVA_MONSTER_SPRITES - RVA_MONSTER_TABLE)) == -1) break;
+            if (!recordNameIs(record, MONSTER_NAME_SIZE, name)) continue;
             if (pass == 0 && monsterAbility(m, MONSTER_ABILITY_GROWHP)) continue;
             if (monsterAbility(m - 1, MONSTER_ABILITY_LOOKSLIKE) == 1 || monsterAbility(m - 2, MONSTER_ABILITY_LOOKSLIKE) == 2) continue;
             found[count++] = m;

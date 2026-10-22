@@ -46,8 +46,7 @@ static void restartEvent(const unsigned char *marks) {
     G32(RVA_EVENT_STATE) = any ? SQUARE_EVENT : EVENT_FAILED;
 }
 
-// Ends a group of triggers at an `or`, or at the branch's end: notes whether it held and which squares
-// it kept.
+// Ends a group of triggers at an `or` or the branch's end.
 static void endTriggerGroup(void) {
     int held = G32(RVA_EVENT_STATE) >= 1;
     eventLogic.anyHeld |= held;
@@ -55,8 +54,7 @@ static void endTriggerGroup(void) {
         for (size_t i = 0; i < SQUARE_EVENT_A_SIZE; i++) eventHeldMarks[i] |= eventMarks()[i];
 }
 
-// Ends a branch's triggers, at its first action or at its elseif or else: the branch holds when any of
-// its groups held, and a squareevent keeps every square some group kept.
+// Ends a branch's triggers; the branch holds when any of its groups held.
 static void endBranchTriggers(void) {
     if (eventLogic.inActions) return;
     eventLogic.inActions = 1;

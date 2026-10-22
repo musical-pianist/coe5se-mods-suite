@@ -1,9 +1,4 @@
-// The log of the code that runs before CoE5SE: glu32.dll or coe5se.dylib (the stub) and the loader.
-// Each line goes to coe5mod.log in the game folder as "<time> plugin=<LOG_TAG> event=<event>
-// <fields>". The file that includes this header defines LOG_TAG first and sets logPath once it knows
-// the game folder. Until then, and when the path doesn't fit, nothing is logged. With
-// STARTUP_LOG_PID defined (the stubs), each line ends with the game process's " pid=<id>", so a
-// log two launches wrote at once still says which wrote what. Plugins log through common.h instead.
+// The log of the code that runs before CoE5SE: the stub and the loader.
 
 #pragma once
 #include <stdarg.h>
@@ -29,9 +24,7 @@ static char logPath[MAX_PATH];
 #include "log_escape.h"
 #endif
 
-// Appends one line to coe5mod.log. With STARTUP_LOG_ESCAPE defined (the loader), a byte that would
-// break the line is written escaped, as common.h's writeLog does (log_escape.h): the loader logs
-// mods' names and file names, which a mod picks. The stubs leave it out: their bytes are frozen.
+// Appends one line to coe5mod.log.
 static PRINTF_FORMAT(2, 3) void writeLog(const char *event, const char *fmt, ...) {
     if (!logPath[0]) return;
     FILE *f = fopen(logPath, "a");

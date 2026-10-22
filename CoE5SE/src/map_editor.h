@@ -1,15 +1,9 @@
 // ---- The map editor: scripts' toolbox lines, the map view, and drawing over the map --------------
-// The map editor ("--mapeditor") has a toolbox of lines on the left of its map. A script adds its own
-// line with coe5.addMapEditorLine: CoE5SE draws it right under "Create Fancy Terrain", so the
-// editor's Tab hides it with the rest of the toolbox, gives it an id the editor itself never uses,
-// and runs the script's onClick when the line (or a key bound to its id) is clicked.
-// MAP_EDITOR_DRAW lets a script draw over the editor's map each frame, with coe5.ui.drawLine and
-// coe5.ui.drawText at UI coordinates, and coe5.mapView says where each square is.
+// Scripts' lines in the map editor's toolbox, and drawing over its map.
 #include <math.h>
 
 // ---- Toolbox lines --------------------------------------------------------------------------------
-// Line n gets the id MAP_EDITOR_FREE_ID_FIRST + n: the editor handles ids 1 to 43 and the plane
-// buttons' 1000 and up, so 44 to 999 do nothing in it but end the frame.
+// Line n gets the id MAP_EDITOR_FREE_ID_FIRST + n.
 #define MAP_EDITOR_LINE_LABEL_MAX 63
 #define MAP_EDITOR_LINE_TIP_MAX   255
 typedef struct {
@@ -60,9 +54,7 @@ static int dispatchMapEditorLineClick(int a, int b) {
     return id;
 }
 
-// MAP_EDITOR_DRAW's gate, outside every wrapper: the game calls its draw pass on every frame of every
-// screen, and the site's wrappers run only in the editor's map frames. Elsewhere the draw pass runs
-// at once.
+// MAP_EDITOR_DRAW's gate: the site's wrappers run only in the editor's map frames.
 static void gateMapEditorDraw(void) {
     if (mapEditorWaiting <= 0) {
         ((void (*)(void))siteGameTarget(SITE_MAP_EDITOR_DRAW))();
@@ -105,8 +97,6 @@ static int addMapEditorLineFor(void *caller, const char *label, const char *tip,
 }
 
 // CoE5SE's outermost wrapper of the whole editor.
-// The --mapeditor launch option opens the editor before the first main menu frame, so the scripts
-// load here first, as the menu would load them; an editor opened from the menu finds them loaded.
 static void (*nextMapEditor)(void);
 static void loadScriptsBeforeMapEditor(void) {
     if (!startupFinished) {
@@ -116,8 +106,7 @@ static void loadScriptsBeforeMapEditor(void) {
     nextMapEditor();
 }
 
-// At startup: the toolbox line site, and CoE5SE's outermost wrappers of the editor, its wait and
-// MAP_EDITOR_DRAW.
+// At startup: the toolbox line site and CoE5SE's editor wrappers.
 static void installMapEditorHooks(void) {
     char owner[64];
     moduleFileName((void *)gateMapEditorDraw, owner, sizeof owner);
@@ -130,11 +119,7 @@ static void installMapEditorHooks(void) {
 }
 
 // ---- The map view ---------------------------------------------------------------------------------
-// Where the map screen's and the map editor's squares are on the screen, in UI units (x from the
-// left, y up from the bottom, screenW x screenH). World square (x, y) is a square of `zoom` UI
-// units with its top left corner at (originX + x * zoom, originY - y * zoom). The first and last
-// x and y are the squares of the shown plane that are at least partly on the screen; first is
-// above last when none is.
+// Where the map's squares are on the screen, in UI units.
 typedef struct {
     double zoom, cameraX, cameraY, originX, originY;
     int screenW, screenH, plane, planeX, planeY, planeW, planeH, firstX, lastX, firstY, lastY;
@@ -161,8 +146,8 @@ static int mapViewFor(double zoom, double cameraX, double cameraY, int screenW, 
 // The game's map view now. Returns 0 when the shown plane isn't one of the game's planes.
 static int currentMapView(MapView *out) {
     int plane = G32(RVA_MAP_VIEW_PLANE), last = G32(RVA_LAST_PLANE);
-    if (plane < 0 || plane > last || plane >= PLANE_TABLE_MAX) return 0;
-    const unsigned char *record = GAME_PTR(RVA_PLANES) + (size_t)plane * PLANE_SIZE;
+    if (plane < 0 || plane > last || plane >= planeTableRecords()) return 0;
+    const unsigned char *record = planeRecord(plane);
     int ok = mapViewFor(*(float *)GAME_PTR(RVA_MAP_ZOOM), *(float *)GAME_PTR(RVA_MAP_CAMERA_X), *(float *)GAME_PTR(RVA_MAP_CAMERA_Y),
                         G32(RVA_SCREEN_W), G32(RVA_SCREEN_H), *(const int *)(record + PLANE_X), *(const int *)(record + PLANE_Y),
                         *(const int *)(record + PLANE_W), *(const int *)(record + PLANE_H), out);
@@ -171,9 +156,7 @@ static int currentMapView(MapView *out) {
 }
 
 // ---- Drawing at UI coordinates ----------------------------------------------------------------------
-// The GUI's own calls, as the game's line and text helpers make them (RVA_DRAW_LINE_UI, RVA_DRAW_TEXT):
-// UI units scaled to window pixels, the GL state through the game's cache, so the draw pass that
-// follows finds the state it expects.
+// Draws with the GUI's own calls, as the game's line and text helpers do.
 static void *glImport(uintptr_t rva) {
 #ifdef __APPLE__
     return GAME_PTR(rva);
@@ -185,21 +168,57 @@ static void *glImport(uintptr_t rva) {
 #define GL_VERTEX_ARRAY 0x8074
 #define GL_FLOAT_TYPE   0x1406
 #define GL_LINES_MODE   1
+#define GL_TRIANGLE_FAN_MODE 6
 
 // UI units to window pixels, along x and along y.
 static float uiScaleX(void) { return G32(RVA_SCREEN_W) > 0 ? (float)G32(RVA_WINDOW_W) / (float)G32(RVA_SCREEN_W) : 1.0f; }
 static float uiScaleY(void) { return G32(RVA_SCREEN_H) > 0 ? (float)G32(RVA_WINDOW_H) / (float)G32(RVA_SCREEN_H) : 1.0f; }
 
+// A straight line as up to three filled boxes on whole pixels; returns the count, 0 for a slanted line.
+#define STRAIGHT_LINE_BOXES 3
+static int straightLineBoxes(float x1, float y1, float x2, float y2, float width,
+                             float corners[STRAIGHT_LINE_BOXES][8], float shares[STRAIGHT_LINE_BOXES]) {
+    int across = y1 == y2;
+    if (x1 != x2 && !across) return 0;
+    float from = (across ? y1 : x1) - floorf(width / 2), to = from + width;
+    float first = floorf(from), last = ceilf(to);
+    float spans[STRAIGHT_LINE_BOXES][3];
+    int n = 0;
+    if (last - first <= 1) {
+        spans[n][0] = first, spans[n][1] = first + 1, spans[n++][2] = to - from;
+    } else {
+        spans[n][0] = first, spans[n][1] = first + 1, spans[n++][2] = first + 1 - from;
+        if (last - 1 > first + 1) spans[n][0] = first + 1, spans[n][1] = last - 1, spans[n++][2] = 1;
+        spans[n][0] = last - 1, spans[n][1] = last, spans[n++][2] = to - (last - 1);
+    }
+    for (int i = 0; i < n; i++) {
+        float lo = spans[i][0], hi = spans[i][1];
+        float acrossBox[8] = {x1, lo, x2, lo, x2, hi, x1, hi}, upBox[8] = {lo, y1, hi, y1, hi, y2, lo, y2};
+        memcpy(corners[i], across ? acrossBox : upBox, sizeof acrossBox);
+        shares[i] = spans[i][2];
+    }
+    return n;
+}
+
 // One line from (x1, y1) to (x2, y2), `width` pixels wide, in r, g, b at `alpha`.
 static void drawUiLine(float x1, float y1, float x2, float y2, float r, float g, float b, float alpha, float width) {
     float sx = uiScaleX(), sy = uiScaleY();
     float points[4] = {x1 * sx, y1 * sy, x2 * sx, y2 * sy};
+    float boxes[STRAIGHT_LINE_BOXES][8], shares[STRAIGHT_LINE_BOXES];
+    int count = straightLineBoxes(points[0], points[1], points[2], points[3], width, boxes, shares);
     GAME_FN(void (*)(int, int), RVA_GL_STATE)(0, GL_STATE_LINES);
-    GL_IMPORT(void (*)(float), RVA_GL_LINE_WIDTH)(width);
-    GL_IMPORT(void (*)(float, float, float, float), RVA_GL_COLOR4F)(r, g, b, alpha);
     GL_IMPORT(void (*)(unsigned), RVA_GL_ENABLE_CLIENT_STATE)(GL_VERTEX_ARRAY);
-    GL_IMPORT(void (*)(int, unsigned, int, const void *), RVA_GL_VERTEX_POINTER)(2, GL_FLOAT_TYPE, 0, points);
-    GL_IMPORT(void (*)(unsigned, int, int), RVA_GL_DRAW_ARRAYS)(GL_LINES_MODE, 0, 2);
+    for (int i = 0; i < count; i++) {
+        GL_IMPORT(void (*)(float, float, float, float), RVA_GL_COLOR4F)(r, g, b, alpha * shares[i]);
+        GL_IMPORT(void (*)(int, unsigned, int, const void *), RVA_GL_VERTEX_POINTER)(2, GL_FLOAT_TYPE, 0, boxes[i]);
+        GL_IMPORT(void (*)(unsigned, int, int), RVA_GL_DRAW_ARRAYS)(GL_TRIANGLE_FAN_MODE, 0, 4);
+    }
+    if (!count) {
+        GL_IMPORT(void (*)(float), RVA_GL_LINE_WIDTH)(width);
+        GL_IMPORT(void (*)(float, float, float, float), RVA_GL_COLOR4F)(r, g, b, alpha);
+        GL_IMPORT(void (*)(int, unsigned, int, const void *), RVA_GL_VERTEX_POINTER)(2, GL_FLOAT_TYPE, 0, points);
+        GL_IMPORT(void (*)(unsigned, int, int), RVA_GL_DRAW_ARRAYS)(GL_LINES_MODE, 0, 2);
+    }
     GL_IMPORT(void (*)(unsigned), RVA_GL_DISABLE_CLIENT_STATE)(GL_VERTEX_ARRAY);
 }
 

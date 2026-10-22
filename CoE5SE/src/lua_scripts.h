@@ -388,6 +388,7 @@ enum {
     T_SQUARE_LIBRARY_LEVEL,
     T_MONSTER_ABILITY,
     T_FORT_PART_WORD,
+    T_PLANE_TINT,
 };
 typedef struct {
     const char *name;
@@ -396,6 +397,8 @@ typedef struct {
     CallSite site;
     int count2, stride2;
 } GameVar;
+// A square value coe5.set writes only while the world is built, inside the area being built.
+#define WRITABLE_WHILE_BUILDING 2
 // The variables that need more than two indexes, by name.
 enum { LIST_NONE, LIST_TO_EMPTY_NAME, LIST_TO_BELOW_ONE, LIST_TO_BELOW_ONE_I32, LIST_TO_BELOW_ZERO_I32 };
 typedef struct { const char *name; int count3, stride3, list, nameBack; uintptr_t lastAt; int everyPlayer; } GameVarShape;
@@ -616,10 +619,16 @@ static const GameVar GAME_VARS[] = {
     {"squareArmyOwner", RVA_SQUARE_RECORDS + SQUARE_ARMY_OWNER, T_ARMY_OWNER, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 0, 0,
      MAP_COLUMN_SQUARES, SQUARE_SIZE},
     {"squareOwner",    RVA_SQUARE_RECORDS + SQUARE_OWNER, T_I8, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 0, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
-    {"squareTerrain",  RVA_SQUARE_RECORDS + SQUARE_TERRAIN_TYPE, T_I16, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 0, 0,
+    {"squareTerrain",  RVA_SQUARE_RECORDS + SQUARE_TERRAIN_TYPE, T_I16, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0,
+     WRITABLE_WHILE_BUILDING, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
+    {"squarePortal",   RVA_SQUARE_RECORDS + SQUARE_PORTAL, T_I16, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, WRITABLE_WHILE_BUILDING, 0,
      MAP_COLUMN_SQUARES, SQUARE_SIZE},
-    {"squarePortal",   RVA_SQUARE_RECORDS + SQUARE_PORTAL, T_I16, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 0, 0, MAP_COLUMN_SQUARES,
-     SQUARE_SIZE},
+    {"squareGround",   RVA_SQUARE_RECORDS + SQUARE_GROUND, T_I16, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, WRITABLE_WHILE_BUILDING, 0,
+     MAP_COLUMN_SQUARES, SQUARE_SIZE},
+    {"squareTemperature", RVA_SQUARE_RECORDS + SQUARE_TEMPERATURE, T_I16, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0,
+     WRITABLE_WHILE_BUILDING, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
+    {"squareName",     RVA_SQUARE_RECORDS + SQUARE_NAME,  T_STR, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, SQUARE_NAME_SIZE,
+     WRITABLE_WHILE_BUILDING, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
     {"squarePlane",    0,                                 T_PLANE_AT, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
     {"commanderLastIndex", RVA_LAST_COMMANDER,            T_I32, 1, 0, 0, 0, 0, 0, 0},
     {"commanderUnit",  RVA_COMMANDERS,                    T_I32, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
@@ -666,8 +675,9 @@ static const GameVar GAME_VARS[] = {
     {"unitApLeft",     RVA_UNITS,                         T_UNIT_AP_LEFT, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
     {"unitApUsed",     RVA_UNITS + UNIT_AP_USED,          T_I16, UNIT_TABLE_MAX, UNIT_SIZE, 0, 1, 0, 0, 0},
     {"unitAbility",    RVA_UNITS,                         T_UNIT_ABILITY, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, RITUAL_EFFECT_ID_COUNT, 0},
-    {"planeName",      RVA_PLANES,                        T_STR, PLANE_TABLE_MAX, PLANE_SIZE, PLANE_NAME_SIZE, 0, 0, 0, 0},
+    {"planeName",      RVA_PLANES,                        T_STR, PLANE_RECORDS_MOVED, PLANE_SIZE, PLANE_NAME_SIZE, 0, 0, 0, 0},
     {"planeLastIndex", RVA_LAST_PLANE,                    T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"planeTint",      RVA_PLANES,                        T_PLANE_TINT, PLANE_RECORDS_MOVED, PLANE_SIZE, 0, 0, 0, 0, 0},
     {"ticksMs",        RVA_TICKS_MS,                      T_TICKS_MS, 1, 0, 0, 0, 0, 0, 0},
     {"tooltipLineHeight", RVA_TOOLTIP_LINE_HEIGHT,        T_F32, 1, 0, 0, 0, 0, 0, 0},
     {"traceLevel",     RVA_DEBUG_LEVEL,                   T_I32, 1, 0, 0, 1, 0, 0, 0},
@@ -692,8 +702,8 @@ static const GameVar GAME_VARS[] = {
      MONSTER_TABLE_MAX, MONSTER_SIZE, 0, 0, 0, MONSTER_ATTACK_MAX, MONSTER_ATTACK_SIZE},
     {"monsterAttackValue", WINDOWS_ONLY_RVA(RVA_MONSTER_TABLE + MONSTER_ATTACKS + MONSTER_ATTACK_VALUE), MONSTER_ATTACK_TYPE,
      MONSTER_TABLE_MAX, MONSTER_SIZE, 0, 0, 0, MONSTER_ATTACK_MAX, MONSTER_ATTACK_SIZE},
-    {"weaponDmgType",  WINDOWS_ONLY_RVA(RVA_WEAPON_TABLE + WEAPON_DMGTYPE), WEAPON_NUMBER_TYPE, WEAPON_SLOTS, WEAPON_SIZE, 0, 0, 0, 0, 0},
-    {"weaponAoe",      WINDOWS_ONLY_RVA(RVA_WEAPON_TABLE + WEAPON_AOE), WEAPON_NUMBER_TYPE, WEAPON_SLOTS, WEAPON_SIZE, 0, 0, 0, 0, 0},
+    {"weaponDmgType",  WINDOWS_ONLY_RVA(RVA_WEAPON_TABLE + WEAPON_DMGTYPE), WEAPON_NUMBER_TYPE, WEAPON_RECORDS_GAME, WEAPON_SIZE, 0, 0, 0, 0, 0},
+    {"weaponAoe",      WINDOWS_ONLY_RVA(RVA_WEAPON_TABLE + WEAPON_AOE), WEAPON_NUMBER_TYPE, WEAPON_RECORDS_GAME, WEAPON_SIZE, 0, 0, 0, 0, 0},
     {"squareCitadel",  0,                                 SQUARE_CITADEL_TYPE, PLAYER_SLOTS, 0, 0, 0, 0, MAP_COLUMNS_MAX, 0},
     {"unitMoveFlags",  RVA_UNITS,                         T_UNIT_MOVE_FLAGS, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
     {"unitFlags",      RVA_UNITS,                         T_UNIT_FLAG_WORDS, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
@@ -733,6 +743,7 @@ static const GameVarShape GAME_VAR_SHAPES[] = {
     {"ritualTerrainAt", MAP_COLUMN_SQUARES, 0, LIST_NONE, 0, 0, 0},
     {"ritualEffectMet", COMMANDER_TABLE_MAX, 0, LIST_NONE, 0, 0, 0},
     {"planeName", 0, 0, LIST_NONE, 0, RVA_LAST_PLANE, 0},
+    {"planeTint", 0, 0, LIST_NONE, 0, RVA_LAST_PLANE, 0},
     {"squareGems", SQUARE_GEM_KINDS, 1, LIST_NONE, 0, 0, 0},
     {"squareStrength", MAP_COLUMN_SQUARES, 0, LIST_NONE, 0, 0, 1},
     {"squareRememberedStrength", MAP_COLUMN_SQUARES, SQUARE_SIZE, LIST_NONE, 0, 0, 0},
@@ -766,8 +777,9 @@ static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg
     for (size_t i = 0; i < sizeof GAME_VARS / sizeof GAME_VARS[0]; i++) if (!strcmp(GAME_VARS[i].name, name)) v = &GAME_VARS[i];
     if (!v) { luaL_error(L, "unknown game variable '%s'", name); return NULL; }
     int isRitualTable = v->count == COUNT_AT_CALL && v->addr >= RVA_RITUAL_TABLE && v->addr < RVA_RITUAL_TABLE + RITUAL_SIZE;
+    int movedTable = isRitualTable || !v->addr ? -1 : tableHolding(v->addr, v->stride);
     lua_Integer index = 0;
-    int count = isRitualTable ? ritualSlotCount() : v->count;
+    int count = isRitualTable ? ritualSlotCount() : movedTable >= 0 ? tableRecords(movedTable) : v->count;
     GameVarShape shape = gameVarShape(v);
     if (count > 1) {
         int first = shape.everyPlayer ? -1 : 0;
@@ -792,6 +804,8 @@ static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg
     }
     if ((v->type == T_SITE_I32 || v->type == T_CEREMONY_COST) && !luaSiteDepth[v->site]) return NULL;
     unsigned char *table = v->type == T_CAST_COUNT ? castCountsBase()
+                         : v->addr == RVA_PLANES ? planeTableAddress()
+                         : movedTable >= 0 ? tableAddress(movedTable) + (v->addr - tableMoves[movedTable].rva)
                          : gameBase + (isRitualTable ? ritualTableRva() + (v->addr - RVA_RITUAL_TABLE) : v->addr);
     if (shape.lastAt && index > G32(shape.lastAt)) return NULL;
     unsigned char *entries = table + (size_t)index * v->stride;
@@ -1338,8 +1352,8 @@ static int monstersHomeAt(int x, int y, const char *name) {
     for (int u = 0; u <= last && u < UNIT_TABLE_MAX; u++) {
         int monster = G16(RVA_UNIT_MONSTER + (size_t)u * UNIT_SIZE);
         if (G16(RVA_UNIT_HOME_X + (size_t)u * UNIT_SIZE) != x || G16(RVA_UNIT_HOME_X + 2 + (size_t)u * UNIT_SIZE) != y) continue;
-        if (G16(RVA_UNIT_HP + (size_t)u * UNIT_SIZE) < 1 || monster < 0 || monster >= MONSTER_TABLE_MAX) continue;
-        count += !strncmp((const char *)(gameBase + RVA_MONSTER_TABLE + (size_t)monster * MONSTER_SIZE), name, MONSTER_NAME_SIZE);
+        if (G16(RVA_UNIT_HP + (size_t)u * UNIT_SIZE) < 1 || !monsterRecord(monster)) continue;
+        count += !strncmp((const char *)monsterRecord(monster), name, MONSTER_NAME_SIZE);
     }
     return count;
 }
@@ -1364,8 +1378,7 @@ static int ritualUnitRuleMet(const RitualCaster *c, int id, int value) {
     char name[100] = "";
     int how, count = 0;
     int casterMonster = G16(RVA_UNIT_MONSTER + (size_t)c->unit * UNIT_SIZE);
-    const char *casterName = casterMonster >= 0 && casterMonster < MONSTER_TABLE_MAX
-        ? (const char *)(gameBase + RVA_MONSTER_TABLE + (size_t)casterMonster * MONSTER_SIZE) : NULL;
+    const char *casterName = (const char *)monsterRecord(casterMonster);
     switch (id) {
     case RITUAL_FX_NOMONREQ: case RITUAL_FX_FEWMONREQ: {
         int limit = id == RITUAL_FX_NOMONREQ ? value - 1 : value;
@@ -1522,9 +1535,7 @@ static int ritualEffectMetAt(const unsigned char *record, int i, int commander) 
     return rule < 5 ? count == 0 : count > 0;
 }
 
-// Fort part words. The game keeps no table of them: its terrain reader passes each word and its bit
-// to RVA_FORT_WORD_MATCH, so they are read from that code, once, and a word a game update adds needs
-// no change here.
+// Fort part words, read once from the game's terrain reader.
 static const char *fortPartWords[FORT_PART_BITS];
 static int fortPartWordsRead;
 
@@ -1536,8 +1547,7 @@ static int singleBitIndex(uint32_t value) {
     return n;
 }
 
-// Windows: each `mov edx, bit / lea rcx, [rip+word] / mov r8d, 1 / add ebx, eax / call match` in
-// code[0..size), which sits at `at`. Returns how many words it stored in words[bit number].
+// Windows: reads the fort part words from the terrain reader's code; returns how many.
 static __attribute__((unused)) int readFortWordsX64(const unsigned char *code, size_t size, uintptr_t at, uintptr_t match, const char **words) {
     static const unsigned char MID[] = {0x41, 0xb8, 0x01, 0x00, 0x00, 0x00, 0x03, 0xd8};
     int found = 0;
@@ -1820,6 +1830,12 @@ static int lGet(lua_State *L) {
         else lua_pushnil(L);
         break;
     }
+    case T_PLANE_TINT: {
+        float rgba[PLANE_TINT_CHANNELS];
+        memcpy(rgba, p + PLANE_TINT, sizeof rgba);
+        for (int c = 0; c < PLANE_TINT_CHANNELS; c++) lua_pushnumber(L, c == PLANE_TINT_CHANNELS - 1 && !p[PLANE_TINT_ON] ? 0.0 : rgba[c]);
+        return PLANE_TINT_CHANNELS;
+    }
     default: lua_pushinteger(L, *(int *)p);
     }
     return 1;
@@ -1830,7 +1846,7 @@ static const struct { const char *name; lua_Integer min, max; } GAME_VAR_RANGES[
     {"mapW", INT_MIN, MAP_COLUMNS_MAX}, {"mapH", INT_MIN, MAP_COLUMN_SQUARES}, {"mapDepth", INT_MIN, MAP_COLUMNS_MAX},
     {"cliMapW", INT_MIN, MAP_COLUMNS_MAX}, {"cliMapH", INT_MIN, MAP_COLUMN_SQUARES},
     {"society", 0, SOCIETY_TABLE_MAX - 1},
-    {"slotClass", INT_MIN, CLASS_TABLE_MAX - 1},
+    {"slotClass", INT_MIN, LAST_MOD_CLASS_SLOT},
     {"slotAi", INT_MIN, AI_LEVEL_TABLE_MAX - 1},
     {"startDefault", 0, 2}, {"northPart", -1, 100}, {"southPart", -1, 100}, {"wilder", 0, 2},
     {"mouseButtons", 0, 7},
@@ -1856,6 +1872,7 @@ static void gameVarRange(const GameVar *v, lua_Integer *min, lua_Integer *max) {
         if (GAME_VAR_RANGES[i].min > *min) *min = GAME_VAR_RANGES[i].min;
         if (GAME_VAR_RANGES[i].max < *max) *max = GAME_VAR_RANGES[i].max;
     }
+    if (!strcmp(v->name, "slotClass") && tableRecords(TABLE_CLASS) - 1 < *max) *max = tableRecords(TABLE_CLASS) - 1;
 }
 
 // Resets a commander's cached army action points.
@@ -1885,6 +1902,79 @@ static void flushArmyApCaches(int unit) {
     flushCommanderCache(G32(RVA_UNITS + (size_t)unit * UNIT_SIZE + UNIT_COMMANDER));
 }
 
+// World building: the squares a script may write.
+typedef struct { int x, y, w, h; } SquareRect;
+static int worldBuildingDepth;
+static SquareRect worldBuildingArea;
+
+// Marks world building in progress on `area`; returns the area it replaces.
+static __attribute__((unused)) SquareRect startWorldBuilding(SquareRect area) {
+    SquareRect previous = worldBuildingArea;
+    worldBuildingArea = area;
+    worldBuildingDepth++;
+    return previous;
+}
+
+// Ends the startWorldBuilding call that returned `previous`.
+static __attribute__((unused)) void stopWorldBuilding(SquareRect previous) {
+    worldBuildingArea = previous;
+    if (worldBuildingDepth > 0) worldBuildingDepth--;
+}
+
+// 1 and the area being built while the world is built, else 0.
+static int worldBuildingAreaNow(SquareRect *area) {
+    if (worldBuildingDepth > 0) {
+        *area = worldBuildingArea;
+        return 1;
+    }
+    if (!luaSiteDepth[SITE_PLAY_GAME_NEW_WORLD]) return 0;
+    int w = G32(RVA_MAP_W), h = G32(RVA_MAP_H);
+    *area = (SquareRect){0, 0, w < MAP_COLUMNS_MAX ? w : MAP_COLUMNS_MAX, h < MAP_COLUMN_SQUARES ? h : MAP_COLUMN_SQUARES};
+    return 1;
+}
+
+// Why a write to square (x, y) is refused, or NULL.
+static const char *squareWriteRefusal(int building, SquareRect area, lua_Integer x, lua_Integer y) {
+    if (!building) return "not_world_building";
+    if (x < area.x || y < area.y || x >= (lua_Integer)area.x + area.w || y >= (lua_Integer)area.y + area.h) return "outside_plane";
+    return NULL;
+}
+
+// The values a square write takes: what the game itself stores there.
+static void squareValueRange(const char *name, int lastTerrain, lua_Integer *min, lua_Integer *max) {
+    *min = SHRT_MIN, *max = SHRT_MAX;
+    if (!strcmp(name, "squareTerrain")) *min = 0, *max = lastTerrain;
+    else if (!strcmp(name, "squareGround")) *min = 0, *max = SQUARE_GROUND_LAST;
+}
+
+// coe5.set for a square value, only inside the area being built.
+static int setSquareValue(lua_State *L, const GameVar *v, unsigned char *p, int arg) {
+    LuaScript *s = luaScriptOf(L);
+    const char *mod = s ? s->mod : "?";
+    lua_Integer x = lua_tointeger(L, 2), y = lua_tointeger(L, 3);
+    SquareRect area = {0, 0, 0, 0};
+    int building = worldBuildingAreaNow(&area);
+    const char *reason = squareWriteRefusal(building, area, x, y);
+    if (reason) {
+        refuseLuaCall(mod, "coe5.set", reason, "name=%s x=%lld y=%lld", v->name, (long long)x, (long long)y);
+        return 0;
+    }
+    if (v->type == T_STR) {
+        snprintf((char *)p, v->size, "%s", luaL_checkstring(L, arg));
+        return 0;
+    }
+    lua_Integer value = luaL_checkinteger(L, arg), min, max;
+    squareValueRange(v->name, G32(RVA_LAST_TERRAIN), &min, &max);
+    if (value < min || value > max) {
+        refuseLuaCall(mod, "coe5.set", "out_of_range", "name=%s value=%lld min=%lld max=%lld", v->name, (long long)value,
+                      (long long)min, (long long)max);
+        return 0;
+    }
+    if (!strcmp(v->name, "squareTerrain")) GAME_FN(void (*)(int, int, int), RVA_CHANGE_SQUARE_TERRAIN)((int)x, (int)y, (int)value);
+    else *(short *)p = (short)value;
+    return 0;
+}
+
 // coe5.set(name, [index,] value).
 static int lSet(lua_State *L) {
     const GameVar *v;
@@ -1892,6 +1982,7 @@ static int lSet(lua_State *L) {
     unsigned char *p = gameVarAddress(L, &v, &arg);
     if (!v->writable) return luaL_error(L, "game variable '%s' is read-only", v->name);
     if (!p) return luaL_error(L, "%s can only be set while a wrap of its site runs", v->name);
+    if (v->writable == WRITABLE_WHILE_BUILDING) return setSquareValue(L, v, p, arg);
     if (v->type == T_WINDOWS_ONLY) {
         LuaScript *s = luaScriptOf(L);
         refuseLuaCall(s ? s->mod : "?", "coe5.set", "windows_only", "name=%s", v->name);
@@ -2959,9 +3050,7 @@ static int lAddGameMenuLine(lua_State *L) {
     return 1;
 }
 
-// coe5.addMapEditorLine{label=, tooltip=, visible=function, onClick=function}: a line in the map
-// editor's toolbox, right under "Create Fancy Terrain" (map_editor.h). Returns the line's id, for
-// coe5.ui.bindKey in a MAP_EDITOR_WAIT wrap, or false.
+// coe5.addMapEditorLine{label=, tooltip=, visible=, onClick=}: a map editor toolbox line; its id or false.
 static int lAddMapEditorLine(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE);
     lua_settop(L, 1);
@@ -2986,8 +3075,179 @@ static int lAddMapEditorLine(lua_State *L) {
     return 1;
 }
 
-// coe5.mapView(): the map view now, as a table (map_editor.h, MapView), or nil when the shown plane
-// isn't one of the game's.
+static int luaScriptsLoading;
+
+static int luaPathIsLink(const char *path);
+
+// Finds file `spec` in mod folder `folder` and writes its path; NULL, or the reason it can't.
+#define PLANE_ICON_SPEC_MAX 200
+static int endsWith(const char *text, const char *ending) {
+    size_t n = strlen(text), e = strlen(ending);
+    return n > e && !strcmp(text + n - e, ending);
+}
+static const char *findModFile(const char *folder, const char *spec, const char *const endings[2], const char *const reasons[4], char *path,
+                               size_t size) {
+    size_t length = strlen(spec);
+    if (length < 4 || length > PLANE_ICON_SPEC_MAX || strncmp(spec, "./", 2) || (!endsWith(spec + 2, endings[0]) && !endsWith(spec + 2, endings[1])))
+        return reasons[0];
+    for (const char *part = spec + 2; *part;) {
+        size_t n = strcspn(part, "/");
+        if (!n || part[0] == '.') return reasons[0];
+        for (size_t i = 0; i < n; i++) {
+            char c = part[i];
+            if (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '_' && c != '-' && c != '.') return reasons[0];
+            if (c == '.' && i + 1 < n && part[i + 1] == '.') return reasons[0];
+        }
+        part += n + (part[n] == '/');
+        if (part[-1] == '/' && !*part) return reasons[0];
+    }
+    if (!buildPath(path, size, __func__, "%s", folder)) return "path_too_long";
+    for (const char *part = spec + 2; *part;) {
+        size_t n = strcspn(part, "/");
+        char name[PLANE_ICON_SPEC_MAX + 1], stored[MAX_PATH];
+        snprintf(name, sizeof name, "%.*s", (int)n, part);
+        if (!buildPath(path + strlen(path), size - strlen(path), __func__, PATH_SEP "%s", name)) return "path_too_long";
+        if (!storageStoredName(path, stored, sizeof stored)) return reasons[1];
+        if (strcmp(stored, name)) return reasons[2];
+        if (luaPathIsLink(path)) return reasons[3];
+        part += n + (part[n] == '/');
+    }
+    return NULL;
+}
+
+// Finds image `spec` (.tga or .png) in mod folder `folder`.
+static const char *findModImage(const char *folder, const char *spec, char *path, size_t size) {
+    static const char *const ENDINGS[2] = {".tga", ".png"};
+    static const char *const REASONS[4] = {"bad_icon", "icon_not_found", "icon_wrong_case", "icon_link"};
+    return findModFile(folder, spec, ENDINGS, REASONS, path, size);
+}
+
+#include "plane_build.h"
+
+// coe5.addPlane{...}: declares a plane of the mod's, at script load; true, or false when refused.
+static void readLuaPlaneLayout(lua_State *L, int piecesAt, int zonesAt, int unitsAt, PlaneLayout *layout, const char *mod, const char *folder,
+                               const char *script, int line);
+static void finishPlaneLayout(PlaneLayout *layout, int w, int h, const char *mod);
+static void notePlaneLayoutProblems(const PlaneLayout *layout, const char *mod);
+static int lAddPlane(lua_State *L) {
+    static PlaneLayout layout;
+    luaL_checktype(L, 1, LUA_TTABLE);
+    lua_settop(L, 1);
+    lua_getfield(L, 1, "name");
+    lua_getfield(L, 1, "w");
+    lua_getfield(L, 1, "h");
+    lua_getfield(L, 1, "fill");
+    lua_getfield(L, 1, "like");
+    lua_getfield(L, 1, "populate");
+    lua_getfield(L, 1, "swap");
+    lua_getfield(L, 1, "generate");
+    lua_getfield(L, 1, "icon");
+    lua_getfield(L, 1, "pieces");
+    lua_getfield(L, 1, "zones");
+    lua_getfield(L, 1, "units");
+    const char *name = luaL_checkstring(L, 2);
+    PlaneBuildFields f;
+    const char *reason = readPlaneBuildFields(L, 6, 7, 8, &f);
+    int sizeFromLike = !reason && lua_isnil(L, 3) && lua_isnil(L, 4) && likePlaneSizeExtra(f.recipe) >= 0;
+    lua_Integer w = sizeFromLike ? PLANE_LIKE_SIZE_MIN : luaL_checkinteger(L, 3);
+    lua_Integer h = sizeFromLike ? PLANE_LIKE_SIZE_MIN : luaL_checkinteger(L, 4);
+    if (!lua_isnil(L, 9)) luaL_checktype(L, 9, LUA_TFUNCTION);
+    int built = !lua_isnil(L, 6) || !lua_isnil(L, 9);
+    lua_Integer fill = built ? luaL_optinteger(L, 5, 0) : luaL_checkinteger(L, 5);
+    const char *icon = luaL_optstring(L, 10, NULL);
+    char iconPath[MAX_PATH] = "";
+    const char *mod = runningLuaMod();
+    if (!reason) {
+        reason = !luaScriptsLoading ? "not_at_load"
+               : w < 1 || w >= MAP_COLUMNS_MAX || h < 1 || h >= MAP_COLUMN_SQUARES ? "bad_size"
+               : fill < 0 || fill > SHRT_MAX ? "bad_terrain"
+               : icon && luaRunning ? findModImage(luaRunning->folder, icon, iconPath, sizeof iconPath)
+               : NULL;
+    }
+    if (!reason && f.recipe >= 0 && !planeRecipesLoaded(L, mod ? mod : "?", "coe5.addPlane")) reason = "recipes_not_loaded";
+    if (!reason) {
+        lua_Debug caller;
+        int line = lua_getstack(L, 1, &caller) && lua_getinfo(L, "l", &caller) ? caller.currentline : 0;
+        readLuaPlaneLayout(L, 11, 12, 13, &layout, mod ? mod : "?", luaRunning ? luaRunning->folder : "", luaRunning ? luaRunning->path : "?", line);
+        finishPlaneLayout(&layout, (int)w, (int)h, mod ? mod : "?");
+    }
+    if (!reason) reason = declareCustomPlane(mod ? mod : "?", name, (int)w, (int)h, (int)fill, iconPath);
+    if (reason) refuseLuaCall(mod, "coe5.addPlane", reason, "name=%.40s w=%lld h=%lld fill=%lld icon=%.80s", name, (long long)w, (long long)h,
+                              (long long)fill, icon ? icon : "-");
+    else {
+        CustomPlane *p = findCustomPlane(name);
+        p->recipe = f.recipe, p->populate = f.populate, p->swapCount = f.swapCount, p->sizeFromLike = sizeFromLike;
+        memcpy(p->swapFrom, f.swapFrom, sizeof f.swapFrom);
+        memcpy(p->swapTo, f.swapTo, sizeof f.swapTo);
+        p->script = luaScriptOf(L);
+        if (!lua_isnil(L, 9)) {
+            lua_pushvalue(L, 9);
+            p->generateRef = luaL_ref(L, LUA_REGISTRYINDEX);
+        }
+        p->layout = layout;
+        notePlaneLayoutProblems(&p->layout, p->mod);
+        writeLog("plane_recipe", "mod=%s name=%s like=%s populate=%s swaps=%d generate=%d pieces=%d zones=%d units=%d", mod ? mod : "?", name,
+                 f.recipe >= 0 ? VANILLA_PLANE_SHORT_NAMES[f.recipe] : "-", f.populate >= 0 ? VANILLA_PLANE_SHORT_NAMES[f.populate] : "-",
+                 f.swapCount, p->generateRef != 0, p->layout.pieceCount, p->layout.zoneCount, p->layout.units.count);
+    }
+    lua_pushboolean(L, !reason);
+    return 1;
+}
+
+// coe5.setPlaneShape(monster, planeName, shapeMonster): a monster's shape on a mod's plane.
+static int lSetPlaneShape(lua_State *L) {
+    const char *monster = luaL_checkstring(L, 1), *plane = luaL_checkstring(L, 2), *shape = luaL_optstring(L, 3, NULL);
+    const char *mod = runningLuaMod();
+    lua_Debug caller;
+    int line = lua_getstack(L, 1, &caller) && lua_getinfo(L, "l", &caller) ? caller.currentline : 0;
+    const char *reason = !luaScriptsLoading ? "not_at_load" : declarePlaneShape(mod ? mod : "?", monster, plane, shape, line);
+    if (reason) refuseLuaCall(mod, "coe5.setPlaneShape", reason, "monster=%.60s plane=%.40s shape=%.60s", monster, plane, shape ? shape : "-");
+    lua_pushboolean(L, !reason);
+    return 1;
+}
+
+static int lSetTerrainLooks(lua_State *L);
+
+// coe5.planeIndex(name): the index of the named plane in this world, or nil.
+static int lPlaneIndex(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+    int index = customPlaneIndex(name);
+    for (int k = 0; index < 0 && k <= G32(RVA_LAST_PLANE) && k < planeTableRecords(); k++)
+        if (!strncmp((const char *)planeRecord(k), name, PLANE_NAME_SIZE)) index = k;
+    if (index < 0) lua_pushnil(L);
+    else lua_pushinteger(L, index);
+    return 1;
+}
+
+// The plane argument `arg` of the tint calls, by index or name (plane_tint.h, planeTintNamed); -1 for none.
+static int luaTintPlane(lua_State *L, int arg) {
+    if (lua_type(L, arg) == LUA_TSTRING) return planeTintNamed(lua_tostring(L, arg));
+    lua_Integer plane = luaL_checkinteger(L, arg);
+    return plane < 0 || plane > INT_MAX ? -1 : (int)plane;
+}
+
+// coe5.setPlaneTint(plane, r, g, b, strength): lays a colour over the map while the plane is in view.
+static int lSetPlaneTint(lua_State *L) {
+    int plane = luaTintPlane(L, 1);
+    double rgba[PLANE_TINT_CHANNELS];
+    for (int c = 0; c < PLANE_TINT_CHANNELS; c++) rgba[c] = luaL_checknumber(L, 2 + c);
+    const char *reason = setLuaPlaneTint(plane, rgba);
+    if (reason)
+        refuseLuaCall(runningLuaMod(), "coe5.setPlaneTint", reason, "plane=%.40s r=%g g=%g b=%g strength=%g min=0 max=1", luaL_tolstring(L, 1, NULL),
+                      rgba[0], rgba[1], rgba[2], rgba[3]);
+    lua_pushboolean(L, !reason);
+    return 1;
+}
+
+// coe5.clearPlaneTint(plane): drops the script's tint on the plane.
+static int lClearPlaneTint(lua_State *L) {
+    const char *reason = clearLuaPlaneTint(luaTintPlane(L, 1));
+    if (reason) refuseLuaCall(runningLuaMod(), "coe5.clearPlaneTint", reason, "plane=%.40s", luaL_tolstring(L, 1, NULL));
+    lua_pushboolean(L, !reason);
+    return 1;
+}
+
+// coe5.mapView(): the map view now as a table, or nil.
 static int lMapView(lua_State *L) {
     MapView v;
     if (!currentMapView(&v)) {
@@ -3175,8 +3435,8 @@ static int lFindMonster(lua_State *L) {
     const char *name = luaL_checkstring(L, 1);
     int last = G32(RVA_MONSTER_COUNT);
     if (strlen(name) < NAME_SIZE)
-        for (int m = 0; m <= last && m < MONSTER_TABLE_MAX; m++)
-            if (!_strnicmp((const char *)(gameBase + RVA_MONSTER_TABLE + (size_t)m * MONSTER_SIZE), name, NAME_SIZE)) {
+        for (int m = 0; m <= last && monsterRecord(m); m++)
+            if (!_strnicmp((const char *)monsterRecord(m), name, NAME_SIZE)) {
                 lua_pushinteger(L, m);
                 return 1;
             }
@@ -3531,15 +3791,16 @@ static const AiRecruitCalls *aiRecruitGame(void) {
 
 // A monster's action points a turn.
 static int monsterMoves(int monster) {
-    if (monster < 0 || monster >= MONSTER_TABLE_MAX) return 0;
-    unsigned long long flags = *(unsigned long long *)(gameBase + RVA_MONSTER_FLAGS + (size_t)monster * MONSTER_SIZE);
+    const unsigned char *record = monsterRecord(monster);
+    if (!record) return 0;
+    unsigned long long flags = *(const unsigned long long *)(record + (RVA_MONSTER_FLAGS - RVA_MONSTER_TABLE));
     return flags & UNIT_FLAG_FAST ? 4 : flags & UNIT_FLAG_SLOW ? 2 : 3;
 }
 
 // The highest level of a monster's spell attacks, 0 for none.
 static int monsterSpellLevel(int monster) {
-    if (monster < 0 || monster >= MONSTER_TABLE_MAX) return 0;
-    const unsigned char *rows = gameBase + RVA_MONSTER_TABLE + (size_t)monster * MONSTER_SIZE + MONSTER_ATTACKS;
+    if (!monsterRecord(monster)) return 0;
+    const unsigned char *rows = monsterRecord(monster) + MONSTER_ATTACKS;
     int best = 0;
     for (int i = 0; i < MONSTER_ATTACK_MAX; i++) {
         const int *row = (const int *)(rows + (size_t)i * MONSTER_ATTACK_SIZE);
@@ -3603,10 +3864,10 @@ static int lShopOffers(lua_State *L) {
         const int *costs = (const int *)(gameBase + RVA_SHOP_COSTS + block + (size_t)i * SHOP_COST_COUNT * 4);
         const char *named = (const char *)(gameBase + RVA_SHOP_OFFER_NAMES + block + (size_t)i * SHOP_OFFER_TEXT_SIZE);
         const char *limiter = (const char *)(gameBase + RVA_SHOP_OFFER_LIMITS + block + (size_t)i * SHOP_OFFER_TEXT_SIZE);
-        if (monster < 0 || monster >= MONSTER_TABLE_MAX) continue;
+        if (!monsterRecord(monster)) continue;
         lua_createtable(L, 0, 16);
         setIntField(L, "offer", i);
-        setOfferMonster(L, monster, (const char *)(gameBase + RVA_MONSTER_TABLE + (size_t)monster * MONSTER_SIZE));
+        setOfferMonster(L, monster, (const char *)monsterRecord(monster));
         setIntField(L, "count", count);
         setBoolField(L, "commander", named[0] != 0);
         setOfferCosts(L, costs);
@@ -3630,12 +3891,12 @@ static int lShopOffers(lua_State *L) {
 static int lClassRecruits(lua_State *L) {
     lua_Integer cls = luaL_checkinteger(L, 1);
     lua_createtable(L, 0, 0);
-    if (cls < 0 || cls >= CLASS_TABLE_MAX) {
+    if (cls < 0 || cls >= tableRecords(TABLE_CLASS_RECRUITS)) {
         LuaScript *s = luaScriptOf(L);
         refuseLuaCall(s ? s->mod : "?", "coe5.classRecruits", "bad_class", "class=%lld", (long long)cls);
         return 1;
     }
-    const unsigned char *list = gameBase + RVA_CLASS_SIDE_A + (size_t)cls * CLASS_RECRUITS_SIZE;
+    const unsigned char *list = tableAddress(TABLE_CLASS_RECRUITS) + (size_t)cls * CLASS_RECRUITS_SIZE;
     for (int i = 0; i < CLASS_RECRUITS_MAX; i++) {
         const unsigned char *rec = list + (size_t)i * CLASS_RECRUIT_SIZE;
         if (!rec[RECRUIT_MONSTER_NAME]) break;
@@ -3924,8 +4185,7 @@ static int lKeepTraceLines(lua_State *L) {
 
 // Whether `monster` is a record the game makes units of: 0 to the last monster, with a name.
 static int isUsedMonster(lua_Integer monster) {
-    return monster >= 0 && monster <= G32(RVA_MONSTER_COUNT) && monster < MONSTER_TABLE_MAX &&
-           gameBase[RVA_MONSTER_TABLE + (size_t)monster * MONSTER_SIZE];
+    return monster >= 0 && monster <= G32(RVA_MONSTER_COUNT) && monsterRecord((int)monster) && monsterRecord((int)monster)[0];
 }
 
 // Why a spawn of `monster` for `player` on (x, y) can't be made, or NULL.
@@ -4602,8 +4862,7 @@ static int lColumnX(lua_State *L) {
     return 0;
 }
 
-// Arguments first to last of a draw call as floats. Returns 0, with lua_refused logged for `call`, when
-// one is NaN, an infinity, or past FLT_MAX: the GL calls would take them as they are.
+// A draw call's arguments as floats; 0 when one isn't a finite float.
 static int luaDrawFloats(lua_State *L, const char *call, int first, int last, float *out) {
     for (int i = first; i <= last; i++) {
         lua_Number value = luaL_checknumber(L, i);
@@ -4617,8 +4876,7 @@ static int luaDrawFloats(lua_State *L, const char *call, int first, int last, fl
     return 1;
 }
 
-// Whether a draw call may draw now: only inside MAP_EDITOR_DRAW's chain, where the frame's GL state is
-// the GUI's. Logs lua_refused reason=not_drawing otherwise.
+// Whether a draw call may draw now: only inside MAP_EDITOR_DRAW's chain.
 static int luaMayDraw(lua_State *L, const char *call) {
     if (mapEditorDrawing > 0) return 1;
     LuaScript *s = luaScriptOf(L);
@@ -4626,8 +4884,7 @@ static int luaMayDraw(lua_State *L, const char *call) {
     return 0;
 }
 
-// coe5.ui.drawLine(x1, y1, x2, y2, r, g, b, alpha[, width]): one line at UI coordinates, `width`
-// window pixels wide (1 when left out), in MAP_EDITOR_DRAW.
+// coe5.ui.drawLine(x1, y1, x2, y2, r, g, b, alpha[, width]): one line at UI coordinates.
 static int lDrawLine(lua_State *L) {
     float f[9];
     f[8] = 1.0f;
@@ -4643,8 +4900,7 @@ static int lDrawLine(lua_State *L) {
     return 0;
 }
 
-// coe5.ui.drawText(x, y, size, text, r, g, b, alpha): one line of text in the GUI font at UI
-// coordinates, in MAP_EDITOR_DRAW. The text is cut to the game's line buffer.
+// coe5.ui.drawText(x, y, size, text, r, g, b, alpha): one line of text at UI coordinates.
 #define DRAW_TEXT_SIZE 500
 static int lDrawText(lua_State *L) {
     float pos[3], colour[4];
@@ -4666,7 +4922,8 @@ static int lNameBox(lua_State *L) {
     luaL_argcheck(L, max >= 1 && max <= NAME_BOX_LENGTH_MAX, 4, "maxLength must be 1 to 42");
     checkLuaMainThread(L, "coe5.ui.nameBox");
     int held = 0, last = G32(RVA_MONSTER_COUNT);
-    for (int m = 0; m <= last && m < MONSTER_TABLE_MAX && !held; m++) held = G32(RVA_MONSTER_SPRITES + (size_t)m * MONSTER_SIZE) == wanted;
+    for (int m = 0; m <= last && monsterRecord(m) && !held; m++)
+        held = *(const int *)(monsterRecord(m) + (RVA_MONSTER_SPRITES - RVA_MONSTER_TABLE)) == wanted;
     if (!held) {
         LuaScript *s = luaScriptOf(L);
         refuseLuaCall(s ? s->mod : "?", "coe5.ui.nameBox", "bad_sprite", "sprite=%lld", (long long)wanted);
@@ -4726,7 +4983,7 @@ static int lMonsterRow(lua_State *L) {
         refuseLuaCall(runningLuaMod(), "coe5.ui.monsterRow", "bad_monster", "monster=%lld", (long long)monster);
         return 0;
     }
-    int sprite = G32(RVA_MONSTER_SPRITES + (size_t)monster * MONSTER_SIZE);
+    int sprite = *(const int *)(monsterRecord((int)monster) + (RVA_MONSTER_SPRITES - RVA_MONSTER_TABLE));
     char cut[TEXT_BUTTON_TEXT_SIZE], cut2[TEXT_BUTTON_TEXT_SIZE];
     text = fitGameText((void *)lMonsterRow, "coe5.ui.monsterRow", text, cut, sizeof cut);
     int stripe = (monsterRowIndex++ & 1) + 1;
@@ -4782,7 +5039,8 @@ static const luaL_Reg LUA_COE5[] = {
     {"releaseFollower", lReleaseFollower}, {"transferFollower", lTransferFollower},
     {"shopOffers", lShopOffers}, {"classRecruits", lClassRecruits}, {"recruitSquares", lRecruitSquares},
     {"aiBuyOffer", lAiBuyOffer}, {"addMapEditorLine", lAddMapEditorLine}, {"mapView", lMapView},
-    {"keepTraceLines", lKeepTraceLines}, COE5SE_EXTRA_LUA_FUNCTIONS {NULL, NULL},
+    {"keepTraceLines", lKeepTraceLines}, {"addPlane", lAddPlane}, {"setPlaneShape", lSetPlaneShape}, {"planeIndex", lPlaneIndex},
+    {"setPlaneTint", lSetPlaneTint}, {"clearPlaneTint", lClearPlaneTint}, {"setTerrainLooks", lSetTerrainLooks}, COE5SE_EXTRA_LUA_FUNCTIONS {NULL, NULL},
 };
 static const luaL_Reg LUA_UI[] = {
     {"screenBegin", lScreenBegin}, {"sectionBegin", lSectionBegin}, {"sectionEnd", lSectionEnd}, {"text", lText},
@@ -5003,6 +5261,9 @@ static int openLuaSandbox(lua_State *L) {
     lua_newtable(L);
     addGatedFunctions(L, LUA_UI, "coe5.ui.");
     lua_setfield(L, -2, "ui");
+    lua_newtable(L);
+    addGatedFunctions(L, LUA_GEN, "coe5.gen.");
+    lua_setfield(L, -2, "gen");
     addGameNumbers(L);
     lua_setglobal(L, "coe5");
     return 0;
@@ -5200,10 +5461,12 @@ static void loadLuaScript(const char *mod, const char *folder) {
 
 // Loads every enabled mod's script once, at the end of startup (finishStartup), in load order.
 static void loadLuaScripts(void) {
+    luaScriptsLoading = 1;
     for (int k = 0; k < orderedModCount; k++) {
         const ModInfo *m = &orderedMods[loadOrder[k]];
         loadLuaScript(m->name, modFolder(m->tag));
     }
+    luaScriptsLoading = 0;
     moveOldDataFolders();
     writeLog("lua_scripts_done", "count=%d lua=%s", luaScriptCount, LUA_RELEASE);
 }

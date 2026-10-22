@@ -7,6 +7,15 @@
 #define SETTING_PAGE_WORD   "newsettingpage"
 #define SETTING_HEADER_WORD "newsettingheader"
 
+// Which file a settings line is in: IniParse.sidecar, and the inSidecar of each setting, page, and ref.
+#define SETTINGS_IN_INI   0
+#define SETTINGS_IN_C5SE  1
+#define SETTINGS_IN_C5M   2
+
+static const char *settingsFileSuffix(int in) {
+    return in == SETTINGS_IN_C5M ? MOD_FILE_SUFFIX : in ? SIDECAR_SUFFIX : ".ini";
+}
+
 #define ID_MS_BACK    9
 #define ID_PAGE_PREV  10
 #define ID_PAGE_NEXT  11
@@ -431,13 +440,14 @@ static PRINTF_FORMAT(4, 5) void refuseC5mLine(const char *word, const char *mod,
 }
 
 // Logs c5m_refused for a line of mod `mod`'s sidecar.
-static PRINTF_FORMAT(4, 5) void refuseSidecarLine(const char *word, const char *mod, const char *reason, const char *fmt, ...) {
+static PRINTF_FORMAT(5, 6) void refuseSidecarLine(int in, const char *word, const char *mod, const char *reason, const char *fmt, ...) {
     char details[512];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(details, sizeof details, fmt, ap);
     va_end(ap);
-    logSidecarRefusal(word, mod, reason, details, mod);
+    if (in == SETTINGS_IN_C5M) refuseC5mLine(word, mod, reason, "%s", details);
+    else logSidecarRefusal(word, mod, reason, details, mod);
 }
 
 // Logs ini_refused for a line of mod `mod`'s .ini.
@@ -612,10 +622,10 @@ static void rejectIniLine(const char *mod, const char *section, int line, const 
     addBadLine(mod, ".ini", line, p, source);
 }
 
-// Leaves out line `line` of `mod`'s sidecar.
-static void rejectSidecarLine(const char *mod, const char *word, int line, const SettingProblem *p, const char *source) {
-    refuseSidecarLine(word, mod, p->reason, "line=%d problem=%s text=%.150s", line, p->text, source);
-    addBadLine(mod, SIDECAR_SUFFIX, line, p, source);
+// Leaves out line `line` of `mod`'s sidecar, or of a #!@ line of its .c5m.
+static void rejectSidecarLine(int in, const char *mod, const char *word, int line, const SettingProblem *p, const char *source) {
+    refuseSidecarLine(in, word, mod, p->reason, "line=%d problem=%s text=%.150s", line, p->text, source);
+    addBadLine(mod, settingsFileSuffix(in), line, p, source);
 }
 
 // The lines a mod's plugins take on its page.
@@ -666,7 +676,7 @@ static const char *sidecarWordOf(const char *section) {
 
 // Leaves out line `line` of the file being read.
 static void rejectSettingsLine(const IniParse *r, const char *section, int line, const SettingProblem *p, const char *source) {
-    if (r->sidecar) rejectSidecarLine(r->mod, sidecarWordOf(section), line, p, source);
+    if (r->sidecar) rejectSidecarLine(r->sidecar, r->mod, sidecarWordOf(section), line, p, source);
     else rejectIniLine(r->mod, section, line, p, source);
 }
 
@@ -725,7 +735,7 @@ static void endIniPage(IniParse *r) {
 // Where an earlier setting or page of the mod is, for "already used" texts.
 static void usedAt(const IniParse *r, int inSidecar, int line, char *out, size_t size) {
     if (inSidecar == r->sidecar) snprintf(out, size, "on line %d", line);
-    else snprintf(out, size, "in %.40s%s line %d", r->mod, inSidecar ? SIDECAR_SUFFIX : ".ini", line);
+    else snprintf(out, size, "in %.40s%s line %d", r->mod, settingsFileSuffix(inSidecar), line);
 }
 
 // The text for a section with no `key` line.
@@ -1086,7 +1096,7 @@ static void finishIniSection(IniParse *r, IniSection *s) {
     if (r->headerPending) {
         SettingProblem p;
         if (s->problems && r->sidecar)
-            refuseSidecarLine(SETTING_HEADER_WORD, r->mod, "setting_rejected", "line=%d header=%s setting_line=%d", r->headerLine,
+            refuseSidecarLine(r->sidecar, SETTING_HEADER_WORD, r->mod, "setting_rejected", "line=%d header=%s setting_line=%d", r->headerLine,
                               r->header, s->line);
         else if (s->problems)
             refuseIniLine("header", r->mod, "setting_rejected", "file=%s.ini line=%d header=%s setting_line=%d", r->mod,
@@ -1390,7 +1400,7 @@ static void noteSidecarSettingRef(const IniParse *r, const char *at, int line) {
     ref->hasIndex = readInt(&p, &ref->index);
     ref->trailing = !isLineEnd(p);
     ref->line = line;
-    ref->inSidecar = 1;
+    ref->inSidecar = r->sidecar;
 }
 
 // Cuts raw at its first #, which starts a comment, as the game does.
@@ -1407,8 +1417,8 @@ static int cutSidecarComment(char *raw) {
 }
 
 // Reads the text of `mod`'s sidecar into reading `r`.
-static void readSidecarSettingsText(IniParse *r, const char *text) {
-    r->sidecar = 1;
+static void readSidecarSettingsText(IniParse *r, const char *text, int in) {
+    r->sidecar = in;
     sidecarBlock.open = 0;
     if (!strncmp(text, "\xEF\xBB\xBF", 3)) text += 3;
     char raw[INI_LINE_MAX + 1], word[24];
@@ -1416,6 +1426,17 @@ static void readSidecarSettingsText(IniParse *r, const char *text) {
     for (int line = 1; *text; line++) {
         int tooLong;
         text = copySettingsLine(text, raw, &tooLong);
+        if (in == SETTINGS_IN_C5M) {
+            const char *own = sidecarLineText(raw);
+            if (!own) {
+                cutSidecarComment(raw);
+                const char *rest = raw;
+                skipSpaces(&rest);
+                if (*rest) finishSidecarBlock(r);
+                continue;
+            }
+            memmove(raw, own, strlen(own) + 1);
+        }
         int hashInText = cutSidecarComment(raw);
         const char *at = raw;
         skipSpaces(&at);
@@ -1434,7 +1455,7 @@ static void readSidecarSettingsText(IniParse *r, const char *text) {
             snprintf(source, sizeof source, "%.150s", at);
             settingProblem(&p, "line_too_long", "line over %d characters", INI_LINE_MAX);
             if (starts) finishSidecarBlock(r);
-            rejectSidecarLine(r->mod, word, line, &p, source);
+            rejectSidecarLine(r->sidecar, r->mod, word, line, &p, source);
             if (inBlock) sidecarBlock.s.problems++;
             continue;
         }
@@ -1469,7 +1490,7 @@ static int settingsFileTried(const char *mod) {
 }
 
 // The text of `mod`'s settings file at `path`, to free, or NULL when there is none.
-static char *readSettingsFileText(const char *mod, const char *path, int sidecar) {
+static char *readSettingsFileText(const char *mod, const char *path, int in) {
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
@@ -1478,7 +1499,7 @@ static char *readSettingsFileText(const char *mod, const char *path, int sidecar
     char *text = size >= 0 ? malloc((size_t)size + 1) : NULL;
     if (!text) {
         fclose(f);
-        if (sidecar) refuseSidecarLine("-", mod, "out_of_memory", "size=%ld", size);
+        if (in) refuseSidecarLine(in, "-", mod, "out_of_memory", "size=%ld", size);
         else refuseIniLine("-", mod, "out_of_memory", "file=%s.ini size=%ld", mod, size);
         return NULL;
     }
@@ -1496,7 +1517,7 @@ static void logIgnoredIni(const char *mod, ...) {
     va_end(ap);
 }
 
-// A mod whose sidecar has settings blocks has its .ini left unread.
+// A mod whose sidecar or .c5m has settings blocks has its .ini left unread.
 static void readSettingsIn(const char *mod, const char *dir) {
     if (!settingsFileTried(mod) && growList((void **)&triedMods, &triedModCapacity, triedModCount + 1, sizeof triedMods[0]))
         snprintf(triedMods[triedModCount++], MOD_NAME_MAX, "%s", mod);
@@ -1504,10 +1525,13 @@ static void readSettingsIn(const char *mod, const char *dir) {
     IniParse r;
     startSettingsReading(&r, mod);
     char path[MAX_PATH], *text;
-    if (buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s" SIDECAR_SUFFIX, dir, mod) &&
-        (text = readSettingsFileText(mod, path, 1)) != NULL) {
-        readSidecarSettingsText(&r, text);
-        free(text);
+    static const struct { const char *suffix; int in; } files[] = {{MOD_FILE_SUFFIX, SETTINGS_IN_C5M}, {SIDECAR_SUFFIX, SETTINGS_IN_C5SE}};
+    for (size_t i = 0; i < sizeof files / sizeof files[0]; i++) {
+        if (buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s%s", dir, mod, files[i].suffix) &&
+            (text = readSettingsFileText(mod, path, files[i].in)) != NULL) {
+            readSidecarSettingsText(&r, text, files[i].in);
+            free(text);
+        }
     }
     if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s.ini", dir, mod)) {
     } else if (r.sidecarBlocks) {
@@ -1531,7 +1555,7 @@ static void readSettingsFile(const char *mod) {
 typedef struct {
     char mod[MOD_NAME_MAX];
     char dir[MAX_PATH];
-    FileStamp sidecar, ini;
+    FileStamp c5m, sidecar, ini;
     unsigned int picks;
     int pageLines;
     int fileBadLines;
@@ -1564,6 +1588,8 @@ static int settingsReadNow(const char *mod, SettingsRead *now) {
     snprintf(now->mod, sizeof now->mod, "%s", modName(m));
     if (strlen(modFolder(m)) >= sizeof now->dir) return 0;
     snprintf(now->dir, sizeof now->dir, "%s", modFolder(m));
+    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s" MOD_FILE_SUFFIX, now->dir, now->mod)) return 0;
+    fileStampOf(path, &now->c5m);
     if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s" SIDECAR_SUFFIX, now->dir, now->mod)) return 0;
     fileStampOf(path, &now->sidecar);
     if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s.ini", now->dir, now->mod)) return 0;
@@ -1577,7 +1603,7 @@ static int settingsReadNow(const char *mod, SettingsRead *now) {
 // Keeps the mod's settings from its last reading if `now` matches it.
 static int keepSettingsRead(const SettingsRead *now) {
     SettingsRead *e = settingsReadOf(now->mod);
-    if (!e || !e->valid || strcmp(e->dir, now->dir) || !sameFileStamp(&e->sidecar, &now->sidecar) ||
+    if (!e || !e->valid || strcmp(e->dir, now->dir) || !sameFileStamp(&e->c5m, &now->c5m) || !sameFileStamp(&e->sidecar, &now->sidecar) ||
         !sameFileStamp(&e->ini, &now->ini) || e->picks != now->picks || e->pageLines != now->pageLines)
         return 0;
     BadLine *mine = NULL;
@@ -1645,7 +1671,7 @@ static int settingLineHook(const char *line, size_t len, int mod, int level) {
         gameSettingBlock.open = 1;
         if (!inSidecar && level == 1 && reading.active && !reading.disabled && mod >= 0 && mod <= G32(RVA_MOD_LAST_INDEX)) {
             SettingProblem p;
-            settingProblem(&p, "setting_in_c5m", "settings go in %.32s%s, not the .c5m", modName(mod), SIDECAR_SUFFIX);
+            settingProblem(&p, "setting_in_c5m", "settings go in %.32s%s or on %s lines", modName(mod), SIDECAR_SUFFIX, SIDECAR_LINE_PREFIX);
             rejectC5mLine(modName(mod), word, number, &p, line);
         }
         return 1;
@@ -1714,7 +1740,7 @@ static void finishReading(void) {
         else if (r->hasIndex && !s->isKey && (r->index < 0 || r->index > max))
             settingProblem(&p, "index_out_of_range", "%s %.32s: index %d is not 0 to %d", r->word, r->name, r->index, max);
         else continue;
-        if (r->inSidecar) rejectSidecarLine(reading.mod, r->word, r->line, &p, source);
+        if (r->inSidecar) rejectSidecarLine(r->inSidecar, reading.mod, r->word, r->line, &p, source);
         else rejectC5mLine(reading.mod, r->word, r->line, &p, source);
     }
 }
@@ -2018,8 +2044,7 @@ static void keyHeldTip(const ModSetting *holder, char *out, size_t size) {
     snprintf(out, size, holder->fixed ? "Used by %s, which can't change" : "Used by %s", holder->label);
 }
 
-// Tells the player, in the game's message box, that key `key` is `holder`'s, and asks whether to move it to
-// `s`, leaving `holder` with no key; a fixed holder's key can't move.
+// Asks whether to move key `key` from `holder` to `s`; a fixed holder's key can't move.
 static int askKeyMove(ModSetting *holder, const ModSetting *s, int key) {
     char name[24], text[400];
     keyValueName(key, name, sizeof name);
@@ -2401,9 +2426,16 @@ static void popupSettingErrors(void) {
 static void (*nextModsRun)(int);
 static void modsRunHook(int level) {
     unsigned int spellPasses = spellPassCount();
+    clearLuaPlaneTints(level);
+    planeWordsBeforePass(level);
+    terrainLooksBeforePass(level);
+    weaponTraitsBeforePass(level);
     nextModsRun(level);
     finishReading();
     spellsAfterPass(level, spellPasses);
+    applyLoadedSavePlanes(level);
+    planeWordsAfterPass(level);
+    terrainLooksAfterPass(level);
     if (level != 3) popupSettingErrors();
 }
 
@@ -2428,6 +2460,8 @@ static void eventLineHook(const char *line, int level) {
     if (len > c5m && !_stricmp(base + len - c5m, MOD_FILE_SUFFIX)) snprintf(mod, sizeof mod, "%.*s", (int)(len - c5m), base);
     else if (len > side && !_stricmp(base + len - side, SIDECAR_SUFFIX)) snprintf(mod, sizeof mod, "%.*s", (int)(len - side), base);
     noteModLine(mod, level);
+    line = planeNameEventLine(line, level, mod);
+    if (!line) return;
     if (eventLogicLine(line, level)) return;
     if (!isSettingLine(line)) {
         eventFindersLineBegin();
@@ -2479,6 +2513,7 @@ static void eventLineHook(const char *line, int level) {
 static void declinedEventLineHook(const char *line, int level) {
     if (isSettingLine(line)) refuseC5mLine(line[0] == '+' ? "+setting" : "-setting", "-", "plugins_declined", "line=%s", line);
     else if (isEventLogicWord(line)) refuseC5mLine("or", "-", "plugins_declined", "line=%s", line);
+    else if (declinedPlaneEventLine(line)) refuseC5mLine("plane", "-", "plugins_declined", "line=%s", line);
     else nextEventLine(line, level);
 }
 

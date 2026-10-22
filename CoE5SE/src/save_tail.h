@@ -126,8 +126,11 @@ static const char *useSaveNameChunks(const SaveList *list, SaveFile file);
 static int isSaveNameTag(int tag);
 static void clearChangedSpells(void);
 static void addModContentChunk(SaveList *list);
+static void addCustomPlanesChunk(SaveList *list);
+static void setCustomPlaneCameras(void);
 #define SAVE_TAG_MODC SAVE_TAG('M', 'O', 'D', 'C')
 #define SAVE_TAG_MODH SAVE_TAG('M', 'O', 'D', 'H')
+#define SAVE_TAG_PLNS SAVE_TAG('P', 'L', 'N', 'S')
 
 // The GAME chunk's last slot of the game's own content for kind `kind`.
 static int saveVanillaLastIndex(int kind) {
@@ -147,6 +150,7 @@ static void buildSaveList(SaveList *list, SaveNamesWritten *written) {
     for (int k = 0; k < SAVE_GAME_KINDS; k++) saveBufferInt(&game, saveVanillaLastIndex(k));
     saveListAdd(list, SAVE_TAG_GAME, &game);
     addSaveNameChunks(list, written);
+    addCustomPlanesChunk(list);
     addModContentChunk(list);
 }
 
@@ -246,7 +250,7 @@ static void writeSaveTail(void *file, int onlyPlayer, SaveFile kind) {
 static void readSaveTail(void *file, int onlyPlayer, SaveFile kind) {
     SaveListRead *read = &lastSaveListRead;
     *read = (SaveListRead){.result = "no_block", .reason = "-", .writtenOn = -1};
-    if (kind == SAVE_FILE_SAVE) clearChangedSpells();
+    if (kind == SAVE_FILE_SAVE) clearChangedSpells(), setCustomPlaneCameras();
     int castCounts = readExtraCastCounts(file, onlyPlayer, SAVE_FILE_NAMES[kind]);
     SaveList list = {0};
     if (castCounts < 0) read->result = "bad_block", read->reason = "cast_counts_block";
@@ -257,7 +261,8 @@ static void readSaveTail(void *file, int onlyPlayer, SaveFile kind) {
             read->chunks = list.count;
             for (int i = 0; i < list.count; i++) {
                 if (list.chunks[i].tag == SAVE_TAG_GAME) readSaveGameChunk(&list.chunks[i], read);
-                else if (!isSaveNameTag(list.chunks[i].tag) && list.chunks[i].tag != SAVE_TAG_MODC && list.chunks[i].tag != SAVE_TAG_MODH)
+                else if (!isSaveNameTag(list.chunks[i].tag) && list.chunks[i].tag != SAVE_TAG_MODC && list.chunks[i].tag != SAVE_TAG_MODH &&
+                         list.chunks[i].tag != SAVE_TAG_PLNS)
                     read->unknown++;
             }
             read->result = useSaveNameChunks(&list, kind);

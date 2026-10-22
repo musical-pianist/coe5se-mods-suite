@@ -145,12 +145,28 @@ static void noteModLine(const char *mod, int level);
 static int refusedRitualLine(const char *line, size_t len, int mod, int level);
 static void popupRitualsLeftOut(void);
 static void drawRitualsLeftOut(void);
+static int refusedTableLine(const char *line, size_t len, int mod, int level);
+static void popupTablesLeftOut(void);
+static void drawTablesLeftOut(void);
 static int spellLineHook(const char *line, size_t len, int mod, int level);
 static const char *spellPathLineHook(const char *line, size_t len, int mod, int level);
 static const char *offsetNameLineHook(const char *line, size_t len, int mod, int level);
 static int declinedOffsetNameLine(const char *line, size_t len, int level);
 static const char *nameListLineHook(const char *line, size_t len, int mod, int level);
 static int declinedNameListLine(const char *line, size_t len, int level);
+static const char *planeWordLineHook(const char *line, size_t len, int mod, int level);
+static int declinedPlaneLine(const char *line, size_t len, int mod, int level);
+static const char *planeNameEventLine(const char *line, int level, const char *mod);
+static int declinedPlaneEventLine(const char *line);
+static void planeWordsBeforePass(int level);
+static void planeWordsAfterPass(int level);
+static void applyLoadedSavePlanes(int level);
+static void clearLuaPlaneTints(int level);
+static const char *terrainLooksLineHook(const char *line, size_t len, int mod, int level);
+static int declinedTerrainLooksLine(const char *line, size_t len, int mod, int level);
+static void terrainLooksBeforePass(int level);
+static void terrainLooksAfterPass(int level);
+static void popupMissingPlanes(void);
 static int settingLineHook(const char *line, size_t len, int mod, int level);
 static int eventLogicLine(const char *line, int level);
 static void eventLogicAfterLine(const char *line, int level);
@@ -158,6 +174,8 @@ static int isEventLogicWord(const char *line);
 static int declinedSpellPathLine(const char *word, int mod, int level);
 static int declinedSpellLine(const char *word, int mod, int level);
 static int flagOffLineHook(const char *line, size_t len, int mod, int level);
+static int weaponTraitLineHook(const char *line, size_t len, int level);
+static void weaponTraitsBeforePass(int level);
 static int declinedFlagOffLine(const char *line);
 static void finishSpellBlock(void);
 static unsigned int spellPassCount(void);
@@ -169,6 +187,7 @@ static void dropSpellsOfDisabledMods(void);
 static void modDisplayName(const char *mod, char *out, size_t size);
 static void readLoadOrder(int logIt);
 static void drawModRequirements(void);
+static void drawCustomPlaneProblems(void);
 static const char *pluginModVersion(const char *pluginPath);
 static void warnModsMissingPlugins(void);
 static void offerStubUpdate(void);
@@ -425,9 +444,7 @@ static void drawMenuColumn(MenuColumn *col) {
     }
 }
 
-// The end of CoE5SE's startup, once a launch, when the game has found and read its mods: the load
-// order, the settings files no mod pass read, and the scripts. The first main menu frame runs it, or
-// the map editor when the game starts with --mapeditor and opens the editor before any menu frame.
+// The end of CoE5SE's startup, once a launch, after the game has read its mods.
 static void finishStartup(void) {
     if (startupFinished) return;
     takeCodeModSnapshot();
@@ -492,6 +509,8 @@ static int menuWaitHook(int a, int b) {
     finishSpellBlock();
     if (quiet) popupSpellProblems();
     if (quiet) popupRitualsLeftOut();
+    if (quiet) popupTablesLeftOut();
+    if (quiet) popupMissingPlanes();
     if (quiet) showLuaNotices();
     return clicked;
 }
@@ -538,6 +557,7 @@ static int makeGameDataWritable(void *address, size_t size) {
 }
 
 static int prepareSiteCode(CallSite site);
+static void gameStartPrepOnce(void), removeGameStartOnceJump(void);
 static unsigned char *generatedSiteCall(CallSite site), *generatedSiteTarget(CallSite site);
 
 // Call i of a site (NULL past its last), and the function its calls go to.
@@ -610,7 +630,7 @@ static int installSite(CallSite site) {
     }
     emitRipStore(&p, MOV_RSP, 3, stub + STUB_RSP);
     emitRipStore(&p, JMP_INDIRECT, 2, stub + STUB_HEAD);
-    void *gameTarget = target;
+    void *gameTarget = site == SITE_GAME_START ? (void *)gameStartPrepOnce : target;
     memcpy(stub + STUB_HEAD, &gameTarget, 8);
 
     for (int i = 0; siteCallAt(site, i); i++) {
@@ -624,6 +644,7 @@ static int installSite(CallSite site) {
         VirtualProtect(call, size, old, &old);
         FlushInstructionCache(GetCurrentProcess(), call, size);
     }
+    if (site == SITE_GAME_START) removeGameStartOnceJump();
     siteInstalled[site] = 1;
     return 1;
 }
@@ -736,7 +757,7 @@ static int isInternalSite(CallSite site) {
            site == SITE_KEY_HELP_TEXT || site == SITE_KEY_TEXT_BUTTON || site == SITE_RUN_ONE_MOD ||
            site == SITE_RUN_ONE_MOD_PATH || site == SITE_GAME_MENU_SETTINGS_SECTION_END || site == SITE_ELIMINATED_WARN ||
            site == SITE_WARN_WAIT || site == SITE_TURN_MESSAGES || site == SITE_MESSAGES_WAIT ||
-           site == SITE_MAP_EDITOR_TOOLBOX_LINE;
+           site == SITE_MAP_EDITOR_TOOLBOX_LINE || site == SITE_RUN_ONE_MOD_LINE_READ;
 }
 
 static int isObserveOnlySite(CallSite site) {
@@ -795,12 +816,46 @@ static void *siteEntry(CallSite site, void *game) {
 static int saveGameToOpenFile(const char *path, const char *name);
 #endif
 
+// GAME_START in every game.
+#define GAME_START_ONCE_JNE 0x12
+// Whether play_game's code at `test` is the done test and jne CoE5SE removes.
+static __attribute__((unused)) int gameStartOnceCodeOk(const unsigned char *test, const unsigned char *flag) {
+    int disp;
+    memcpy(&disp, test + 2, 4);
+    return test[0] == 0x39 && test[1] == 0x35 && test + 6 + disp == flag && test[GAME_START_ONCE_JNE] == 0x75 &&
+           test[GAME_START_ONCE_JNE + 1] == 0x05 && test[GAME_START_ONCE_JNE + 2] == 0xe8;
+}
+#ifndef __aarch64__
+// GAME_START's game end on Windows: game_start_prep while it hasn't run in this launch.
+static void gameStartPrepOnce(void) {
+    if (G32(RVA_GAME_START_PREP_DONE) == 0) ((void (*)(void))GAME_PTR(RVA_GAME_START_PREP))();
+}
+// installSite's step for GAME_START before it points the call at the stub.
+static int checkGameStartOnceCode(void) {
+    if (gameStartOnceCodeOk(GAME_PTR(RVA_GAME_START_ONCE_TEST), GAME_PTR(RVA_GAME_START_PREP_DONE))) return 1;
+    writeLog("game_start_once_check", "ok=0 reason=not_the_expected_code address=%p", (void *)GAME_PTR(RVA_GAME_START_ONCE_TEST));
+    return 0;
+}
+// Removes play_game's jne over the GAME_START call, once the call goes to the site's stub.
+static void removeGameStartOnceJump(void) {
+    unsigned char *jne = GAME_PTR(RVA_GAME_START_ONCE_TEST) + GAME_START_ONCE_JNE;
+    static const unsigned char NOP2[] = {0x66, 0x90};
+    DWORD old;
+    VirtualProtect(jne, sizeof NOP2, PAGE_EXECUTE_READWRITE, &old);
+    memcpy(jne, NOP2, sizeof NOP2);
+    VirtualProtect(jne, sizeof NOP2, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), jne, sizeof NOP2);
+    writeLog("game_start_once_removed", "ok=1 address=%p", (void *)jne);
+}
+#endif
+
 // The game's own function for the site: where the innermost wrapper's next goes.
 static void *siteGameTarget(CallSite site) {
 #ifdef __aarch64__
     return siteGameFunction(site);
 #else
     if (site == SITE_GAME_SAVE) return (void *)saveGameToOpenFile;
+    if (site == SITE_GAME_START) return (void *)gameStartPrepOnce;
     return isInlinedButtonRowSite(site) ? gameBase + RVA_BUTTON_ROW : siteCallTarget(site);
 #endif
 }
@@ -967,6 +1022,16 @@ static u64 (*nextModsScreen)(u64, u64, u64, u64);
 // A mod's file names: <ModName>.c5m and its sidecar, <ModName>.c5se.
 #define MOD_FILE_SUFFIX ".c5m"
 #define SIDECAR_SUFFIX  ".c5se"
+
+// A .c5m line that starts with #!@ holds a line the sidecar could hold.
+#define SIDECAR_LINE_PREFIX "#!@"
+
+// Where the text of a #!@ line starts, past the prefix, or NULL when `line` isn't one.
+static const char *sidecarLineText(const char *line) {
+    while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n') line++;
+    size_t n = sizeof SIDECAR_LINE_PREFIX - 1;
+    return strncmp(line, SIDECAR_LINE_PREFIX, n) ? NULL : line + n;
+}
 
 // The folder of mod `mod`.
 static const char *modFolder(int mod) {
@@ -1238,6 +1303,7 @@ static void modCommandHook(const char *line, int mod, int level) {
     if (mod >= 0 && mod <= G32(RVA_MOD_LAST_INDEX)) noteModLine(modName(mod), level);
     size_t len = strcspn(line, " \t");
     if (refusedRitualLine(line, len, mod, level)) return;
+    if (refusedTableLine(line, len, mod, level)) return;
     if (spellLineHook(line, len, mod, level)) return;
     line = spellPathLineHook(line, len, mod, level);
     if (!line) return;
@@ -1246,8 +1312,14 @@ static void modCommandHook(const char *line, int mod, int level) {
     line = nameListLineHook(line, len, mod, level);
     if (!line) return;
     len = strcspn(line, " \t");
+    line = planeWordLineHook(line, len, mod, level);
+    if (!line) return;
+    len = strcspn(line, " \t");
+    line = terrainLooksLineHook(line, len, mod, level);
+    if (!line) return;
     if (settingLineHook(line, len, mod, level)) return;
     if (flagOffLineHook(line, len, mod, level)) return;
+    weaponTraitLineHook(line, len, level);
     for (int i = 0; i < modCommandCount; i++) {
         if (strlen(modCommands[i].name) != len || strncmp(modCommands[i].name, line, len)) continue;
         const char *args = line + len;
@@ -1271,7 +1343,8 @@ static void declinedModCommandHook(const char *line, int mod, int level) {
     size_t len = strcspn(line, " \t");
     snprintf(word, sizeof word, "%.*s", (int)(len < sizeof word ? len : sizeof word - 1), line);
     int pathName = declinedSpellPathLine(word, mod, level);
-    if (word[0] && (!isGameWord(word) || declinedSpellLine(word, mod, level) || pathName || declinedOffsetNameLine(line, len, level) || declinedNameListLine(line, len, level) || declinedFlagOffLine(line))) {
+    int planeLine = declinedPlaneLine(line, len, mod, level) | declinedTerrainLooksLine(line, len, mod, level);
+    if (word[0] && (!isGameWord(word) || declinedSpellLine(word, mod, level) || pathName || planeLine || declinedOffsetNameLine(line, len, level) || declinedNameListLine(line, len, level) || declinedFlagOffLine(line))) {
         writeLog("mod_command_skipped", "word=%s mod=%d level=%d reason=plugins_declined", word, mod, level);
         return;
     }
@@ -2538,6 +2611,8 @@ static void coe5sePageScreen(void) {
         drawModRequirements();
         drawSpellProblems();
         drawRitualsLeftOut();
+        drawTablesLeftOut();
+        drawCustomPlaneProblems();
 
         finishReading();
         int settingCount = settingsOfModPage(COE5SE_MOD, &page, &pageCapacity);
@@ -2660,6 +2735,8 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "sidecar.h"
 #define VANILLA_SPELL_COUNT 1029
 #include "spell_table_move.h"
+#include "plane_table_move.h"
+#include "table_move.h"
 #include "spell_table.h"
 #include "spell_paths.h"
 #include "offset_names.h"
@@ -2669,15 +2746,26 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "save_tail.h"
 #include "save_names.h"
 #include "missing_mods.h"
+#include "plane_layout.h"
+#include "custom_planes.h"
+#include "plane_shapes.h"
+#include "plane_ground.h"
+#include "custom_plane_view.h"
+#include "plane_tint.h"
 #include "mod_versions.h"
 #include "spells_changed.h"
 #include "code_check.h"
+#include "weapon_traits.h"
 #include "trace_filter.h"
 #include "seal_events.h"
 #include "data_area_max.h"
 #include "map_editor.h"
 #include "lua_scripts.h"
+#include "plane_words.h"
+#include "plane_pieces.h"
+#include "terrain_looks.h"
 #include "event_finders.h"
+#include "fanpatch/fanpatch_host.h"
 
 // Ends the launch's header in the log at the end of startup (finishStartup).
 static void logHeaderEnd(void) {
@@ -2750,12 +2838,18 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved) {
     ritualExpansionInit();
     spellPathExpansionInit();
     spellTableMoveInit();
+    tableMovesInit();
+    fanpatchInstall();
     saveTailInit();
     missingModsInit();
+    installSaveCountHook();
     modVersionsInit();
     spellWordsInit();
     spellPathWordsInit();
+    planeWordsInit();
+    terrainLooksWordsInit();
     monsterFlagWordsInit();
+    weaponTraitsInit();
     nameListsInit();
     maxdataWordInit();
     sidecarInit();
