@@ -1,12 +1,12 @@
 #!/bin/bash
 # Installs CoE5SE and the Jazzy mods on a Mac, from this repo's main branch.
 # Run it with:
-#   curl -fsSL https://gitlab.com/musical_pianist/coe5se_mods_suite/-/raw/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/musical-pianist/coe5se_mods_suite/main/install.sh | bash
 # It puts each mod folder in ~/.coe5/mods (replacing an older copy) and
 # coe5se.dylib in the game folder, next to coe5_mac. It changes nothing else.
 set -euo pipefail
 
-ARCHIVE_URL="${COE5_SUITE_ZIP_URL:-https://gitlab.com/musical_pianist/coe5se_mods_suite/-/archive/main/coe5se_mods_suite-main.zip}"
+ARCHIVE_URL="${COE5_SUITE_ZIP_URL:-https://github.com/musical-pianist/coe5se_mods_suite/archive/refs/heads/main.zip}"
 MODS_DIR="${COE5_MODS_DIR:-$HOME/.coe5/mods}"
 STEAM_DIR="$HOME/Library/Application Support/Steam"
 APP_ID=1606340

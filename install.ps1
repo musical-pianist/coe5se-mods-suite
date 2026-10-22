@@ -1,6 +1,6 @@
 # Installs CoE5SE and the Jazzy mods on Windows, from this repo's main branch.
 # Run it in PowerShell with:
-#   irm https://gitlab.com/musical_pianist/coe5se_mods_suite/-/raw/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/musical-pianist/coe5se_mods_suite/main/install.ps1 | iex
 # It puts each mod folder in %APPDATA%\coe5\mods (replacing an older copy) and
 # glu32.dll in the game folder, next to CoE5.exe. It changes nothing else.
 # Everything runs in one script block, so an error never closes the window.
@@ -9,7 +9,7 @@
   $ProgressPreference = 'SilentlyContinue'
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-  $archiveUrl = if ($env:COE5_SUITE_ZIP_URL) { $env:COE5_SUITE_ZIP_URL } else { 'https://gitlab.com/musical_pianist/coe5se_mods_suite/-/archive/main/coe5se_mods_suite-main.zip' }
+  $archiveUrl = if ($env:COE5_SUITE_ZIP_URL) { $env:COE5_SUITE_ZIP_URL } else { 'https://github.com/musical-pianist/coe5se_mods_suite/archive/refs/heads/main.zip' }
   $modsDir = if ($env:COE5_MODS_DIR) { $env:COE5_MODS_DIR } else { Join-Path $env:APPDATA 'coe5\mods' }
   $appId = '1606340'
   $mods = @('CoE5SE', 'JazzyGamePresets', 'JazzyHotkeys', 'JazzyRestart', 'JazzyUITweaks')
