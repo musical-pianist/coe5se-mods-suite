@@ -1,0 +1,95 @@
+# Installs CoE5SE and the Jazzy mods on Windows, from this repo's main branch.
+# Run it in PowerShell with:
+#   irm https://gitlab.com/musical_pianist/coe5se_mods_suite/-/raw/main/install.ps1 | iex
+# It puts each mod folder in %APPDATA%\coe5\mods (replacing an older copy) and
+# glu32.dll in the game folder, next to CoE5.exe. It changes nothing else.
+# Everything runs in one script block, so an error never closes the window.
+& {
+  $ErrorActionPreference = 'Stop'
+  $ProgressPreference = 'SilentlyContinue'
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+  $archiveUrl = if ($env:COE5_SUITE_ZIP_URL) { $env:COE5_SUITE_ZIP_URL } else { 'https://gitlab.com/musical_pianist/coe5se_mods_suite/-/archive/main/coe5se_mods_suite-main.zip' }
+  $modsDir = if ($env:COE5_MODS_DIR) { $env:COE5_MODS_DIR } else { Join-Path $env:APPDATA 'coe5\mods' }
+  $appId = '1606340'
+  $mods = @('CoE5SE', 'JazzyGamePresets', 'JazzyHotkeys', 'JazzyRestart', 'JazzyUITweaks')
+
+  # Each Steam library holds the game if it has the game's app manifest.
+  function Find-GameDir {
+    $steam = Get-ItemProperty -Path 'HKCU:\Software\Valve\Steam' -Name SteamPath -ErrorAction SilentlyContinue
+    if (-not $steam) { return $null }
+    $libraries = @($steam.SteamPath)
+    $libraryList = Join-Path $steam.SteamPath 'steamapps\libraryfolders.vdf'
+    if (Test-Path $libraryList) {
+      foreach ($match in [regex]::Matches((Get-Content -Raw $libraryList), '"path"\s*"([^"]*)"')) {
+        $libraries += $match.Groups[1].Value -replace '\\\\', '\'
+      }
+    }
+    foreach ($library in $libraries) {
+      $manifest = Join-Path $library "steamapps\appmanifest_$appId.acf"
+      if (-not (Test-Path $manifest)) { continue }
+      $installDir = [regex]::Match((Get-Content -Raw $manifest), '"installdir"\s*"([^"]*)"')
+      if (-not $installDir.Success) { continue }
+      $gameDir = Join-Path $library "steamapps\common\$($installDir.Groups[1].Value)"
+      if (Test-Path (Join-Path $gameDir 'CoE5.exe')) { return $gameDir }
+    }
+    return $null
+  }
+
+  $workDir = Join-Path $env:TEMP ('coe5se_install_' + [guid]::NewGuid().ToString('N'))
+  try {
+    $gameDir = if ($env:COE5_GAME_DIR) { $env:COE5_GAME_DIR } else { Find-GameDir }
+    if (-not $gameDir) { throw "couldn't find Conquest of Elysium 5 in Steam. Is it installed?" }
+    $gameDir = [IO.Path]::GetFullPath($gameDir)
+    $gameExe = Join-Path $gameDir 'CoE5.exe'
+    if (-not (Test-Path $gameExe)) { throw "no CoE5.exe in $gameDir" }
+
+    $running = Get-Process -Name CoE5 -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $gameExe }
+    if ($running) { throw 'Conquest of Elysium 5 is running. Close the game, then paste the command again.' }
+
+    Write-Host 'Downloading the mods...'
+    New-Item -ItemType Directory -Path $workDir | Out-Null
+    $zip = Join-Path $workDir 'suite.zip'
+    try {
+      Invoke-WebRequest -Uri $archiveUrl -OutFile $zip -UseBasicParsing
+    } catch {
+      throw 'the download failed. Check your internet connection and try again.'
+    }
+    try {
+      Expand-Archive -Path $zip -DestinationPath (Join-Path $workDir 'unzipped')
+    } catch {
+      throw 'the download was damaged. Try again.'
+    }
+    $sourceDir = (Get-ChildItem -Directory (Join-Path $workDir 'unzipped') | Select-Object -First 1).FullName
+    foreach ($mod in $mods) {
+      if (-not (Test-Path (Join-Path $sourceDir "$mod\$mod.c5m"))) { throw "the download has no $mod folder. Try again later." }
+    }
+    $stub = Join-Path $sourceDir 'CoE5SE\glu32.dll'
+    if (-not (Test-Path $stub)) { throw 'the download has no glu32.dll. Try again later.' }
+
+    New-Item -ItemType Directory -Path $modsDir -Force | Out-Null
+    foreach ($mod in $mods) {
+      # Copy next to the old folder first, so a failed copy leaves the old one in place.
+      $target = Join-Path $modsDir $mod
+      $staging = Join-Path $modsDir ".$mod.installing"
+      if (Test-Path $staging) { Remove-Item -Recurse -Force $staging }
+      Copy-Item -Recurse (Join-Path $sourceDir $mod) $staging
+      if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+      Rename-Item $staging $mod
+      Write-Host "Installed $mod in $target"
+    }
+
+    $stubStaging = Join-Path $gameDir '.glu32.dll.installing'
+    Copy-Item $stub $stubStaging -Force
+    Move-Item $stubStaging (Join-Path $gameDir 'glu32.dll') -Force
+    Write-Host "Installed glu32.dll in $gameDir"
+
+    Write-Host ''
+    Write-Host 'Done. Start the game. The first time, CoE5SE turns itself on and tells you so.'
+    Write-Host 'Turn on the Jazzy mods you want on the Mods screen.'
+  } catch {
+    Write-Host "Install stopped: $($_.Exception.Message)" -ForegroundColor Red
+  } finally {
+    if (Test-Path $workDir) { Remove-Item -Recurse -Force $workDir -ErrorAction SilentlyContinue }
+  }
+}

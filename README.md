@@ -2,7 +2,31 @@
 
 This repo is temporary: it will be deleted once Nexus Mods approves the mods' pages, which will be their home.
 
-Each mod is also a zip under Releases.
+## Install with one command
+
+This installs the latest CoE5SE, Jazzy Game Presets, Jazzy Hotkeys, Jazzy Restart and Jazzy UI Tweaks, and copies CoE5SE's file into the game folder. Close the game first. Running it again later updates them.
+
+**Windows:** open the Start menu, type PowerShell, open Windows PowerShell, then paste this and press Enter:
+
+```
+irm https://gitlab.com/musical_pianist/coe5se_mods_suite/-/raw/main/install.ps1 | iex
+```
+
+**Mac:** open Terminal (in Applications, Utilities), then paste this and press Return:
+
+```
+curl -fsSL https://gitlab.com/musical_pianist/coe5se_mods_suite/-/raw/main/install.sh | bash
+```
+
+On Mac, one step is left after it finishes: in Steam, click the gear on Conquest of Elysium 5's page, then Properties, General, and set Launch Options to `/usr/bin/env DYLD_INSERT_LIBRARIES=coe5se.dylib %command%`. The script prints this line too.
+
+Then start the game. The first time, CoE5SE turns itself on and tells you so. Turn on the Jazzy mods you want on the Mods screen.
+
+You can read both scripts before running them: [install.ps1](install.ps1), [install.sh](install.sh).
+
+## Install by hand
+
+Each mod is also a zip under Releases. Copy its folder into your mods folder:
 
 - Windows: `%APPDATA%\coe5\mods\`
 - Mac: `~/.coe5/mods/`
