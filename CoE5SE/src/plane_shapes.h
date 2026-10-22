@@ -110,6 +110,32 @@ static int monsterPlaneShapeHook(int monster, int ability) {
     return GAME_FN(MonsterAbilityFn, RVA_MONSTER_ABILITY)(monster, ability);
 }
 
+// A stub that calls monsterPlaneShapeHook with r10 kept; NULL when it can't be made.
+#define PLANE_SHAPE_KEEP_FUNCTION 0x40
+#define PLANE_SHAPE_KEEP_UNWIND   0x50
+static void *planeShapeKeepR10Stub(void) {
+    unsigned char *page = allocNear(gameBase + RVA_TEXT_SECTION);
+    if (!page) return NULL;
+    void *hook = (void *)monsterPlaneShapeHook;
+    unsigned char *p = page;
+    *p++ = 0x41; *p++ = 0x52;
+    *p++ = 0x48; *p++ = 0x83; *p++ = 0xec; *p++ = 0x20;
+    *p++ = 0x48; *p++ = 0xb8; memcpy(p, &hook, 8); p += 8;
+    *p++ = 0xff; *p++ = 0xd0;
+    *p++ = 0x48; *p++ = 0x83; *p++ = 0xc4; *p++ = 0x20;
+    *p++ = 0x41; *p++ = 0x5a;
+    *p++ = 0xc3;
+    static const unsigned char UNWIND[] = {0x01, 0x06, 0x02, 0x00, 0x06, 0x32, 0x02, 0xa0};
+    memcpy(page + PLANE_SHAPE_KEEP_UNWIND, UNWIND, sizeof UNWIND);
+    RUNTIME_FUNCTION *function = (RUNTIME_FUNCTION *)(page + PLANE_SHAPE_KEEP_FUNCTION);
+    function->BeginAddress = 0;
+    function->EndAddress = (DWORD)(p - page);
+    function->UnwindData = PLANE_SHAPE_KEEP_UNWIND;
+    if (!RtlAddFunctionTable(function, 1, (DWORD64)(uintptr_t)page)) return NULL;
+    FlushInstructionCache(GetCurrentProcess(), page, PLANE_SHAPE_KEEP_UNWIND + sizeof UNWIND);
+    return page;
+}
+
 // Points the step's ability id at planeShapeAbilityIds.
 static int patchPlaneShapeId(void) {
     static const unsigned char SHIPPED[] = {0x8d, 0xa8, 0xd8, 0x04, 0x00, 0x00};
@@ -151,7 +177,9 @@ static int patchPlaneShapeId(void) {
 // Installs the shape step's patch and wrap, with the planes' other hooks; 1 when both are in.
 static int installPlaneShapeHooks(void) {
     int ok = patchPlaneShapeId();
-    ok += pointCustomPlaneCall(RVA_UNIT_PLANE_SHAPE_CALL, RVA_MONSTER_ABILITY, (void *)monsterPlaneShapeHook, "plane_shape");
+    void *keep = planeShapeKeepR10Stub();
+    if (!keep) writeLog("hook_skipped", "site=plane_shape reason=no_keep_stub");
+    else ok += pointCustomPlaneCall(RVA_UNIT_PLANE_SHAPE_CALL, RVA_MONSTER_ABILITY, keep, "plane_shape");
     writeLog("plane_shape_hooks_installed", "ok=%d of 2", ok);
     return ok == 2;
 }
