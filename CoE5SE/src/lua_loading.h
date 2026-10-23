@@ -16,7 +16,7 @@ static const luaL_Reg LUA_COE5[] = {
     {"addActionKey", lAddActionKey}, {"actionKey", lActionKey}, {"findMonster", lFindMonster},
     {"dataFolder", lDataFolder}, {"readIni", lReadIni}, {"writeIni", lWriteIni}, {"listIni", lListIni},
     {"deleteIni", lDeleteIni}, {"spawnUnit", lSpawnUnit}, {"spawnCommander", lSpawnCommander},
-    {"monsterVariant", lMonsterVariant}, {"portalExits", lPortalExits}, {"squareUnits", lSquareUnits}, {"armies", lArmies}, {"route", lRoute},
+    {"monsterVariant", lMonsterVariant}, {"portalExits", lPortalExits}, {"squareUnits", lSquareUnits}, {"revealMap", lRevealMap}, {"armies", lArmies}, {"route", lRoute},
     {"scrapRitualPlan", lScrapRitualPlan}, {"planRitual", lPlanRitual}, {"terrainMatch", lTerrainMatch},
     {"releaseFollower", lReleaseFollower}, {"transferFollower", lTransferFollower},
     {"shopOffers", lShopOffers}, {"classRecruits", lClassRecruits}, {"recruitSquares", lRecruitSquares},

@@ -64,6 +64,7 @@
 --   Change a square as the world is built  coe5.wrap("PLAY_GAME_NEW_WORLD", function(next, mode) local r = next(mode) coe5.set("squareTerrain", x, y, t) coe5.set("squareName", x, y, "Old Tower") return r end)
 --   A commander's square           local u = coe5.get("commanderUnit", c); coe5.get("unitX", u), coe5.get("unitY", u)
 --   Can an AI commander get there  coe5.route(c, x, y)   (nil for no route; only inside an AI site's wrap)
+--   Reveal the map for a turn      coe5.revealMap(coe5.get("activePlayer"))   (one plane: coe5.revealMap(p, coe5.planeIndex("Inferno")))
 --   A square's army, unit by unit  for _, u in ipairs(coe5.squareUnits(x, y)) do local s = coe5.get("unitStrength", coe5.get("unitOwner", u), u) end   (Windows only for the strength)
 --   Does a player see a unit        coe5.get("unitVisibleTo", u, p)   (stealth, invisibility, spiritsight; squareSeen for the fog; Windows only)
 --   Write the AI's trace lines only  coe5.set("traceLevel", 2); coe5.keepTraceLines({"ailog", "aiship"})   (Windows only)
@@ -697,6 +698,17 @@ function coe5.portalExits(x, y) end
 ---@param y integer
 ---@return integer[] units unit indexes (unitHp, unitMonster, unitStrength take them); empty for no living unit there or a square outside the arrays
 function coe5.squareUnits(x, y) end
+
+---The game's Reveal Map, the Game Over screen's button: every square of every plane in the world,
+---the mods' planes included (Elysium2's copy aside), or of one plane, in view for `player`
+---(squareSeen 2, a scried 3 included), then
+---the game's sight update, which redraws the map for a human. Sight only rises within a turn, and
+---the game lowers squares in view to seen before (1) at the player's next turn start, so they stay
+---in view until then: terrain stays on the map after, armies show only where the player sees them.
+---@param player integer a slot, 0-31
+---@param plane? integer a plane's index (coe5.planeIndex), 0 to the last plane; left out, every plane
+---@return boolean revealed false when refused: outside a game (reason=no_game), a player past the slots (bad_player), a plane past the last (bad_plane), each logged as lua_refused
+function coe5.revealMap(player, plane) end
 
 ---Every army on the world map: each square of the world (x below mapDepth, y below mapH) with an
 ---army (squareArmy not 0), by x, then y. With viewer, only the squares that player sees now

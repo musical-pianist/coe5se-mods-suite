@@ -1,6 +1,6 @@
 # CoE5SE
 
-[All mods](../README.md#mods) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md)
+[All mods](../README.md#mods) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
 
 I debated and decided to *release* this mod unhidden. Please give your critique and offer your support! Most script extenders aren't built in a couple of days and take teams. It takes time to get this right.
 
@@ -120,4 +120,4 @@ Script extenders have been around in PC modding for a long time (SKSE, F4SE; the
 
 At a base level, I made this for myself. All the "Jazzy" mods listed above I've been wishing for since I first played this game! That said, I'm not a traditional modder. I hate creative writing and I hate sprites. So I decided my contribution to the community would be make other's stories a little bit easier to write and play. Hopefully, I'm not 5 years late to the table on this. If I am and there's no adoption, well, at least I made the mods I need to have a good time lol.
 
-[All mods](../README.md#mods) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md)
+[All mods](../README.md#mods) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)

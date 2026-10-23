@@ -493,6 +493,29 @@ static int lSquareUnits(lua_State *L) {
     return 1;
 }
 
+// coe5.revealMap(player[, plane]): every plane's squares, the mods' included, or one plane's, in view for the player.
+#define SIGHT_REDRAW_CONTROLLERS 0x109
+static int lRevealMap(lua_State *L) {
+    lua_Integer player = luaL_checkinteger(L, 1), plane = luaL_optinteger(L, 2, -1);
+    const char *problem = NULL;
+    if (G32(RVA_ACTIVE_PLAYER) < 0) problem = "no_game";
+    else if (player < 0 || player >= PLAYER_SLOTS) problem = "bad_player";
+    else if (plane < -1 || plane > G32(RVA_LAST_PLANE) || plane >= planeTableRecords()) problem = "bad_plane";
+    if (problem) {
+        refuseLuaCall(runningLuaMod(), "coe5.revealMap", problem, "player=%lld plane=%lld", (long long)player, (long long)plane);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    GAME_FN(void (*)(int, int), RVA_REVEAL_MAP_FOR)((int)player, (int)plane);
+    int controller = G16(RVA_SLOT_CONTROLLER + (size_t)player * 2);
+    if (controller >= -3 && controller < 29 && (SIGHT_REDRAW_CONTROLLERS >> (controller + 3) & 1))
+        for (int index = PLANE_ELYSIUM2 + 1; index <= lastCustomPlaneIndex(); index++)
+            if (plane < 0 || plane == index) GAME_FN(int (*)(int, int), RVA_MAP_BG_MARK)(index, (int)player);
+    writeLog("lua_map_revealed", "mod=%s player=%lld plane=%lld", runningLuaMod(), (long long)player, (long long)plane);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 // coe5.armies([viewer]): every army on the world map.
 static void setIntField(lua_State *L, const char *key, lua_Integer value);
 static int lArmies(lua_State *L) {

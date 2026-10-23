@@ -1,6 +1,6 @@
 # Jazzy UI Tweaks
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md)
+[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
 
 Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. You can turn each one back to vanilla in Mod Settings, Jazzy UI Tweaks.  
 **Needs [CoE5SE](../CoE5SE/README.md) from Nexus Mods.**
@@ -51,4 +51,4 @@ Jazzy UI Tweaks is a Lua mod. The script, JazzyUITweaks.lua, is in the mod's fol
 - [Jazzy Restart](../JazzyRestart/README.md): Restart in the Game Menu. Single player.
 - [Jazzy Hotkeys](../JazzyHotkeys/README.md): change any key of the game's Keyboard Shortcuts list, on every screen.
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md)
+[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)

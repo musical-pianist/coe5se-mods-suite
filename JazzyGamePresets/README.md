@@ -1,6 +1,6 @@
 # Jazzy Game Presets
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md)
+[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
 
 ## Set up your perfect game once. Load it in one click. Tweak it mid-game.
 
@@ -70,4 +70,4 @@ Jazzy Game Presets is a Lua mod. The script, JazzyGamePresets.lua, is in the mod
 - [Jazzy Hotkeys](../JazzyHotkeys/README.md): change any key of the game's Keyboard Shortcuts list, on every screen.
 - [Jazzy UI Tweaks](../JazzyUITweaks/README.md): small changes to the game's own screens, like deleting saves from Load Game.
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md)
+[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
