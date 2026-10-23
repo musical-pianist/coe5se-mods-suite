@@ -12,7 +12,7 @@
   $archiveUrl = if ($env:COE5_SUITE_ZIP_URL) { $env:COE5_SUITE_ZIP_URL } else { 'https://github.com/musical-pianist/coe5se_mods_suite/archive/refs/heads/main.zip' }
   $modsDir = if ($env:COE5_MODS_DIR) { $env:COE5_MODS_DIR } else { Join-Path $env:APPDATA 'coe5\mods' }
   $appId = '1606340'
-  $mods = @('CoE5SE', 'JazzyGamePresets', 'JazzyHotkeys', 'JazzyRestart', 'JazzyUITweaks')
+  $mods = @('CoE5SE', 'JazzyGamePresets', 'JazzyHotkeys', 'JazzyRestart', 'JazzyUITweaks', 'JazzyCheats')
 
   # Each Steam library holds the game if it has the game's app manifest.
   function Find-GameDir {
@@ -74,6 +74,8 @@
       $staging = Join-Path $modsDir ".$mod.installing"
       if (Test-Path $staging) { Remove-Item -Recurse -Force $staging }
       Copy-Item -Recurse (Join-Path $sourceDir $mod) $staging
+      # Each folder's README.md is for the repo's page; the game never reads it.
+      Remove-Item (Join-Path $staging 'README.md') -Force -ErrorAction SilentlyContinue
       if (Test-Path $target) { Remove-Item -Recurse -Force $target }
       Rename-Item $staging $mod
       Write-Host "Installed $mod in $target"

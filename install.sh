@@ -10,7 +10,7 @@ ARCHIVE_URL="${COE5_SUITE_ZIP_URL:-https://github.com/musical-pianist/coe5se_mod
 MODS_DIR="${COE5_MODS_DIR:-$HOME/.coe5/mods}"
 STEAM_DIR="$HOME/Library/Application Support/Steam"
 APP_ID=1606340
-MODS=(CoE5SE JazzyGamePresets JazzyHotkeys JazzyRestart JazzyUITweaks)
+MODS=(CoE5SE JazzyGamePresets JazzyHotkeys JazzyRestart JazzyUITweaks JazzyCheats)
 LAUNCH_OPTIONS='/usr/bin/env DYLD_INSERT_LIBRARIES=coe5se.dylib %command%'
 
 fail() {
@@ -68,6 +68,8 @@ for mod in "${MODS[@]}"; do
   # Copy next to the old folder first, so a failed copy leaves the old one in place.
   rm -rf -- "$MODS_DIR/.$mod.installing"
   cp -R "$SOURCE_DIR/$mod" "$MODS_DIR/.$mod.installing"
+  # Each folder's README.md is for the repo's page; the game never reads it.
+  rm -f -- "$MODS_DIR/.$mod.installing/README.md"
   rm -rf -- "${MODS_DIR:?}/$mod"
   mv "$MODS_DIR/.$mod.installing" "$MODS_DIR/$mod"
   echo "Installed $mod in $MODS_DIR/$mod"
