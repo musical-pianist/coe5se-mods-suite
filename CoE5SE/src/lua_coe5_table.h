@@ -88,6 +88,45 @@ static int lAddMapEditorLine(lua_State *L) {
 }
 
 static int luaScriptsLoading;
+static int luaCommandsLoading;
+
+// coe5.addModCommand(name, handler): a .c5m word, in the mod's commands file only; true, or false when refused.
+static int lAddModCommand(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    if (refuseFromDeadLuaScript(L, "coe5.addModCommand")) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    const char *reason = !luaCommandsLoading ? "not_in_commands_file" : modCommandNameProblem(name);
+    int callback = -1;
+    if (!reason && (callback = newLuaCallback(L, 2, 0)) < 0) reason = "out_of_memory";
+    if (!reason && !addModCommandEntry(name, NULL, callback)) reason = "out_of_memory";
+    if (reason) refuseLuaCall(runningLuaMod(), "coe5.addModCommand", reason, "name=%.60s", name);
+    lua_pushboolean(L, !reason);
+    return 1;
+}
+
+// A script's .c5m word: its handler, the line's arguments, the line's mod by name, and the level.
+typedef struct { int ref; const char *args, *mod; int level; } LuaModCommandCall;
+static int pushLuaModCommand(lua_State *L, void *ctx) {
+    const LuaModCommandCall *c = ctx;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, c->ref);
+    lua_pushstring(L, c->args);
+    if (c->mod) lua_pushstring(L, c->mod);
+    else lua_pushnil(L);
+    lua_pushinteger(L, c->level);
+    return 3;
+}
+
+// Runs callback `callback`, a script's .c5m word, for a line of mod `mod` at `level`.
+static void runLuaModCommand(int callback, const char *args, int mod, int level) {
+    if (callback < 0 || callback >= luaCallbackCount) return;
+    LuaCallback c = luaCallbacks[callback];
+    if (!c.s || c.s->dead || isNetworkGame()) return;
+    LuaModCommandCall call = {c.ref, args, mod >= 0 && mod <= G32(RVA_MOD_LAST_INDEX) ? modName(mod) : NULL, level};
+    callLuaProtected(c.s, pushLuaModCommand, &call, 0);
+}
 
 static int luaPathIsLink(const char *path);
 

@@ -176,6 +176,7 @@ static int declinedSpellLine(const char *word, int mod, int level);
 static int flagOffLineHook(const char *line, size_t len, int mod, int level);
 static int weaponTraitLineHook(const char *line, size_t len, int level);
 static void weaponTraitsBeforePass(int level);
+static void ritualWordsAfterPass(int level);
 static int declinedFlagOffLine(const char *line);
 static void finishSpellBlock(void);
 static unsigned int spellPassCount(void);
@@ -362,6 +363,7 @@ static int arrangeMainMenu(const int *slots, const int *buttons, int count, int 
 
 static void takeCodeModSnapshot(void);
 static void loadLuaScripts(void);
+static void loadLuaCommandsFiles(void);
 static void logAllWrapOrders(void);
 static void moreButtonsScreen(int first);
 
@@ -450,6 +452,7 @@ static void finishStartup(void) {
     takeCodeModSnapshot();
     readLoadOrder(1);
     readUnreadSettingsFiles();
+    loadLuaCommandsFiles();
     loadLuaScripts();
     logAllWrapOrders();
     logHeaderEnd();
@@ -1029,11 +1032,14 @@ static int apiWrapWithPriority(CallSite site, void *hook, void **next, int prior
     return wrapFor(__builtin_return_address(0), "wrapWithPriority", site, hook, next, priority);
 }
 
-// ---- Plugin .c5m commands --------------------------------------------------------------------
+// ---- Plugin and script .c5m commands ---------------------------------------------------------
 typedef void (*ModCommandHandler)(const char *args, int mod, int level);
-static struct ModCommand { char name[48]; ModCommandHandler handler; } *modCommands;
+static struct ModCommand { char name[48]; ModCommandHandler handler; int lua; } *modCommands;
 static int modCommandCount, modCommandCapacity;
 static void (*nextModCommand)(const char *, int, int);
+static void runLuaModCommand(int callback, const char *args, int mod, int level);
+static int modWaitsForCommandsFile(int mod);
+static int anyEnabledModWaitsForCommandsFile(void);
 
 // Returns 1 in a network game: any of the client, server, and lobby flags is set.
 static int isNetworkGame(void) {
@@ -1629,6 +1635,7 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "offset_names.h"
 #include "name_lists.h"
 #include "monster_flags.h"
+#include "ritual_words.h"
 #include "game_save.h"
 #include "save_tail.h"
 #include "save_names.h"
@@ -1761,6 +1768,7 @@ static void startCoe5se(const char *via) {
     planeWordsInit();
     terrainLooksWordsInit();
     monsterFlagWordsInit();
+    ritualWordsInit();
     weaponTraitsInit();
     nameListsInit();
     maxdataWordInit();

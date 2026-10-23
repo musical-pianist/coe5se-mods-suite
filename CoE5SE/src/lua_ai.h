@@ -44,7 +44,6 @@ static int lRoute(lua_State *L) {
         lua_pushnil(L);
         return 1;
     }
-    // @platform-split ai_route: Mac takes no strength from the game (RVA_COMMANDER_STRENGTH not looked up)
     if (ownStrength) comstr = commanderStrength((int)commander);
     int randomIndex = G32(RVA_RANDOM_INDEX), randomShift = G32(RVA_RANDOM_SHIFT), randomXor = G32(RVA_RANDOM_XOR);
     int stepX = 0, stepY = 0;

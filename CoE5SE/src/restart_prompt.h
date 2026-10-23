@@ -46,13 +46,19 @@ static int folderHasPlugin(const char *dir) {
     return 1;
 }
 
-// Whether mod `mod` has a script, <folder>/<name>.lua.
-static int modHasScript(int mod) {
+// Whether file <folder>/<name><suffix> of mod `mod` exists.
+static int modHasFile(int mod, const char *suffix) {
     char path[MAX_PATH];
-    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s.lua", modFolder(mod), modName(mod))) return 0;
+    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s%s", modFolder(mod), modName(mod), suffix)) return 0;
     FILE *f = fopen(path, "rb");
     if (f) fclose(f);
     return f != NULL;
+}
+
+// Whether mod `mod` has a script: <folder>/<name>.lua, or its commands file <folder>/<name>_commands.lua.
+#define LUA_COMMANDS_SUFFIX "_commands.lua"
+static int modHasScript(int mod) {
+    return modHasFile(mod, ".lua") || modHasFile(mod, LUA_COMMANDS_SUFFIX);
 }
 
 static int modHasCode(int mod) {

@@ -17,43 +17,44 @@ static int livingCommanderUnit(int commander) {
 
 // The move flags of the commander's army as the AI's routes test them.
 static unsigned long long commanderMoveFlags(int commander) {
-#ifdef __APPLE__
-    (void)commander;
-    return 0;
-#else
     return GAME_FN(unsigned long long (*)(int), RVA_ARMY_MOVE_FLAGS)(commander);
-#endif
 }
+
+// The commander's school and level, as RVA_COMMANDER_RITPOW works them out.
 static int commanderRitpowOf(int commander, int *level) {
     *level = 0;
-#ifdef __APPLE__
-    (void)commander;
+    int unit = livingCommanderUnit(commander);
+    if (unit < 0 || (*(const unsigned long long *)GAME_PTR(RVA_UNITS + (size_t)unit * UNIT_SIZE + 8) >> 28) & 1) return 0;
+    int last = G32(RVA_RITPOW_COUNT);
+    for (int school = 501; school <= last && school < RITUAL_EFFECT_ID_COUNT; school++) {
+        int total = unitAbilityTotal(unit, school, 1);
+        if (total > 0) {
+            *level = total;
+            return school;
+        }
+    }
     return 0;
-#else
-    return GAME_FN(int (*)(int, int *), RVA_COMMANDER_RITPOW)(commander, level);
-#endif
 }
 
 // Square (x, y)'s library level as the AI's conquest scores it.
+#define LIBRARY_ENCHANT_KIND 0x484
 static int squareLibraryLevel(int x, int y) {
-#ifdef __APPLE__
-    (void)x, (void)y;
-    return 0;
-#else
-    if (x >= G32(RVA_MAP_DEPTH) || y >= G32(RVA_MAP_H)) return 0;
-    return GAME_FN(int (*)(int, int), RVA_SQUARE_LIBRARY_LEVEL)(x, y);
-#endif
+    if (x < 0 || y < 0 || x >= G32(RVA_MAP_DEPTH) || y >= G32(RVA_MAP_H) || x >= G32(RVA_MAP_W)) return 0;
+    size_t square = ((size_t)x * MAP_COLUMN_SQUARES + (size_t)y) * SQUARE_SIZE;
+    int terrain = (short)G16(RVA_SQUARE_RECORDS + square + SQUARE_TERRAIN_TYPE);
+    if (terrain < 0 || terrain >= TERRAIN_TABLE_MAX) return 0;
+    int owner = (signed char)G8(RVA_SQUARE_RECORDS + square + SQUARE_OWNER);
+    unsigned long long flags = *(const unsigned long long *)GAME_PTR(RVA_TERRAIN_TABLE + (size_t)terrain * TERRAIN_SIZE + TERRAIN_FLAGS);
+    int base = (int)((flags >> 34) & 1);
+    int enchant = GAME_FN(int (*)(int, int, int, int), RVA_SQUARE_ENCHANT_VALUE)(owner, x, y, LIBRARY_ENCHANT_KIND);
+    return enchant + ((flags >> 35) & 1 ? base + 2 : base);
 }
 
 // Whether square (x, y) has a fort, as the game's AI buy asks it for an aihold monster.
+#define FORT_PART_FORT 0x200
 static int squareHasFort(int x, int y) {
-#ifdef __APPLE__
-    (void)x, (void)y;
-    return 0;
-#else
     if (x >= G32(RVA_MAP_DEPTH) || y >= G32(RVA_MAP_H)) return 0;
-    return GAME_FN(int (*)(int, int), RVA_SQUARE_HAS_FORT)(x, y) != 0;
-#endif
+    return (GAME_FN(unsigned (*)(int, int), RVA_SQUARE_FORT_PARTS)(x, y) & FORT_PART_FORT) != 0;
 }
 
 // ---- Incomes: slotIncome and terrainIncome ---------------------------------------------------------
@@ -79,16 +80,24 @@ static int scaledIncome(int raw, int percent) {
 }
 
 // What player `slot` gets of `resource` at its next turn start.
-#ifndef __APPLE__
+static int anyCommanderGathers(int slot, unsigned int check) {
+    int last = G32(RVA_LAST_COMMANDER);
+    for (int c = 0; c <= last && c < COMMANDER_TABLE_MAX; c++) {
+        int unit = G32(RVA_COMMANDERS + (size_t)c * COMMANDER_SIZE);
+        int owner = unit >= 0 && unit < UNIT_TABLE_MAX ? (short)G16(RVA_UNIT_PLAYER + (size_t)unit * UNIT_SIZE) : -1;
+        if (owner == slot && GAME_FN(int (*)(int), check)(c)) return 1;
+    }
+    return 0;
+}
 static int playerGathersSpecial(int slot, int resource) {
     switch (resource) {
     case 2: return GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_HERBS)(slot) != 0;
     case 3: return GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_FUNGUS)(slot) != 0;
-    case 4: return GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_SACRIFICES)(slot) != 0;
+    case 4: return anyCommanderGathers(slot, RVA_COMMANDER_GATHERS_SACRIFICES);
     case 5: return GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_HANDS)(slot) != 0;
     case 6: return GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_WEED)(slot) != 0;
     case 7: case 8: case 9: case 10:
-        return GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_GEMS)(slot) != 0 || GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_ANY_GEMS)(slot) != 0;
+        return anyCommanderGathers(slot, RVA_COMMANDER_GATHERS_GEMS) || GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_ANY_GEMS)(slot) != 0;
     case 12: return GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_RELICS)(slot) != 0;
     case 13: return GAME_FN(int (*)(int), RVA_PLAYER_GATHERS_LIFEFORCE)(slot) != 0;
     default: return 1;
@@ -109,15 +118,11 @@ static int rawIncome(int slot, int resource) {
     default: return GAME_FN(int (*)(int, int), RVA_PLAYER_GEM_INCOME)(resource - 7, slot);
     }
 }
-#endif
 static int slotIncome(int slot, int resource) {
     int controller = G16(RVA_SLOT_CONTROLLER + (size_t)slot * 2);
     int level = G16(RVA_SLOT_AI + (size_t)slot * PLAYER_BLOCK_SIZE);
     int bonus = level >= 0 && level < AI_LEVEL_TABLE_MAX ? G32(RVA_AI_LEVEL_BONUS + (size_t)level * 4) : 0;
     int percent = incomePercent(controller, bonus, resource, 0);
-#ifdef __APPLE__
-    return scaledIncome(0, percent);
-#else
     if (percent == 0 || !playerGathersSpecial(slot, resource)) return 0;
     if (controller == CONTROLLER_AI && (resource == 0 || resource == 1 || resource == 11)) {
         static const int SPECIAL_CHECKS[] = {3, 2, 6, 13, 4, 12, 5, 7};
@@ -127,7 +132,6 @@ static int slotIncome(int slot, int resource) {
         percent = incomePercent(controller, bonus, resource, anySpecial);
     }
     return scaledIncome(rawIncome(slot, resource), percent);
-#endif
 }
 
 // ---- What stays home: commanderGarrisonLeft --------------------------------------------------------
@@ -648,6 +652,51 @@ static int setCeremonyCost(lua_State *L, unsigned char *table, int arg) {
     return 0;
 }
 
+// ---- Content records by their .c5m words: coe5.get("monster", m, "hp") -----------------------------
+// The record_words.h row of `word` in a block of kind `record`, or NULL.
+static const RecordWord *recordWordRow(int record, const char *word) {
+    for (size_t i = 0; i < sizeof RECORD_WORDS / sizeof RECORD_WORDS[0]; i++)
+        if (RECORD_WORDS[i].record == record && !strcmp(RECORD_WORDS[i].word, word)) return &RECORD_WORDS[i];
+    return NULL;
+}
+
+// The value of ability `id` among a record's (ability, value) pairs: the first match, 0 for none.
+static long long abilityPairValue(const unsigned char *pairs, int count, int width, int id) {
+    for (int i = 0; i < count; i++) {
+        const unsigned char *pair = pairs + (size_t)i * 2 * width;
+        long long ability = width == 8 ? *(const long long *)pair : *(const int *)pair;
+        if (!ability) break;
+        if (ability == id) return width == 8 ? *(const long long *)(pair + 8) : *(const int *)(pair + 4);
+    }
+    return 0;
+}
+
+// Pushes record `record`'s value of .c5m word `word` of its block (kind `kind`).
+static void pushRecordWord(lua_State *L, const char *name, int kind, const unsigned char *record, const char *word) {
+    const RecordWord *row = recordWordRow(kind, word);
+    long long ability = row && row->kind == WORD_ABILITY ? (long long)row->value : -1;
+    if (!row && (kind == RECORD_MONSTER || kind == RECORD_ITEM || kind == RECORD_RITUAL)) ability = abilityIdOfWord(word);
+    if (!row && ability < 0) { luaL_error(L, "%s: unknown word '%s'", name, word); return; }
+    if (row && row->kind == WORD_FIELD) {
+        const unsigned char *at = record + row->offset;
+        lua_pushinteger(L, row->size == 1 ? *at : row->size == 2 ? *(const short *)at : row->size == 4 ? *(const int *)at
+                                                                                                    : *(const long long *)at);
+        return;
+    }
+    if (row && row->kind == WORD_FLAG) {
+        unsigned long long bits = row->size == 4 ? *(const unsigned int *)(record + row->offset) : *(const unsigned long long *)(record + row->offset);
+        lua_pushboolean(L, (bits & row->value) == row->value);
+        return;
+    }
+    switch (kind) {
+    case RECORD_MONSTER: lua_pushinteger(L, abilityPairValue(record + MONSTER_ABILITIES, MONSTER_ABILITY_PAIRS, 4, (int)ability)); break;
+    case RECORD_ITEM: lua_pushinteger(L, abilityPairValue(record + ITEM_ABILITIES, ITEM_ABILITY_PAIRS, 4, (int)ability)); break;
+    case RECORD_CLASS: lua_pushinteger(L, abilityPairValue(record + CLASS_ABILITIES, CLASS_ABILITY_PAIRS, 4, (int)ability)); break;
+    case RECORD_TERRAIN: lua_pushinteger(L, abilityPairValue(record + TERRAIN_ABILITIES, TERRAIN_ABILITY_PAIRS, 8, (int)ability)); break;
+    default: lua_pushinteger(L, ritualFirstFx(record, (int)ability, 0));
+    }
+}
+
 // coe5.get(name[, index]).
 static int lGet(lua_State *L) {
     const GameVar *v;
@@ -800,6 +849,8 @@ static int lGet(lua_State *L) {
     }
     case T_SQUARE_LIBRARY_LEVEL: lua_pushinteger(L, squareLibraryLevel((int)lua_tointeger(L, 2), (int)lua_tointeger(L, 3))); break;
     case T_SQUARE_HAS_FORT: lua_pushboolean(L, squareHasFort((int)lua_tointeger(L, 2), (int)lua_tointeger(L, 3))); break;
+    case T_RECORD_WORD: pushRecordWord(L, v->name, v->size, p, luaL_checkstring(L, arg)); break;
+    case T_AI_ATTACK_MARGIN: lua_pushinteger(L, AI_ATTACK_MARGIN); break;
     case T_I16: lua_pushinteger(L, *(short *)p); break;
     case T_FLAG_U8: lua_pushboolean(L, *p != 0); break;
     case T_FLAG_POSITIVE: lua_pushboolean(L, *(int *)p > 0); break;

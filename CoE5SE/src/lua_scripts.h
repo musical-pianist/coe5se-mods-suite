@@ -7,6 +7,7 @@
 #include "lua_random.h"
 #include "mod_storage.h"
 #include "ritual_effect_names.h"
+#include "record_words.h"
 
 // Lua steps one call into a script may run.
 #define LUA_STEP_LIMIT      20000000
@@ -36,12 +37,15 @@ static int luaCodeRunning;
 
 typedef struct {
     char mod[MOD_NAME_MAX], path[MAX_PATH];
+    char commandsName[MOD_NAME_MAX + sizeof "_commands"];
     char folder[MAX_PATH];
     char dataFolder[STORAGE_NAME_MAX + 1];
     long long dataBytes;
     int dataBytesKnown;
     lua_State *L;
     int dead;
+    int commandsTried;
+    int mainTried;
     int stopLogged;
     long long stepsLeft;
     unsigned long stepsFrame;

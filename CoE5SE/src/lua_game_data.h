@@ -63,6 +63,8 @@ enum {
     T_FORT_PART_WORD,
     T_PLANE_TINT,
     T_SQUARE_HAS_FORT,
+    T_RECORD_WORD,
+    T_AI_ATTACK_MARGIN,
 };
 typedef struct {
     const char *name;
@@ -88,46 +90,13 @@ typedef struct { const char *name; int count3, stride3, list, nameBack; uintptr_
 #define INT_FLAG_TYPE T_FLAG_I32
 #define WILDER_DEFAULT_TYPE T_FLAG_TWO
 #endif
-// @platform-split ai_test_values: bugChecksOff and commanderStrength read nil on Mac (RVA_NO_CHECKS and RVA_COMMANDER_STRENGTH not looked up)
 // Values only the Windows build has an address for so far.
 #ifdef __APPLE__
 #define WINDOWS_ONLY_RVA(rva) 0
-#define BUG_CHECKS_OFF_TYPE T_WINDOWS_ONLY
-#define COMMANDER_STRENGTH_TYPE T_WINDOWS_ONLY
+#define BUG_CHECKS_OFF_TYPE T_FLAG_U8
 #else
 #define WINDOWS_ONLY_RVA(rva) (rva)
 #define BUG_CHECKS_OFF_TYPE T_FLAG_I32
-#define COMMANDER_STRENGTH_TYPE T_COMMANDER_STRENGTH
-#endif
-// @platform-split ai_square_strength: squareStrength and squareRememberedStrength read nil on Mac (RVA_SQUARE_STRENGTH not looked up, SQUARE_AI_STRENGTH not checked there)
-// A square's strength, now and as an AI player remembers it: Windows only.
-#ifdef __APPLE__
-#define SQUARE_STRENGTH_TYPE T_WINDOWS_ONLY
-#define REMEMBERED_STRENGTH_TYPE T_WINDOWS_ONLY
-#else
-#define SQUARE_STRENGTH_TYPE T_SQUARE_STRENGTH
-#define REMEMBERED_STRENGTH_TYPE T_REMEMBERED_STRENGTH
-#endif
-// @platform-split army_stationary: squareArmyStationary reads nil on Mac (RVA_SQUARE_ARMY_STATIONARY not looked up)
-// Whether the game ever moves the army on a square: Windows only.
-#ifdef __APPLE__
-#define ARMY_STATIONARY_TYPE T_WINDOWS_ONLY
-#else
-#define ARMY_STATIONARY_TYPE T_ARMY_STATIONARY
-#endif
-// @platform-split army_holds: squareArmyHolds reads nil on Mac (RVA_SQUARE_TOP_UNIT not looked up)
-// Whether the independents' move holds the army on a square: Windows only.
-#ifdef __APPLE__
-#define ARMY_HOLDS_TYPE T_WINDOWS_ONLY
-#else
-#define ARMY_HOLDS_TYPE T_ARMY_HOLDS
-#endif
-// @platform-split unit_visible: unitVisibleTo reads nil on Mac (RVA_UNIT_VISIBLE_TO not looked up)
-// Whether a player sees a unit: Windows only.
-#ifdef __APPLE__
-#define UNIT_VISIBLE_TYPE T_WINDOWS_ONLY
-#else
-#define UNIT_VISIBLE_TYPE T_UNIT_VISIBLE
 #endif
 // @platform-split garrison_left: commanderGarrisonLeft reads nil on Mac (RVA_AI_GATHER_TROOPS and the functions it calls not looked up)
 // What stays on a commander's square when it leaves: Windows only.
@@ -135,26 +104,6 @@ typedef struct { const char *name; int count3, stride3, list, nameBack; uintptr_
 #define GARRISON_LEFT_TYPE T_WINDOWS_ONLY
 #else
 #define GARRISON_LEFT_TYPE T_GARRISON_LEFT
-#endif
-// @platform-split ai_unit_fight: unitStrength, unitArmor, monsterAttackType, monsterAttackWeapon, monsterAttackValue, weaponDmgType and weaponAoe read nil on Mac (RVA_UNIT_STRENGTH_FOR and RVA_UNIT_ARMOR not looked up, MONSTER_ATTACKS and the WEAPON_ offsets not checked there)
-// What a fight estimate reads of units, monsters and weapons: Windows only.
-#ifdef __APPLE__
-#define UNIT_STRENGTH_TYPE T_WINDOWS_ONLY
-#define UNIT_ARMOR_TYPE T_WINDOWS_ONLY
-#define MONSTER_ATTACK_TYPE T_WINDOWS_ONLY
-#define WEAPON_NUMBER_TYPE T_WINDOWS_ONLY
-#else
-#define UNIT_STRENGTH_TYPE T_UNIT_STRENGTH
-#define UNIT_ARMOR_TYPE T_UNIT_ARMOR
-#define MONSTER_ATTACK_TYPE T_MONSTER_ATTACK
-#define WEAPON_NUMBER_TYPE T_I32
-#endif
-// @platform-split square_citadel: squareCitadel reads nil on Mac (RVA_SQUARE_IS_CITADEL_FOR not looked up)
-// Whether a square is a citadel for a player: Windows only.
-#ifdef __APPLE__
-#define SQUARE_CITADEL_TYPE T_WINDOWS_ONLY
-#else
-#define SQUARE_CITADEL_TYPE T_SQUARE_CITADEL
 #endif
 // @platform-split ceremony_values: ceremonyName, ceremonyCost and ceremonyLastIndex read nil on Mac (the ceremony code and table not looked up)
 // The Voice of El's ceremonies: their names, the cost table, and the last number.
@@ -169,41 +118,6 @@ typedef struct { const char *name; int count3, stride3, list, nameBack; uintptr_
 #endif
 #define CEREMONY_INDEXES (CEREMONY_LAST + 1)
 #define FORT_PART_BITS 32
-// @platform-split slot_income: slotIncome reads nil on Mac (the income functions player_turn_start calls not looked up)
-// A player's income at its next turn start: Windows only.
-#ifdef __APPLE__
-#define SLOT_INCOME_TYPE T_WINDOWS_ONLY
-#else
-#define SLOT_INCOME_TYPE T_SLOT_INCOME
-#endif
-// @platform-split commander_done: commanderDone reads nil on Mac (RVA_COMMANDER_DONE not looked up)
-// Whether the player gave a commander "Commander is done for this turn": Windows only.
-#ifdef __APPLE__
-#define COMMANDER_DONE_TYPE T_WINDOWS_ONLY
-#else
-#define COMMANDER_DONE_TYPE T_FLAG_U8
-#endif
-// @platform-split ai_move_reads: monsterMoveFlags, monsterHp, slotTradeType, slotTradeMode, commanderMoveFlags, commanderRitpow, commanderRitualLevel, terrainFlags, squareLibraryLevel, squareHasFort, seasonTurnsLeft, aiAttackDivOther, aiAttackDivAi, aiAttackDivHuman and aiAttackMargin read nil on Mac (RVA_ARMY_MOVE_FLAGS, RVA_COMMANDER_RITPOW, RVA_SQUARE_LIBRARY_LEVEL, RVA_SEASON_TURNS_LEFT and the four RVA_AI_ATTACK_ globals not looked up, MONSTER_MOVE_FLAGS and TERRAIN_FLAGS not checked there)
-// What the AI's move and target choices read: Windows only.
-#ifdef __APPLE__
-#define AI_MOVE_I64_TYPE T_WINDOWS_ONLY
-#define AI_MOVE_I32_TYPE T_WINDOWS_ONLY
-#define AI_MOVE_I16_TYPE T_WINDOWS_ONLY
-#define COMMANDER_MOVE_FLAGS_TYPE T_WINDOWS_ONLY
-#define COMMANDER_RITPOW_TYPE T_WINDOWS_ONLY
-#define COMMANDER_RITUAL_LEVEL_TYPE T_WINDOWS_ONLY
-#define SQUARE_LIBRARY_LEVEL_TYPE T_WINDOWS_ONLY
-#define SQUARE_HAS_FORT_TYPE T_WINDOWS_ONLY
-#else
-#define AI_MOVE_I64_TYPE T_I64
-#define AI_MOVE_I32_TYPE T_I32
-#define AI_MOVE_I16_TYPE T_I16
-#define COMMANDER_MOVE_FLAGS_TYPE T_COMMANDER_MOVE_FLAGS
-#define COMMANDER_RITPOW_TYPE T_COMMANDER_RITPOW
-#define COMMANDER_RITUAL_LEVEL_TYPE T_COMMANDER_RITUAL_LEVEL
-#define SQUARE_LIBRARY_LEVEL_TYPE T_SQUARE_LIBRARY_LEVEL
-#define SQUARE_HAS_FORT_TYPE T_SQUARE_HAS_FORT
-#endif
 #define RESOURCE_COUNT 14
 #define NAME_SIZE 100
 #define COUNT_AT_CALL 0
@@ -234,9 +148,9 @@ static const GameVar GAME_VARS[] = {
     {"slotColorGreen", RVA_SLOT_COLOUR + 4,               T_F32, 32, PLAYER_BLOCK_SIZE, 0, 1, 0, 0, 0},
     {"slotColorBlue",  RVA_SLOT_COLOUR + 8,               T_F32, 32, PLAYER_BLOCK_SIZE, 0, 1, 0, 0, 0},
     {"slotResource",   RVA_PLAYER_INTS,                   T_I32, 32, PLAYER_BLOCK_SIZE, 0, 1, 0, 14, 4},
-    {"slotIncome",     0,                                 SLOT_INCOME_TYPE, PLAYER_SLOTS, 0, 0, 0, 0, RESOURCE_COUNT, 0},
-    {"slotTradeType",  WINDOWS_ONLY_RVA(RVA_PLAYER_TRADE_TYPE), AI_MOVE_I16_TYPE, 32, PLAYER_BLOCK_SIZE, 0, 1, 0, 0, 0},
-    {"slotTradeMode",  WINDOWS_ONLY_RVA(RVA_PLAYER_TRADE_MODE), AI_MOVE_I16_TYPE, 32, PLAYER_BLOCK_SIZE, 0, 0, 0, 0, 0},
+    {"slotIncome",     0,                                 T_SLOT_INCOME, PLAYER_SLOTS, 0, 0, 0, 0, RESOURCE_COUNT, 0},
+    {"slotTradeType",  RVA_PLAYER_TRADE_TYPE, T_I16, 32, PLAYER_BLOCK_SIZE, 0, 1, 0, 0, 0},
+    {"slotTradeMode",  RVA_PLAYER_TRADE_MODE, T_I16, 32, PLAYER_BLOCK_SIZE, 0, 0, 0, 0, 0},
     {"newWorldUniqueRandom", FRAME_NEW_WORLD_UNIQUE_RANDOM, T_FRAME_I32, 1, 0, 0, 1, SITE_NEW_WORLD_CREATING_WORLD, 0, 0},
     {"cliMapW",        RVA_CLI_MAP_W,                     T_I32, 1, 0, 0, 1, 0, 0, 0},
     {"cliMapH",        RVA_CLI_MAP_H,                     T_I32, 1, 0, 0, 1, 0, 0, 0},
@@ -318,7 +232,7 @@ static const GameVar GAME_VARS[] = {
     {"commanderAiTargetY", RVA_COMMANDER_AI_TARGET_Y,     T_I16, COMMANDER_TABLE_MAX, 2, 0, 0, 0, 0, 0},
     {"commanderAiMoveKind", RVA_COMMANDER_AI_MOVE_KIND,   T_I16, COMMANDER_TABLE_MAX, 2, 0, 0, 0, 0, 0},
     {"commanderRitualPlan", RVA_COMMANDER_AI_PLAN,        T_I16, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
-    {"commanderDone",  WINDOWS_ONLY_RVA(RVA_COMMANDER_DONE), COMMANDER_DONE_TYPE, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
+    {"commanderDone",  RVA_COMMANDER_DONE,                T_FLAG_U8, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
     {"slotLeader",     RVA_PLAYER_LEADER,                 T_I32, 32, PLAYER_BLOCK_SIZE, 0, 0, 0, 0, 0},
     {"unitLastIndex",  RVA_UNIT_COUNT,                    T_I32, 1, 0, 0, 0, 0, 0, 0},
     {"unitOwner",      RVA_UNIT_PLAYER,                   T_I16, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
@@ -359,55 +273,62 @@ static const GameVar GAME_VARS[] = {
     {"ticksMs",        RVA_TICKS_MS,                      T_TICKS_MS, 1, 0, 0, 0, 0, 0, 0},
     {"tooltipLineHeight", RVA_TOOLTIP_LINE_HEIGHT,        T_F32, 1, 0, 0, 0, 0, 0, 0},
     {"traceLevel",     RVA_DEBUG_LEVEL,                   T_I32, 1, 0, 0, 1, 0, 0, 0},
-    {"bugChecksOff",   WINDOWS_ONLY_RVA(RVA_NO_CHECKS),   BUG_CHECKS_OFF_TYPE, 1, 0, 0, 1, 0, 0, 0},
+    {"bugChecksOff",   RVA_NO_CHECKS,                     BUG_CHECKS_OFF_TYPE, 1, 0, 0, 1, 0, 0, 0},
     {"commanderName",  RVA_COMMANDER_NAMES,               T_STR, COMMANDER_TABLE_MAX, COMMANDER_SIZE, COMMANDER_NAME_SIZE, 0, 0, 0, 0},
-    {"commanderStrength", WINDOWS_ONLY_RVA(RVA_COMMANDERS), COMMANDER_STRENGTH_TYPE, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
+    {"commanderStrength", RVA_COMMANDERS, T_COMMANDER_STRENGTH, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
     {"commanderGarrisonLeft", WINDOWS_ONLY_RVA(RVA_COMMANDERS), GARRISON_LEFT_TYPE, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
     {"slotHomeX",      RVA_PLAYER_HOME_X,                 T_I16, 32, 2, 0, 0, 0, 0, 0},
     {"slotHomeY",      RVA_PLAYER_HOME_Y,                 T_I16, 32, 2, 0, 0, 0, 0, 0},
     {"squareGems",     RVA_SQUARE_RECORDS + SQUARE_GEMS,  T_U8, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 0, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
-    {"squareStrength", 0,                                 SQUARE_STRENGTH_TYPE, PLAYER_SLOTS, 0, 0, 0, 0, MAP_COLUMNS_MAX, 0},
-    {"squareRememberedStrength", WINDOWS_ONLY_RVA(RVA_SQUARE_RECORDS + SQUARE_AI_STRENGTH), REMEMBERED_STRENGTH_TYPE, PLAYER_SLOTS, 4, 0, 0, 0,
+    {"squareStrength", 0,                                 T_SQUARE_STRENGTH, PLAYER_SLOTS, 0, 0, 0, 0, MAP_COLUMNS_MAX, 0},
+    {"squareRememberedStrength", RVA_SQUARE_RECORDS + SQUARE_AI_STRENGTH, T_REMEMBERED_STRENGTH, PLAYER_SLOTS, 4, 0, 0, 0,
      MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE},
-    {"squareArmyStationary", 0,                           ARMY_STATIONARY_TYPE, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
-    {"squareArmyHolds", 0,                                ARMY_HOLDS_TYPE, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
-    {"unitStrength",   0,                                 UNIT_STRENGTH_TYPE, PLAYER_SLOTS, 0, 0, 0, 0, UNIT_TABLE_MAX, 0},
-    {"unitArmor",      WINDOWS_ONLY_RVA(RVA_UNITS),       UNIT_ARMOR_TYPE, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
-    {"unitVisibleTo",  0,                                 UNIT_VISIBLE_TYPE, UNIT_TABLE_MAX, 0, 0, 0, 0, PLAYER_SLOTS, 0},
-    {"monsterAttackType", WINDOWS_ONLY_RVA(RVA_MONSTER_TABLE + MONSTER_ATTACKS), MONSTER_ATTACK_TYPE, MONSTER_TABLE_MAX, MONSTER_SIZE,
+    {"squareArmyStationary", 0,                           T_ARMY_STATIONARY, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
+    {"squareArmyHolds", 0,                                T_ARMY_HOLDS, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
+    {"unitStrength",   0,                                 T_UNIT_STRENGTH, PLAYER_SLOTS, 0, 0, 0, 0, UNIT_TABLE_MAX, 0},
+    {"unitArmor",      RVA_UNITS,                         T_UNIT_ARMOR, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
+    {"unitVisibleTo",  0,                                 T_UNIT_VISIBLE, UNIT_TABLE_MAX, 0, 0, 0, 0, PLAYER_SLOTS, 0},
+    {"monsterAttackType", RVA_MONSTER_TABLE + MONSTER_ATTACKS, T_MONSTER_ATTACK, MONSTER_TABLE_MAX, MONSTER_SIZE,
      0, 0, 0, MONSTER_ATTACK_MAX, MONSTER_ATTACK_SIZE},
-    {"monsterAttackWeapon", WINDOWS_ONLY_RVA(RVA_MONSTER_TABLE + MONSTER_ATTACKS + MONSTER_ATTACK_WEAPON), MONSTER_ATTACK_TYPE,
+    {"monsterAttackWeapon", RVA_MONSTER_TABLE + MONSTER_ATTACKS + MONSTER_ATTACK_WEAPON, T_MONSTER_ATTACK,
      MONSTER_TABLE_MAX, MONSTER_SIZE, 0, 0, 0, MONSTER_ATTACK_MAX, MONSTER_ATTACK_SIZE},
-    {"monsterAttackValue", WINDOWS_ONLY_RVA(RVA_MONSTER_TABLE + MONSTER_ATTACKS + MONSTER_ATTACK_VALUE), MONSTER_ATTACK_TYPE,
+    {"monsterAttackValue", RVA_MONSTER_TABLE + MONSTER_ATTACKS + MONSTER_ATTACK_VALUE, T_MONSTER_ATTACK,
      MONSTER_TABLE_MAX, MONSTER_SIZE, 0, 0, 0, MONSTER_ATTACK_MAX, MONSTER_ATTACK_SIZE},
-    {"weaponDmgType",  WINDOWS_ONLY_RVA(RVA_WEAPON_TABLE + WEAPON_DMGTYPE), WEAPON_NUMBER_TYPE, WEAPON_RECORDS_GAME, WEAPON_SIZE, 0, 0, 0, 0, 0},
-    {"weaponAoe",      WINDOWS_ONLY_RVA(RVA_WEAPON_TABLE + WEAPON_AOE), WEAPON_NUMBER_TYPE, WEAPON_RECORDS_GAME, WEAPON_SIZE, 0, 0, 0, 0, 0},
-    {"squareCitadel",  0,                                 SQUARE_CITADEL_TYPE, PLAYER_SLOTS, 0, 0, 0, 0, MAP_COLUMNS_MAX, 0},
+    {"weaponDmgType",  RVA_WEAPON_TABLE + WEAPON_DMGTYPE, T_I32, WEAPON_RECORDS_GAME, WEAPON_SIZE, 0, 0, 0, 0, 0},
+    {"weaponAoe",      RVA_WEAPON_TABLE + WEAPON_AOE, T_I32, WEAPON_RECORDS_GAME, WEAPON_SIZE, 0, 0, 0, 0, 0},
+    {"squareCitadel",  0,                                 T_SQUARE_CITADEL, PLAYER_SLOTS, 0, 0, 0, 0, MAP_COLUMNS_MAX, 0},
     {"unitMoveFlags",  RVA_UNITS,                         T_UNIT_MOVE_FLAGS, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
     {"unitFlags",      RVA_UNITS,                         T_UNIT_FLAG_WORDS, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
     {"monsterFlags",   RVA_MONSTER_FLAGS,                 T_I64, MONSTER_TABLE_MAX, MONSTER_SIZE, 0, 0, 0, 0, 0},
     {"monsterAbility", RVA_MONSTER_TABLE,                 T_MONSTER_ABILITY, MONSTER_TABLE_MAX, MONSTER_SIZE, 0, 0, 0,
      RITUAL_EFFECT_ID_COUNT, 0},
-    {"monsterMoveFlags", WINDOWS_ONLY_RVA(RVA_MONSTER_TABLE + MONSTER_MOVE_FLAGS), AI_MOVE_I64_TYPE, MONSTER_TABLE_MAX, MONSTER_SIZE,
+    {"monsterMoveFlags", RVA_MONSTER_TABLE + MONSTER_MOVE_FLAGS, T_I64, MONSTER_TABLE_MAX, MONSTER_SIZE,
      0, 0, 0, 0, 0},
-    {"monsterHp",      WINDOWS_ONLY_RVA(RVA_MONSTER_TABLE + MONSTER_HP), AI_MOVE_I16_TYPE, MONSTER_TABLE_MAX, MONSTER_SIZE, 0, 0, 0, 0, 0},
-    {"commanderMoveFlags", RVA_COMMANDERS,                COMMANDER_MOVE_FLAGS_TYPE, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
-    {"commanderRitpow", RVA_COMMANDERS,                   COMMANDER_RITPOW_TYPE, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
-    {"commanderRitualLevel", RVA_COMMANDERS,              COMMANDER_RITUAL_LEVEL_TYPE, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
+    {"monsterHp",      RVA_MONSTER_TABLE + MONSTER_HP, T_I16, MONSTER_TABLE_MAX, MONSTER_SIZE, 0, 0, 0, 0, 0},
+    {"commanderMoveFlags", RVA_COMMANDERS,                T_COMMANDER_MOVE_FLAGS, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
+    {"commanderRitpow", RVA_COMMANDERS,                   T_COMMANDER_RITPOW, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
+    {"commanderRitualLevel", RVA_COMMANDERS,              T_COMMANDER_RITUAL_LEVEL, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
     {"commanderSpellLevel", RVA_COMMANDERS,               T_COMMANDER_SPELL_LEVEL, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
-    {"terrainFlags",   WINDOWS_ONLY_RVA(RVA_TERRAIN_TABLE + TERRAIN_FLAGS), AI_MOVE_I64_TYPE, TERRAIN_TABLE_MAX, TERRAIN_SIZE, 0, 0, 0, 0, 0},
-    {"squareLibraryLevel", 0,                             SQUARE_LIBRARY_LEVEL_TYPE, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
-    {"squareHasFort",  0,                                 SQUARE_HAS_FORT_TYPE, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
-    {"seasonTurnsLeft", WINDOWS_ONLY_RVA(RVA_SEASON_TURNS_LEFT), AI_MOVE_I16_TYPE, 1, 0, 0, 0, 0, 0, 0},
-    {"aiAttackDivOther", WINDOWS_ONLY_RVA(RVA_AI_ATTACK_DIV_OTHER), AI_MOVE_I32_TYPE, 1, 0, 0, 0, 0, 0, 0},
-    {"aiAttackDivAi",  WINDOWS_ONLY_RVA(RVA_AI_ATTACK_DIV_AI), AI_MOVE_I32_TYPE, 1, 0, 0, 0, 0, 0, 0},
-    {"aiAttackDivHuman", WINDOWS_ONLY_RVA(RVA_AI_ATTACK_DIV_HUMAN), AI_MOVE_I32_TYPE, 1, 0, 0, 0, 0, 0, 0},
-    {"aiAttackMargin", WINDOWS_ONLY_RVA(RVA_AI_ATTACK_MARGIN), AI_MOVE_I32_TYPE, 1, 0, 0, 0, 0, 0, 0},
+    {"terrainFlags",   RVA_TERRAIN_TABLE + TERRAIN_FLAGS, T_I64, TERRAIN_TABLE_MAX, TERRAIN_SIZE, 0, 0, 0, 0, 0},
+    {"squareLibraryLevel", 0,                             T_SQUARE_LIBRARY_LEVEL, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
+    {"squareHasFort",  0,                                 T_SQUARE_HAS_FORT, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
+    {"seasonTurnsLeft", RVA_SEASON_TURNS_LEFT, T_I16, 1, 0, 0, 0, 0, 0, 0},
+    {"aiAttackDivOther", RVA_AI_ATTACK_DIV_OTHER, T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"aiAttackDivAi",  RVA_AI_ATTACK_DIV_AI, T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"aiAttackDivHuman", RVA_AI_ATTACK_DIV_HUMAN, T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"aiAttackMargin", 0,                                 T_AI_ATTACK_MARGIN, 1, 0, 0, 0, 0, 0, 0},
     {"ceremonyName",   0,                                 CEREMONY_NAME_TYPE, CEREMONY_INDEXES, 0, 0, 0, 0, 0, 0},
     {"ceremonyCost",   0,                                 CEREMONY_COST_TYPE, CEREMONY_INDEXES, 0, 0, 1, SITE_CEREMONY_COSTS, 0, 0},
     {"ceremonyLastIndex", 0,                              CEREMONY_LAST_TYPE, 1, 0, 0, 0, 0, 0, 0},
     // The terrain word for fort part bit n (walls, irongate, ...), as the game's terrain reader has it.
     {"fortPartWord",   0,                                 T_FORT_PART_WORD, FORT_PART_BITS, 0, 0, 0, 0, 0, 0},
+    // A content record by the .c5m words of its block: coe5.get("monster", m, "hp"), read-only.
+    {"monster",        RVA_MONSTER_TABLE,                 T_RECORD_WORD, MONSTER_TABLE_MAX, MONSTER_SIZE, RECORD_MONSTER, 0, 0, 0, 0},
+    {"weapon",         RVA_WEAPON_TABLE,                  T_RECORD_WORD, WEAPON_RECORDS_GAME, WEAPON_SIZE, RECORD_WEAPON, 0, 0, 0, 0},
+    {"item",           RVA_ITEM_TABLE,                    T_RECORD_WORD, ITEM_TABLE_MAX, ITEM_SIZE, RECORD_ITEM, 0, 0, 0, 0},
+    {"class",          RVA_CLASS_TABLE,                   T_RECORD_WORD, CLASS_TABLE_MAX, CLASS_SIZE, RECORD_CLASS, 0, 0, 0, 0},
+    {"terrain",        RVA_TERRAIN_TABLE,                 T_RECORD_WORD, TERRAIN_TABLE_MAX, TERRAIN_SIZE, RECORD_TERRAIN, 0, 0, 0, 0},
+    {"ritual",         RVA_RITUAL_TABLE,                  T_RECORD_WORD, COUNT_AT_CALL, RITUAL_SIZE, RECORD_RITUAL, 0, 0, 0, 0},
 };
 static const GameVarShape GAME_VAR_SHAPES[] = {
     {"classRecruitName", 0, 0, LIST_TO_EMPTY_NAME, RECRUIT_MONSTER_NAME, 0, 0},
@@ -470,6 +391,22 @@ static const GameVar *findGameVar(const char *name) {
     return NULL;
 }
 
+// The ability id the .c5m word `word` sets, or -1 for a word that sets none.
+static int abilityIdOfWord(const char *word) {
+    size_t len = strlen(word);
+    for (size_t i = 0; i < sizeof RITUAL_EFFECT_NAMES / sizeof RITUAL_EFFECT_NAMES[0]; i++)
+        for (const char *at = RITUAL_EFFECT_NAMES[i].name; *at;) {
+            const char *end = strchr(at, '/');
+            size_t n = end ? (size_t)(end - at) : strlen(at);
+            if (n == len && !memcmp(at, word, len)) return RITUAL_EFFECT_NAMES[i].id;
+            at += n + (end != NULL);
+        }
+    return -1;
+}
+
+// Whether a variable's second index is an ability id, which a script may also give as its .c5m word.
+static int takesAbilityWord(int type) { return type == T_UNIT_ABILITY || type == T_MONSTER_ABILITY; }
+
 // Finds the variable named by argument 1 of coe5.get or coe5.set, and returns its address.
 static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg) {
     const char *name = luaL_checkstring(L, 1);
@@ -488,6 +425,13 @@ static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg
     lua_Integer index2 = 0, index3 = 0;
     int count2 = v->type == T_CAST_COUNT ? ritualSlotCount() : v->count2;
     if (count2 > 1) {
+        if (takesAbilityWord(v->type) && lua_type(L, *arg) == LUA_TSTRING && !lua_isnumber(L, *arg)) {
+            const char *word = lua_tostring(L, *arg);
+            int id = abilityIdOfWord(word);
+            if (id < 0) luaL_error(L, "%s: unknown ability word '%s'", name, word);
+            lua_pushinteger(L, id);
+            lua_replace(L, *arg);
+        }
         index2 = luaL_checkinteger(L, (*arg)++);
         if (index2 < 0 || index2 >= count2) luaL_error(L, "%s: index %I out of range 0-%d", name, (LUAI_UACINT)index2, count2 - 1);
     }
@@ -611,8 +555,7 @@ static int unitAbilityTotal(int unit, int ability, int add) {
 // The game's strength of a commander's army.
 static int commanderStrength(int commander) {
 #ifdef __APPLE__
-    (void)commander;
-    return 0;
+    return GAME_FN(int (*)(int), RVA_COMMANDER_STRENGTH)(commander);
 #else
     return GAME_FN(int (*)(int, int), RVA_COMMANDER_FLAGGED_STRENGTH)(commander, 0);
 #endif
@@ -620,22 +563,17 @@ static int commanderStrength(int commander) {
 
 // The strength of the units on square (x, y) of player `team` and its teammates.
 static int squareStrength(int team, int x, int y) {
-#ifdef __APPLE__
-    (void)team, (void)x, (void)y;
-    return 0;
-#else
     return GAME_FN(int (*)(int, int, int), RVA_SQUARE_STRENGTH)(team, x, y);
-#endif
 }
+
+static int unitAliveAt(int u, int x, int y);
 
 // 1 when the game never moves the army on square (x, y).
 static int armyStationaryAt(int x, int y) {
-#ifdef __APPLE__
-    (void)x, (void)y;
-    return 0;
-#else
-    return GAME_FN(int (*)(int, int), RVA_SQUARE_ARMY_STATIONARY)(x, y);
-#endif
+    int last = G32(RVA_UNIT_COUNT);
+    for (int u = 0; u <= last && u < UNIT_TABLE_MAX; u++)
+        if (unitAliveAt(u, x, y) && G16(RVA_UNIT_MONSTER + (size_t)u * UNIT_SIZE) >= 0 && !unitStationary(u)) return 0;
+    return 1;
 }
 
 // 1 when the independents' move never moves the army on square (x, y).
@@ -645,20 +583,20 @@ static int holdFlagsHold(int squareFlags, int top, unsigned long long topFlags) 
 }
 
 static int armyHoldsAt(int x, int y) {
-#ifdef __APPLE__
-    (void)x, (void)y;
-    return holdFlagsHold(0, -1, 0);
-#else
     if (x < 0 || y < 0 || x >= G32(RVA_MAP_DEPTH) || y >= G32(RVA_MAP_H)) return 0;
     size_t square = ((size_t)x * MAP_COLUMN_SQUARES + (size_t)y) * SQUARE_SIZE;
     int squareFlags = G32(RVA_SQUARE_FLAGS + square);
     if (holdFlagsHold(squareFlags, -1, 0)) return 1;
     int owner = armyOwnerAt(x, y);
     if (owner < 0) return 0;
+#ifdef __APPLE__
+    (void)owner;
+    int top = GAME_FN(int (*)(int, int, int, int, int, int *), RVA_SQUARE_TOP_UNIT)(-1, x, y, -1, -1, NULL);
+#else
     int top = GAME_FN(int (*)(int, int, int, int, int, int, int *), RVA_SQUARE_TOP_UNIT)(owner, -1, x, y, -1, -1, NULL);
+#endif
     if (top < 0 || top >= UNIT_TABLE_MAX) return 0;
     return holdFlagsHold(squareFlags, top, *(const unsigned long long *)GAME_PTR(RVA_UNITS + (size_t)top * UNIT_SIZE + 8));
-#endif
 }
 
 // 1 when unit u stands on square (x, y) alive.
@@ -676,34 +614,31 @@ static int unitAliveInTable(int u) {
 // A unit's strength as player `player` counts it.
 static int unitStrengthFor(int player, int unit) {
     if (!unitAliveInTable(unit)) return 0;
-#ifdef __APPLE__
-    (void)player;
-    return 0;
-#else
-    return GAME_FN(int (*)(int, int), RVA_UNIT_STRENGTH_FOR)(player, unit);
-#endif
+    size_t at = (size_t)unit * UNIT_SIZE;
+    int (*core)(int, int, int) = GAME_FN(int (*)(int, int, int), RVA_UNIT_STRENGTH_CORE);
+    short hp = (short)G16(RVA_UNIT_HP + at);
+    if ((short)G16(RVA_UNIT_PLAYER + at) == player) return core(unit, -1, hp);
+    int monster = (short)G16(RVA_UNIT_MONSTER + at);
+    if (monster < 0) return 0;
+    int as = GAME_FN(int (*)(int, int), RVA_UNIT_COUNTS_AS_MONSTER)(unit, player);
+    if (as >= 0) monster = as;
+    const unsigned char *record = monsterRecord(monster);
+    if (!record) return 0;
+    short most = *(const short *)(record + MONSTER_HP);
+    return core(-1, monster, hp >= most ? most : hp);
 }
 
 // A living unit's armor as the unit screen shows it, or -1.
 static int unitArmorNow(int unit) {
     if (!unitAliveInTable(unit)) return -1;
-#ifdef __APPLE__
-    return -1;
-#else
     return GAME_FN(int (*)(int), RVA_UNIT_ARMOR)(unit);
-#endif
 }
 
 // Whether player `player` sees unit `unit`.
 static int unitVisibleToNow(int unit, int player) {
     if (!unitAliveInTable(unit)) return 0;
-#ifdef __APPLE__
-    (void)player;
-    return 0;
-#else
     size_t at = (size_t)unit * UNIT_SIZE;
     return GAME_FN(int (*)(int, int, int, int), RVA_UNIT_VISIBLE_TO)(player, unit, G32(RVA_UNIT_X + at), G32(RVA_UNIT_X + 4 + at)) != 0;
-#endif
 }
 
 // The int at byte `field` of row `row` of a monster's attack list.
@@ -719,10 +654,5 @@ static int monsterAttackField(const unsigned char *rows, int row, int field, int
 
 // 1 when square (x, y) is a citadel for `player`.
 static int squareCitadelFor(int player, int x, int y) {
-#ifdef __APPLE__
-    (void)player, (void)x, (void)y;
-    return 0;
-#else
     return GAME_FN(int (*)(int, int, int), RVA_SQUARE_IS_CITADEL_FOR)(player, x, y);
-#endif
 }

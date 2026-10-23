@@ -59,15 +59,21 @@ static void modCommandHook(const char *line, int mod, int level) {
         if (strlen(modCommands[i].name) != len || strncmp(modCommands[i].name, line, len)) continue;
         const char *args = line + len;
         while (*args == ' ' || *args == '\t') args++;
-        if (!isNetworkGame() || runsInNetworkGames((void *)modCommands[i].handler))
+        if (modCommands[i].lua >= 0) runLuaModCommand(modCommands[i].lua, args, mod, level);
+        else if (!isNetworkGame() || runsInNetworkGames((void *)modCommands[i].handler))
             modCommands[i].handler(args, mod, level);
         return;
     }
     char word[64];
     snprintf(word, sizeof word, "%.*s", (int)(len < sizeof word ? len : sizeof word - 1), line);
-    if (word[0] && !isGameWord(word) && (modHasUnloadedPlugin(mod) || anyEnabledModWaitsForItsPlugin())) {
-        writeLog("mod_command_deferred", "word=%s mod=%d level=%d reason=plugin_not_loaded_yet", word, mod, level);
-        return;
+    if (word[0] && !isGameWord(word)) {
+        const char *waits = modHasUnloadedPlugin(mod) || anyEnabledModWaitsForItsPlugin() ? "plugin_not_loaded_yet"
+                          : modWaitsForCommandsFile(mod) || anyEnabledModWaitsForCommandsFile() ? "commands_file_not_loaded_yet"
+                          : NULL;
+        if (waits) {
+            writeLog("mod_command_deferred", "word=%s mod=%d level=%d reason=%s", word, mod, level, waits);
+            return;
+        }
     }
     nextModCommand(line, mod, level);
 }
@@ -86,20 +92,34 @@ static void declinedModCommandHook(const char *line, int mod, int level) {
     nextModCommand(line, mod, level);
 }
 
-static int apiAddModCommand(const char *name, ModCommandHandler handler) {
-    if (!name || !name[0]) return REFUSE_API(0, "addModCommand", "no_name", "name=%s", name ? name : "");
-    if (strlen(name) >= sizeof modCommands[0].name || strcspn(name, " \t") != strlen(name))
-        return REFUSE_API(0, "addModCommand", "bad_name", "name=%s", name);
-    if (!handler) return REFUSE_API(0, "addModCommand", "no_callback", "name=%s", name);
+// Why `name` can't be a new mod command, as a reason word, or NULL when it can.
+static const char *modCommandNameProblem(const char *name) {
+    if (!name || !name[0]) return "no_name";
+    if (strlen(name) >= sizeof modCommands[0].name || strcspn(name, " \t") != strlen(name)) return "bad_name";
     for (int i = 0; i < modCommandCount; i++)
-        if (!strcmp(modCommands[i].name, name)) return REFUSE_API(0, "addModCommand", "duplicate", "name=%s", name);
-    if (isGameWord(name)) return REFUSE_API(0, "addModCommand", "game_command", "name=%s", name);
-    if (!nextModCommand) return REFUSE_API(0, "addModCommand", "site_unavailable", "name=%s", name);
-    if (!growList((void **)&modCommands, &modCommandCapacity, modCommandCount + 1, sizeof modCommands[0]))
-        return REFUSE_API(0, "addModCommand", "out_of_memory", "name=%s", name);
+        if (!strcmp(modCommands[i].name, name)) return "duplicate";
+    if (isGameWord(name)) return "game_command";
+    if (!nextModCommand) return "site_unavailable";
+    return NULL;
+}
+
+// Adds command `name`, a good name: a plugin's `handler`, or script callback `lua` (-1 for a plugin's).
+static int addModCommandEntry(const char *name, ModCommandHandler handler, int lua) {
+    if (!growList((void **)&modCommands, &modCommandCapacity, modCommandCount + 1, sizeof modCommands[0])) return 0;
     snprintf(modCommands[modCommandCount].name, sizeof modCommands[0].name, "%s", name);
-    modCommands[modCommandCount++].handler = handler;
+    modCommands[modCommandCount].handler = handler;
+    modCommands[modCommandCount++].lua = lua;
     writeLog("mod_command_added", "name=%s", name);
+    return 1;
+}
+
+static int apiAddModCommand(const char *name, ModCommandHandler handler) {
+    const char *problem = modCommandNameProblem(name);
+    if (problem && (!strcmp(problem, "no_name") || !strcmp(problem, "bad_name")))
+        return REFUSE_API(0, "addModCommand", problem, "name=%s", name ? name : "");
+    if (!handler) return REFUSE_API(0, "addModCommand", "no_callback", "name=%s", name);
+    if (problem) return REFUSE_API(0, "addModCommand", problem, "name=%s", name);
+    if (!addModCommandEntry(name, handler, -1)) return REFUSE_API(0, "addModCommand", "out_of_memory", "name=%s", name);
     return 1;
 }
 

@@ -22,7 +22,8 @@ static const luaL_Reg LUA_COE5[] = {
     {"shopOffers", lShopOffers}, {"classRecruits", lClassRecruits}, {"recruitSquares", lRecruitSquares},
     {"aiBuyOffer", lAiBuyOffer}, {"addMapEditorLine", lAddMapEditorLine}, {"mapView", lMapView},
     {"keepTraceLines", lKeepTraceLines}, {"addPlane", lAddPlane}, {"setPlaneShape", lSetPlaneShape}, {"planeIndex", lPlaneIndex},
-    {"setPlaneTint", lSetPlaneTint}, {"clearPlaneTint", lClearPlaneTint}, {"setTerrainLooks", lSetTerrainLooks}, COE5SE_EXTRA_LUA_FUNCTIONS {NULL, NULL},
+    {"setPlaneTint", lSetPlaneTint}, {"clearPlaneTint", lClearPlaneTint}, {"setTerrainLooks", lSetTerrainLooks},
+    {"addModCommand", lAddModCommand}, COE5SE_EXTRA_LUA_FUNCTIONS {NULL, NULL},
 };
 static const luaL_Reg LUA_UI[] = {
     {"screenBegin", lScreenBegin}, {"sectionBegin", lSectionBegin}, {"sectionEnd", lSectionEnd}, {"text", lText},
@@ -146,13 +147,22 @@ static int lXpcall(lua_State *L) {
     return finishLuaXpcall(L, status, 2);
 }
 
+// What a commands file may call while it loads: coe5.addModCommand, coe5.log, and require.
+static int lRequire(lua_State *L);
+static int luaCommandsFileCall(const luaL_Reg *fn) {
+    return fn->func == lAddModCommand || fn->func == lLog || fn->func == lRequire;
+}
+
 // Every coe5.* function is a closure of this gate.
 static int luaGate(lua_State *L) {
     const luaL_Reg *fn = lua_touserdata(L, lua_upvalueindex(1));
     LuaScript *s = luaScriptOf(L);
-    if (s && s == luaRunning && !s->stopping) return fn->func(L);
-    refuseLuaCall(s ? s->mod : "?", lua_tostring(L, lua_upvalueindex(2)), s && s->stopping ? "script_stopped" : "not_running",
-                  "running=%s", luaRunning ? luaRunning->mod : "none");
+    const char *reason = s && s->stopping ? "script_stopped"
+                       : !s || s != luaRunning ? "not_running"
+                       : luaCommandsLoading && !luaCommandsFileCall(fn) ? "commands_file"
+                       : NULL;
+    if (!reason) return fn->func(L);
+    refuseLuaCall(s ? s->mod : "?", lua_tostring(L, lua_upvalueindex(2)), reason, "running=%s", luaRunning ? luaRunning->mod : "none");
     return 0;
 }
 // Adds each function of `fns` to the table on top of the stack through luaGate.
@@ -279,7 +289,7 @@ static void readLuaFileStart(LuaFileReader *r) {
 }
 
 // Pushes the chunk of the script file at `path`, named `chunk`.
-#define LUA_CHUNK_NAME_MAX (MOD_NAME_MAX + 8)
+#define LUA_CHUNK_NAME_MAX (MOD_NAME_MAX + 16)
 static void pushLuaTextFile(lua_State *L, const char *path, const char *chunk) {
     LuaFileReader *r = lua_newuserdatauv(L, sizeof *r, 0);
     r->pending = 0;
@@ -370,7 +380,7 @@ static int lRequire(lua_State *L) {
     size_t length;
     const char *name = luaL_checklstring(L, 1, &length);
     LuaScript *s = luaScriptOf(L);
-    const char *problem = luaRequireNameProblem(name, length);
+    const char *problem = strcmp(name, s->commandsName) ? luaRequireNameProblem(name, length) : NULL;
     if (problem) {
         refuseLuaCall(s->mod, "require", problem, "name=%.64s", name);
         return luaL_error(L, "require: '%s' can't name a file in the mod's folder (%s: use letters, digits, and _, with "
@@ -385,6 +395,7 @@ static int lRequire(lua_State *L) {
         return 1;
     }
     lua_pop(L, 1);
+    if (!strcmp(name, s->commandsName)) return luaL_error(L, "require: %s has no %s.lua that loaded", s->mod, name);
     char path[MAX_PATH], chunk[LUA_CHUNK_NAME_MAX], part[MAX_PATH];
     if (!strcmp(name, s->mod)) {
         refuseLuaCall(s->mod, "require", "main_script", "name=%.64s", name);
@@ -420,25 +431,123 @@ static int lRequire(lua_State *L) {
     return 1;
 }
 
-// Loads and runs <folder>/<mod>.lua, if the mod has one.
-static void loadLuaScript(const char *mod, const char *folder) {
-    char path[MAX_PATH];
-    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s.lua", folder, mod)) return;
+// Whether the file at `path` exists.
+static int luaFileExists(const char *path) {
     FILE *f = fopen(path, "rb");
-    if (!f) return;
+    if (!f) return 0;
     fclose(f);
+    return 1;
+}
+
+// The script of mod `mod` in folder `folder`, or NULL when it has none yet.
+static LuaScript *findLuaScript(const char *mod, const char *folder) {
+    for (int i = 0; i < luaScriptCount; i++)
+        if (!strcmp(luaScripts[i]->mod, mod) && !strcmp(luaScripts[i]->folder, folder)) return luaScripts[i];
+    return NULL;
+}
+
+// Makes mod `mod`'s script, with its Lua state, for the file at `path`; NULL when memory runs out (logged).
+static LuaScript *newLuaScript(const char *mod, const char *folder, const char *path) {
     LuaScript *s = calloc(1, sizeof *s);
     if (s) snprintf(s->mod, sizeof s->mod, "%s", mod);
     if (!s || !growList((void **)&luaScripts, &luaScriptCapacity, luaScriptCount + 1, sizeof s) || !(s->L = newLuaSandbox(s))) {
         free(s);
         refuseLuaCall(mod, "script", "out_of_memory", "path=%s", path);
-        return;
+        return NULL;
     }
-    snprintf(s->path, sizeof s->path, "%s", path);
+    snprintf(s->commandsName, sizeof s->commandsName, "%s_commands", mod);
     snprintf(s->folder, sizeof s->folder, "%s", folder);
+    if (!buildPath(s->path, sizeof s->path, __func__, "%s" PATH_SEP "%s.lua", folder, mod)) s->path[0] = '\0';
     *(LuaScript **)lua_getextraspace(s->L) = s;
     luaScripts[luaScriptCount++] = s;
+    return s;
+}
+
+// Loads and runs <folder>/<mod>.lua, if the mod has one, in the state its commands file may have made.
+static void loadLuaScript(const char *mod, const char *folder) {
+    char path[MAX_PATH];
+    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s.lua", folder, mod)) return;
+    if (!luaFileExists(path)) return;
+    LuaScript *s = findLuaScript(mod, folder);
+    if (s && s->mainTried) s = NULL;
+    if (s && (s->dead || !s->L)) return;
+    if (!s && !(s = newLuaScript(mod, folder, path))) return;
+    s->mainTried = 1;
     if (callLuaProtected(s, pushLuaScriptFile, s, 0)) writeLog("lua_script_loaded", "mod=%s version=%s path=%s", mod, modVersionText(mod), path);
+}
+
+// ---- Commands files: <ModName>_commands.lua, loaded first ---------------------------------------
+// A mod's commands file: its coe5.addModCommand calls and their handlers.
+typedef struct { const char *path, *chunk, *key; } LuaCommandsFile;
+
+// Runs the commands file and keeps what it returned as require's value for it (true for nothing).
+static int runLuaCommandsFile(lua_State *L) {
+    const LuaCommandsFile *c = lua_touserdata(L, 1);
+    lua_settop(L, 0);
+    pushLuaTextFile(L, c->path, c->chunk);
+    lua_call(L, 0, 1);
+    if (lua_isnil(L, 1)) {
+        lua_pushboolean(L, 1);
+        lua_replace(L, 1);
+    }
+    lua_rawgetp(L, LUA_REGISTRYINDEX, &luaRequiredKey);
+    lua_pushstring(L, c->key);
+    lua_pushvalue(L, 1);
+    lua_rawset(L, -3);
+    return 0;
+}
+// callLuaProtected's push for a commands file.
+static int pushLuaCommandsFile(lua_State *L, void *file) {
+    lua_pushcfunction(L, runLuaCommandsFile);
+    lua_pushlightuserdata(L, file);
+    return 1;
+}
+
+// Loads and runs <folder>/<mod>_commands.lua, if the mod has one: 1 when it ran, -1 when it stopped, 0 for none.
+static int loadLuaCommandsFile(const char *mod, const char *folder) {
+    char path[MAX_PATH], chunk[LUA_CHUNK_NAME_MAX];
+    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s" LUA_COMMANDS_SUFFIX, folder, mod)) return -1;
+    if (!luaFileExists(path)) return 0;
+    LuaScript *s = findLuaScript(mod, folder);
+    if (s && s->commandsTried) return 0;
+    if (!s && !(s = newLuaScript(mod, folder, path))) return -1;
+    s->commandsTried = 1;
+    if (s->dead || !s->L) return -1;
+    snprintf(chunk, sizeof chunk, "%s" LUA_COMMANDS_SUFFIX, mod);
+    LuaCommandsFile file = {path, chunk, s->commandsName};
+    luaCommandsLoading = 1;
+    int ran = callLuaProtected(s, pushLuaCommandsFile, &file, 0);
+    luaCommandsLoading = 0;
+    if (!ran) return -1;
+    writeLog("lua_commands_loaded", "mod=%s version=%s path=%s", mod, modVersionText(mod), path);
+    return 1;
+}
+
+// Loads every enabled mod's commands file once, in load order, before the game's startup mod pass.
+static void loadLuaCommandsFiles(void) {
+    static int loaded;
+    if (loaded) return;
+    loaded = 1;
+    readLoadOrder(0);
+    int count = 0, failed = 0;
+    for (int k = 0; k < orderedModCount; k++) {
+        const ModInfo *m = &orderedMods[loadOrder[k]];
+        int ran = loadLuaCommandsFile(m->name, modFolder(m->tag));
+        count += ran > 0, failed += ran < 0;
+    }
+    writeLog("lua_commands_done", "count=%d failed=%d", count, failed);
+}
+
+// Whether enabled mod `mod` has a commands file that hasn't loaded this launch.
+static int modWaitsForCommandsFile(int mod) {
+    if (mod < 0 || mod > G32(RVA_MOD_LAST_INDEX) || !modEnabled(mod) || !modHasFile(mod, LUA_COMMANDS_SUFFIX)) return 0;
+    const LuaScript *s = findLuaScript(modName(mod), modFolder(mod));
+    return !s || !s->commandsTried;
+}
+static int anyEnabledModWaitsForCommandsFile(void) {
+    for (int m = 0; m <= G32(RVA_MOD_LAST_INDEX); m++)
+        if (modWaitsForCommandsFile(m)) return 1;
+    return 0;
 }
 
 // Loads every enabled mod's script once, at the end of startup (finishStartup), in load order.
