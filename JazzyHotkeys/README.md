@@ -42,5 +42,3 @@ Jazzy Hotkeys is a Lua mod. The script, JazzyHotkeys.lua, is in the mod's folder
 - [Jazzy Game Presets](../JazzyGamePresets/README.md): save a new-game setup as a preset.
 - [Jazzy Restart](../JazzyRestart/README.md): Restart in the Game Menu. Single player.
 - [Jazzy UI Tweaks](../JazzyUITweaks/README.md): small changes to the game's own screens, like deleting saves from Load Game.
-
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)

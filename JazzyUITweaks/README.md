@@ -50,5 +50,3 @@ Jazzy UI Tweaks is a Lua mod. The script, JazzyUITweaks.lua, is in the mod's fol
 - [Jazzy Game Presets](../JazzyGamePresets/README.md): save a new-game setup as a preset.
 - [Jazzy Restart](../JazzyRestart/README.md): Restart in the Game Menu. Single player.
 - [Jazzy Hotkeys](../JazzyHotkeys/README.md): change any key of the game's Keyboard Shortcuts list, on every screen.
-
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
