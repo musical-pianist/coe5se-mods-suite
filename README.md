@@ -47,5 +47,5 @@ Click a mod for a Readme. It's the same text as its Nexus page. All these mods n
 - [Jazzy Hotkeys](JazzyHotkeys/README.md): Change any key of the game's Keyboard Shortcuts list: 196 actions on 10 screens, picked in Mod Settings.
 - [Jazzy Restart](JazzyRestart/README.md): Restart in the Game Menu. It ends the game and starts a new world with the same settings, no relaunch.
 - [Jazzy UI Tweaks](JazzyUITweaks/README.md): Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. You can turn each one back to vanilla in Mod Settings, Jazzy UI Tweaks.
-- [Jazzy Cheats](JazzyCheats/README.md): Give yourself resources, drop units anywhere you've seen, get your movement back, and see every plane for a turn.
+- [Jazzy Cheats](JazzyCheats/README.md): Give yourself resources, drop units anywhere you've seen, get your movement back, and see every plane for a turn. All from the Game Menu.
 <!-- mods end -->

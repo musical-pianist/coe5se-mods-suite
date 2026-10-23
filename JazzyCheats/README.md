@@ -9,14 +9,14 @@ Give yourself resources, drop units anywhere you've seen, get your movement back
 
 Press F10 on the map: a new *Cheats* section sits under Saving & Exiting. Works in hotseat multiplayer though I don't know why you'd want it to.
 
-![What It Adds](../images/JazzyCheats/cheats-menu.png)
+![](https://staticdelivery.nexusmods.com/mods/10486/images/6/6-1792789881-1313279283.png)
 
 ### Resources
 
 - Pick *10* or *100*, then click a resource. Click again for more.
 - All 14 resources, current amounts.
 
-![Resources](../images/JazzyCheats/resources.png)
+![](https://staticdelivery.nexusmods.com/mods/10486/images/6/6-1792789881-1824070782.png)
 
 ### Units
 
@@ -26,7 +26,7 @@ Press F10 on the map: a new *Cheats* section sits under Saving & Exiting. Works 
 - Only squares you've seen. Not in the middle of a fight (just spawn a commander and move units), and not on another player's army unless you're on the same team.
 - Right click or Esc cancels.
 
-![Units](../images/JazzyCheats/units-search.png)
+![](https://staticdelivery.nexusmods.com/mods/10486/images/6/6-1792789886-1461746441.png)
 
 ### Restore movement
 
