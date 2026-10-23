@@ -1,13 +1,13 @@
-// Every ADRP in coe5_mac that builds an address in the game's battle_summons table, and its bounds, as shipped.
+// Every ADRP in coe5_mac that builds an address in the game's battle_summons table, and its bounds.
 #pragma once
 
 #define BATTLE_SUMMONS_MAC_SITE_COUNT 7
 static const TableMacSite BATTLE_SUMMONS_MAC_SITES[BATTLE_SUMMONS_MAC_SITE_COUNT] = {
-    {0x3be0d4, 0x9003d948},
-    {0x3be1b8, 0x9003d949},
-    {0x3be1cc, 0x9003d949},
-    {0x3c6488, 0x9003d919},
-    {0x3ccdc8, 0xd003d8c8},
-    {0x3cfb48, 0xf003d8a0},
-    {0x4bfc90, 0xf003d128},
+    {0x3bdd48},
+    {0x3bde2c},
+    {0x3bde40},
+    {0x3c60fc},
+    {0x3cca3c},
+    {0x3cf7bc},
+    {0x4bf954},
 };

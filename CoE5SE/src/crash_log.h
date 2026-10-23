@@ -92,9 +92,43 @@ static void crashWhere(ULONG64 pc) {
     crashHex(pc - base, 1);
 }
 
+// Appends the registers of `c`, as they were at the crash, after the other fields.
+#define CRASH_REGISTER(name, field) {" " name "=0x", offsetof(CONTEXT, field)}
+static const struct { const char *field; size_t offset; } CRASH_REGISTERS[] = {
+    CRASH_REGISTER("rip", Rip), CRASH_REGISTER("rsp", Rsp), CRASH_REGISTER("rbp", Rbp), CRASH_REGISTER("rax", Rax),
+    CRASH_REGISTER("rbx", Rbx), CRASH_REGISTER("rcx", Rcx), CRASH_REGISTER("rdx", Rdx), CRASH_REGISTER("rsi", Rsi),
+    CRASH_REGISTER("rdi", Rdi), CRASH_REGISTER("r8", R8),   CRASH_REGISTER("r9", R9),   CRASH_REGISTER("r10", R10),
+    CRASH_REGISTER("r11", R11), CRASH_REGISTER("r12", R12), CRASH_REGISTER("r13", R13), CRASH_REGISTER("r14", R14),
+    CRASH_REGISTER("r15", R15),
+};
+static void crashRegisters(const CONTEXT *c) {
+    for (size_t i = 0; i < sizeof CRASH_REGISTERS / sizeof CRASH_REGISTERS[0]; i++) {
+        crashText(CRASH_REGISTERS[i].field);
+        crashHex(*(const ULONG64 *)((const char *)c + CRASH_REGISTERS[i].offset), 1);
+    }
+    crashText(" eflags=0x");
+    crashHex(c->EFlags, 1);
+}
+
+// Appends " stack=": the values above rsp that point into a loaded module, likely return addresses.
+static void crashStack(const CONTEXT *c) {
+    char name[MAX_PATH];
+    const ULONG64 *slot = (const ULONG64 *)c->Rsp;
+    int listed = 0;
+    crashText(" stack=");
+    for (int i = 0; i < 64 && listed < 8; i++) {
+        if (!crashModule(slot[i], name, sizeof name)) continue;
+        if (listed++) crashText(",");
+        crashText("+0x");
+        crashHex((ULONG64)i * 8, 1);
+        crashText(":");
+        crashWhere(slot[i]);
+    }
+}
+
 // Builds and writes the crash line.
-static void writeCrashLine(DWORD code, ULONG64 address, const EXCEPTION_RECORD *record, const ULONG64 *pcs, int frames,
-                           const char *caughtBy) {
+static void writeCrashLine(DWORD code, ULONG64 address, const EXCEPTION_RECORD *record, const CONTEXT *registers,
+                           const ULONG64 *pcs, int frames, const char *caughtBy) {
     char name[MAX_PATH];
     SYSTEMTIME t;
     GetLocalTime(&t);
@@ -144,6 +178,8 @@ static void writeCrashLine(DWORD code, ULONG64 address, const EXCEPTION_RECORD *
     }
     crashText(" caught_by=");
     crashText(caughtBy);
+    if (registers) crashRegisters(registers);
+    if (registers && registers->Rsp) crashStack(registers);
     crashLine[crashLength++] = '\r';
     crashLine[crashLength++] = '\n';
     HANDLE h = CreateFileA(logPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_ALWAYS,
@@ -161,7 +197,7 @@ static ULONG64 crashPcs[CRASH_FRAMES];
 static void writeExceptionLine(const EXCEPTION_RECORD *record, const CONTEXT *context, const char *caughtBy) {
     crashWalkContext = *context;
     int frames = crashFrames(&crashWalkContext, crashPcs, CRASH_FRAMES);
-    writeCrashLine(record->ExceptionCode, (ULONG64)record->ExceptionAddress, record, crashPcs, frames, caughtBy);
+    writeCrashLine(record->ExceptionCode, (ULONG64)record->ExceptionAddress, record, context, crashPcs, frames, caughtBy);
 }
 
 // ---- The unhandled-exception filter ----
@@ -207,7 +243,7 @@ static void stackCookieFailed(ULONG64 cookie) {
         if (handling && pendingThread == GetCurrentThreadId())
             writeExceptionLine(&pendingRecord, &pendingContext, "stack_cookie_check");
         else if (frames > 1)
-            writeCrashLine(STATUS_STACK_BUFFER_OVERRUN, cookiePcs[1], NULL, cookiePcs + 1, frames - 1, "stack_cookie_check");
+            writeCrashLine(STATUS_STACK_BUFFER_OVERRUN, cookiePcs[1], NULL, NULL, cookiePcs + 1, frames - 1, "stack_cookie_check");
     }
     GAME_FN(void (*)(ULONG64), RVA_REPORT_GSFAILURE)(cookie);
 }
@@ -227,13 +263,7 @@ static void installStackCookieHook(void) {
         stub[0] = 0xff; stub[1] = 0x25; memset(stub + 2, 0, 4);
         memcpy(stub + 6, &hook, 8);
         rel = (int)(stub - (site + 5));
-        DWORD old;
-        ok = VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old) != 0;
-        if (ok) {
-            memcpy(site + 1, &rel, 4);
-            VirtualProtect(site, 5, old, &old);
-            FlushInstructionCache(GetCurrentProcess(), site, 5);
-        }
+        ok = writeGameCode(site + 1, &rel, 4);
     }
     int vectored = ok && AddVectoredExceptionHandler(1, rememberException) != NULL;
     writeLog("crash_log_installed", "filter=1 stack_cookie_hook=%d vectored=%d", ok, vectored);

@@ -372,13 +372,14 @@ static void terrainLooksAfterPass(int level) {
 // ---- The ground pass ---------------------------------------------------------------------------
 // The ground pass reads a terrain with terrainground as its vanilla terrain.
 #ifndef __APPLE__
-static const unsigned char GROUND_TERRAIN_SHIPPED[12] = {0x85, 0xc0, 0x44, 0x8b, 0xce, 0x44, 0x0f, 0x4f, 0xc8, 0x49, 0x63, 0xc1};
+#define GROUND_TERRAIN_SIZE  12
+#define GROUND_TERRAIN_FIRST 9
 
 // Writes the Windows stub for the read at `at` into `stub`; returns its length.
 static size_t writeTerrainGroundStubWin(unsigned char *stub, const unsigned char *at) {
     unsigned char *p = stub;
-    memcpy(p, GROUND_TERRAIN_SHIPPED, 9);
-    p += 9;
+    memcpy(p, at, GROUND_TERRAIN_FIRST);
+    p += GROUND_TERRAIN_FIRST;
     *p++ = 0x41; *p++ = 0x81; *p++ = 0xf9;
     int max = TERRAIN_TABLE_MAX;
     memcpy(p, &max, 4);
@@ -389,9 +390,10 @@ static size_t writeTerrainGroundStubWin(unsigned char *stub, const unsigned char
     memcpy(p, &table, 8);
     p += 8;
     *p++ = 0x46; *p++ = 0x8b; *p++ = 0x0c; *p++ = 0x88;
-    *p++ = 0x49; *p++ = 0x63; *p++ = 0xc1;
+    memcpy(p, at + GROUND_TERRAIN_FIRST, GROUND_TERRAIN_SIZE - GROUND_TERRAIN_FIRST);
+    p += GROUND_TERRAIN_SIZE - GROUND_TERRAIN_FIRST;
     *p++ = 0xe9;
-    int rel = (int)((at + sizeof GROUND_TERRAIN_SHIPPED) - (p + 4));
+    int rel = (int)((at + GROUND_TERRAIN_SIZE) - (p + 4));
     memcpy(p, &rel, 4);
     p += 4;
     return (size_t)(p - stub);
@@ -399,8 +401,8 @@ static size_t writeTerrainGroundStubWin(unsigned char *stub, const unsigned char
 
 static int patchTerrainGround(void) {
     unsigned char *at = GAME_PTR(RVA_SET_GROUND_TERRAIN_READ);
-    if (memcmp(at, GROUND_TERRAIN_SHIPPED, sizeof GROUND_TERRAIN_SHIPPED)) {
-        writeLog("hook_skipped", "site=terrain_ground reason=code_differs");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=terrain_ground reason=game_code_differs");
         return 0;
     }
     unsigned char *stub = allocNear(at);
@@ -408,25 +410,20 @@ static int patchTerrainGround(void) {
         writeLog("hook_skipped", "site=terrain_ground reason=no_near_page");
         return 0;
     }
-    size_t size = writeTerrainGroundStubWin(stub, at);
-    FlushInstructionCache(GetCurrentProcess(), stub, size);
-    unsigned char code[sizeof GROUND_TERRAIN_SHIPPED];
+    writeTerrainGroundStubWin(stub, at);
+    makePagesReadExecute(stub, 0x1000);
+    unsigned char code[GROUND_TERRAIN_SIZE];
     memset(code, 0x90, sizeof code);
     code[0] = 0xe9;
     int rel = (int)(stub - (at + 5));
     memcpy(code + 1, &rel, 4);
-    DWORD old;
-    if (!VirtualProtect(at, sizeof code, PAGE_EXECUTE_READWRITE, &old)) {
+    if (!writeGameCode(at, code, sizeof code)) {
         writeLog("hook_skipped", "site=terrain_ground reason=code_unwritable");
         return 0;
     }
-    memcpy(at, code, sizeof code);
-    VirtualProtect(at, sizeof code, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), at, sizeof code);
     return 1;
 }
 #else
-#define GROUND_TERRAIN_SHIPPED 0x7100017fu
 #define TERRAIN_GROUND_STUB_WORDS 10
 
 // Fills the Mac stub for the read at `at`, placed at `stub`.
@@ -436,7 +433,7 @@ static void writeTerrainGroundStubMac(uint32_t code[TERRAIN_GROUND_STUB_WORDS], 
     code[2] = 0x54000062u;
     code[3] = 0x580000acu;
     code[4] = 0xb86b598bu;
-    code[5] = GROUND_TERRAIN_SHIPPED;
+    memcpy(&code[5], at, 4);
     code[6] = 0x14000000u | ((uint32_t)(((at + 4) - (stub + 24)) >> 2) & 0x3ffffffu);
     code[7] = 0xd503201fu;
     memcpy(&code[8], &table, 8);
@@ -444,10 +441,8 @@ static void writeTerrainGroundStubMac(uint32_t code[TERRAIN_GROUND_STUB_WORDS], 
 
 static int patchTerrainGround(void) {
     unsigned char *at = GAME_PTR(RVA_SET_GROUND_TERRAIN_READ);
-    uint32_t insn;
-    memcpy(&insn, at, 4);
-    if (insn != GROUND_TERRAIN_SHIPPED) {
-        writeLog("hook_skipped", "site=terrain_ground reason=code_differs");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=terrain_ground reason=game_code_differs");
         return 0;
     }
     unsigned char *stub = takePadding(sizeof(uint32_t) * TERRAIN_GROUND_STUB_WORDS);
@@ -765,11 +760,9 @@ static void terrainBackgroundHook(void) {
 // Points the composite's first instruction and the builder's call at CoE5SE, through a near page.
 static int patchTerrainComposite(void) {
     unsigned char *entry = GAME_PTR(RVA_GROUND_COMPOSITE_ROWS), *call = GAME_PTR(RVA_MAP_BG_BUILDER_IMAGE_CALL);
-    static const unsigned char ENTRY_SHIPPED[5] = {0x3b, 0xca, 0x0f, 0x8f, 0x43};
     int rel;
-    memcpy(&rel, call + 1, 4);
-    if (memcmp(entry, ENTRY_SHIPPED, sizeof ENTRY_SHIPPED) || call[0] != 0xe8 || call + 5 + rel != GAME_PTR(RVA_CREATE_BACKGROUND_IMAGE)) {
-        writeLog("hook_skipped", "site=terrain_composite reason=code_differs");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=terrain_composite reason=game_code_differs");
         return 0;
     }
     unsigned char *stub = allocNear(entry);
@@ -791,26 +784,25 @@ static int patchTerrainComposite(void) {
     memcpy(p, &hook, 8);
     p += 8;
     *p++ = 0xff; *p++ = 0xe0;
-    FlushInstructionCache(GetCurrentProcess(), stub, 0x40);
+    makePagesReadExecute(stub, 0x1000);
     unsigned char jump[5] = {0xe9};
     rel = (int)(stub - (entry + 5));
     memcpy(jump + 1, &rel, 4);
     int callRel = (int)((stub + 0x20) - (call + 5));
-    DWORD old, oldCall;
-    if (!VirtualProtect(entry, sizeof jump, PAGE_EXECUTE_READWRITE, &old) || !VirtualProtect(call, 5, PAGE_EXECUTE_READWRITE, &oldCall)) {
+    unsigned char oldCallRel[4];
+    memcpy(oldCallRel, call + 1, 4);
+    if (!writeGameCode(call + 1, &callRel, 4)) {
         writeLog("hook_skipped", "site=terrain_composite reason=code_unwritable");
         return 0;
     }
-    memcpy(call + 1, &callRel, 4);
-    memcpy(entry, jump, sizeof jump);
-    VirtualProtect(entry, sizeof jump, old, &old);
-    VirtualProtect(call, 5, oldCall, &oldCall);
-    FlushInstructionCache(GetCurrentProcess(), entry, sizeof jump);
-    FlushInstructionCache(GetCurrentProcess(), call, 5);
+    if (!writeGameCode(entry, jump, sizeof jump)) {
+        writeGameCode(call + 1, oldCallRel, 4);
+        writeLog("hook_skipped", "site=terrain_composite reason=code_unwritable");
+        return 0;
+    }
     return 1;
 }
 #else
-#define COMPOSITE_ENTRY_SHIPPED 0xd10543ffu
 #define TERRAIN_BACKGROUND_STUB_WORDS 8
 
 // Fills the Mac stub the builder's `bl` goes to, which stores the plane (w23) and branches to the hook.
@@ -825,10 +817,8 @@ static void writeTerrainBackgroundStubMac(uint32_t code[TERRAIN_BACKGROUND_STUB_
 
 static int patchTerrainComposite(void) {
     unsigned char *entry = GAME_PTR(RVA_GROUND_COMPOSITE_ROWS), *call = GAME_PTR(RVA_MAP_BG_BUILDER_IMAGE_CALL);
-    uint32_t insn;
-    memcpy(&insn, entry, 4);
-    if (insn != COMPOSITE_ENTRY_SHIPPED || blTarget(call) != GAME_PTR(RVA_CREATE_BACKGROUND_IMAGE)) {
-        writeLog("hook_skipped", "site=terrain_composite reason=code_differs");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=terrain_composite reason=game_code_differs");
         return 0;
     }
     unsigned char *trampoline = newTrampoline((void *)terrainCompositeRows);

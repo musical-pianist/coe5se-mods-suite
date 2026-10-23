@@ -1,5 +1,4 @@
 // The log of the code that runs before CoE5SE: the stub and the loader.
-
 #pragma once
 #include <stdarg.h>
 #include <stdio.h>
@@ -16,7 +15,7 @@
 #endif
 #endif
 
-// coe5mod.log in the game folder. Empty until the includer sets it.
+// coe5mod.log in the game folder.
 static char logPath[MAX_PATH];
 
 #ifdef STARTUP_LOG_ESCAPE
@@ -43,7 +42,7 @@ static PRINTF_FORMAT(2, 3) void writeLog(const char *event, const char *fmt, ...
         text = heap;
         vsnprintf(heap, (size_t)length + 1, fmt, again);
     } else if (length >= (int)sizeof stackText) {
-        length = (int)sizeof stackText - 1;   // out of memory: the text's start
+        length = (int)sizeof stackText - 1;
     }
     va_end(again);
     for (int i = 0; i < length; i++) {
@@ -65,4 +64,4 @@ static PRINTF_FORMAT(2, 3) void writeLog(const char *event, const char *fmt, ...
     fclose(f);
 }
 
-#include "build_path.h"   // after writeLog, which buildPath logs through
+#include "build_path.h"

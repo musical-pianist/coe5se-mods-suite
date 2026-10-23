@@ -79,7 +79,7 @@ typedef struct {
     char folder[MAX_PATH], pattern[256];
 } FindState;
 
-// Fills `fd` with the next entry that matches the pattern. Returns 0 when there are no more.
+// Fills `fd` with the next entry that matches the pattern.
 static PLATFORM_UNUSED int findNextMatch(FindState *s, WIN32_FIND_DATAA *fd) {
     struct dirent *e;
     while ((e = readdir(s->dir))) {
@@ -158,13 +158,12 @@ static PLATFORM_UNUSED UINT GetPrivateProfileIntA(const char *section, const cha
     return iniRead(file, section, key, text, sizeof text) ? (UINT)strtol(text, NULL, 10) : (UINT)fallback;
 }
 
-// Rewrites the file with `key` set to `value` in `[section]`; NULL deletes the key.
+// Rewrites the file with `key` set to `value` in `[section]`.
 static PLATFORM_UNUSED BOOL WritePrivateProfileStringA(const char *section, const char *key, const char *value, const char *file) {
     char *old = NULL;
     size_t oldLen = 0;
     FILE *f = fopen(file, "r");
     if (f) {
-        // A file whose size can't be read fails the write.
         long size = fseek(f, 0, SEEK_END) == 0 ? ftell(f) : -1;
         if (size < 0 || fseek(f, 0, SEEK_SET) != 0) { fclose(f); return FALSE; }
         oldLen = (size_t)size;
@@ -220,7 +219,7 @@ static PLATFORM_UNUSED HMODULE mainExecutableHeader(void) {
     return NULL;
 }
 
-// The game with NULL, else the loaded image named `name`, ignoring case.
+// With NULL, returns the game.
 static PLATFORM_UNUSED HMODULE GetModuleHandleA(const char *name) {
     if (!name) return mainExecutableHeader();
     for (uint32_t i = 0; i < _dyld_image_count(); i++) {

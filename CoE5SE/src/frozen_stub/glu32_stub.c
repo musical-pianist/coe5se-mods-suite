@@ -1,5 +1,4 @@
-// glu32.dll, the Windows stub: the file the player copies into the game folder once.
-
+// glu32.dll, the Windows stub: the file the player copies into the game folder once. CoE5 imports
 #include <windows.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -15,7 +14,7 @@
 #include "stub.h"
 #include "stub_version.h"   // GLU32_VERSION
 
-// For each export: a pointer to the real one, and a thunk that jumps through it.
+// For each export: a pointer, filled in from the real glu32.dll, and the export itself, a thunk
 #define GLU_EXPORT(name, ordinal) \
     void *real_##name; \
     __asm__(".text\n.globl " #name "\n" #name ":\n    jmp *real_" #name "(%rip)\n");
@@ -42,7 +41,7 @@ static int resolveRealGlu32(void) {
     return 1;
 }
 
-// The stub starts at SDL_SetMainReady, which CoE5.exe calls once right before SDL_main.
+// CoE5.exe's WinMain calls SDL_SetMainReady once, on the main thread, right before SDL_main: before
 static void (*realSetMainReady)(void);
 
 static void startAtMainReady(void) {
@@ -51,7 +50,7 @@ static void startAtMainReady(void) {
     realSetMainReady();
 }
 
-// Points the exe's import slot for SDL_SetMainReady at startAtMainReady; 0 when it can't.
+// Points the exe's import slot for SDL_SetMainReady, from a DLL whose name starts with SDL (any
 static int deferToMainReady(void) {
     unsigned char *base = (unsigned char *)GetModuleHandleA(NULL);
     IMAGE_NT_HEADERS64 *nt = (IMAGE_NT_HEADERS64 *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);

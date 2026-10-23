@@ -34,7 +34,7 @@ static size_t copySealEventUnwind(unsigned char *out) {
 // Writes the stub and the jump once.
 static int patchSealEventStep(void) {
     if (sealEventCall) return 1;
-    if (!checkGameFunction("seal_event_step_check", "", RVA_SEAL_EVENT_STEP, RVA_SEAL_EVENT_THIRD, SEAL_EVENT_STEP_CODE, NULL, 0))
+    if (!checkGameFunction("seal_event_step_check", ""))
         return 0;
     unsigned char *page = allocNear(GAME_PTR(RVA_SEAL_EVENT_SWITCH));
     if (!page) {
@@ -70,18 +70,14 @@ static int patchSealEventStep(void) {
         writeLog("seal_event_patched", "ok=0 reason=unwind_not_added");
         return 0;
     }
-    FlushInstructionCache(GetCurrentProcess(), page, 0x100);
+    makePagesReadExecute(page, 0x1000);
     unsigned char *at = GAME_PTR(RVA_SEAL_EVENT_SWITCH), code[9] = {0xe9, 0, 0, 0, 0, 0x90, 0x90, 0x90, 0x90};
     int rel = (int)(stub - (at + 5));
     memcpy(code + 1, &rel, 4);
-    DWORD old;
-    if (!VirtualProtect(at, sizeof code, PAGE_EXECUTE_READWRITE, &old)) {
+    if (!writeGameCode(at, code, sizeof code)) {
         writeLog("seal_event_patched", "ok=0 reason=code_unwritable");
         return 0;
     }
-    memcpy(at, code, sizeof code);
-    VirtualProtect(at, sizeof code, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), at, sizeof code);
     sealEventPage = page;
     sealEventCall = call;
     writeLog("seal_event_patched", "ok=1 address=%p stub=%p", (void *)at, (void *)stub);

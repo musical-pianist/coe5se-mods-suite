@@ -281,6 +281,73 @@ static UNUSED void commonInit(const char *name) {
     writeLog("plugin_attached", "pid=%lu base=%p", (unsigned long)GetCurrentProcessId(), gameBase);
 }
 
+#ifdef _WIN32
+// Writes `size` bytes of code at `address`: the game's code, or a stub page made read-execute.
+static UNUSED unsigned char *gameCodeOpenFrom, *gameCodeOpenTo;
+static UNUSED DWORD gameCodeOpenProtection;
+static UNUSED int writeGameCode(void *address, const void *bytes, size_t size) {
+    DWORD old, ignored;
+    if (gameCodeOpenFrom && (unsigned char *)address >= gameCodeOpenFrom && (unsigned char *)address + size <= gameCodeOpenTo) {
+        memcpy(address, bytes, size);
+        return 1;
+    }
+    if (!VirtualProtect(address, size, PAGE_EXECUTE_READWRITE, &old)) {
+        writeLog("code_unwritable", "address=%p bytes=%zu error=%lu", address, size, GetLastError());
+        return 0;
+    }
+    if (size == 8 && !((uintptr_t)address & 7)) {
+        LONG64 word;
+        memcpy(&word, bytes, 8);
+        InterlockedExchange64((volatile LONG64 *)address, word);
+    } else {
+        memcpy(address, bytes, size);
+    }
+    if (!VirtualProtect(address, size, old, &ignored))
+        writeLog("code_protection_not_restored", "address=%p bytes=%zu error=%lu", address, size, GetLastError());
+    FlushInstructionCache(GetCurrentProcess(), address, size);
+    return 1;
+}
+
+// Opens `size` bytes of the game's code for a run of writeGameCode calls, until closeGameCode.
+static UNUSED int openGameCode(void *address, size_t size) {
+    if (gameCodeOpenFrom || !VirtualProtect(address, size, PAGE_EXECUTE_READWRITE, &gameCodeOpenProtection)) {
+        writeLog("code_unwritable", "address=%p bytes=%zu error=%lu", address, size, gameCodeOpenFrom ? 0UL : GetLastError());
+        return 0;
+    }
+    gameCodeOpenFrom = address;
+    gameCodeOpenTo = (unsigned char *)address + size;
+    return 1;
+}
+
+// Puts back the protection openGameCode found, and clears the instruction cache for the range.
+static UNUSED void closeGameCode(void) {
+    if (!gameCodeOpenFrom) return;
+    DWORD ignored;
+    size_t size = (size_t)(gameCodeOpenTo - gameCodeOpenFrom);
+    if (!VirtualProtect(gameCodeOpenFrom, size, gameCodeOpenProtection, &ignored))
+        writeLog("code_protection_not_restored", "address=%p bytes=%zu error=%lu", (void *)gameCodeOpenFrom, size, GetLastError());
+    FlushInstructionCache(GetCurrentProcess(), gameCodeOpenFrom, size);
+    gameCodeOpenFrom = gameCodeOpenTo = NULL;
+}
+
+// Sets pages of code that were just written read-execute, and clears the instruction cache.
+static UNUSED int makePagesReadExecute(void *address, size_t size) {
+    DWORD old;
+    FlushInstructionCache(GetCurrentProcess(), address, size);
+    if (VirtualProtect(address, size, PAGE_EXECUTE_READ, &old)) return 1;
+    writeLog("page_protection_kept", "address=%p bytes=%zu want=read_execute error=%lu", address, size, GetLastError());
+    return 0;
+}
+
+// Sets pages of data that sit next to code read-write, not executable.
+static UNUSED int makePagesReadWrite(void *address, size_t size) {
+    DWORD old;
+    if (VirtualProtect(address, size, PAGE_READWRITE, &old)) return 1;
+    writeLog("page_protection_kept", "address=%p bytes=%zu want=read_write error=%lu", address, size, GetLastError());
+    return 0;
+}
+#endif
+
 #if !defined(__aarch64__) && defined(COE5SE_RAW_ADDRESSES)
 // Allocates `bytes` of executable memory within 2 GB of `target`.
 static UNUSED unsigned char *allocNearBytes(unsigned char *target, size_t bytes) {
@@ -309,7 +376,7 @@ static UNUSED int redirectCall(unsigned int siteRva, unsigned int targetRva, uns
         writeLog("hook_skipped", "site=%s reason=not_the_expected_call address=%p", label, site);
         return 0;
     }
-    unsigned char *p = stub;
+    unsigned char code[0x20], *p = code;
     if (rspSlot) {
         int disp = (int)((unsigned char *)rspSlot - (stub + 7));
         p[0] = 0x48; p[1] = 0x89; p[2] = 0x25; memcpy(p + 3, &disp, 4);
@@ -317,12 +384,12 @@ static UNUSED int redirectCall(unsigned int siteRva, unsigned int targetRva, uns
     }
     p[0] = 0xff; p[1] = 0x25; memset(p + 2, 0, 4);
     memcpy(p + 6, &hook, 8);
+    p += 14;
     rel = (int)(stub - (site + 5));
-    DWORD old;
-    VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old);
-    memcpy(site + 1, &rel, 4);
-    VirtualProtect(site, 5, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), site, 5);
+    if (!writeGameCode(stub, code, (size_t)(p - code)) || !writeGameCode(site + 1, &rel, 4)) {
+        writeLog("hook_skipped", "site=%s reason=code_unwritable address=%p", label, site);
+        return 0;
+    }
     return 1;
 }
 #endif

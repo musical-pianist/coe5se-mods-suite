@@ -89,46 +89,44 @@ static void transformMemorizeHook(int unit) {
 
 #ifndef __APPLE__
 // ---- Windows: the patch --------------------------------------------------------------------------
-// An instruction rewritten to other bytes of the same length.
+// A compare whose imm8 changes, and for a loop the conditional jump after it.
 typedef struct {
     unsigned int rva;
-    int size;
-    unsigned char shipped[6], patched[6];
+    unsigned char immAt, imm, jumpAt, jump;
     const char *name;
 } PathBytePatch;
 
 static const PathBytePatch PATH_BYTE_PATCHES[] = {
-    {RVA_PARSER_SPELLWEAPON50S_PATH,      3, {0x83, 0xf9, 0x62}, {0x83, 0xf9, 0x7e}, "parser_spellweapon50s"},
-    {RVA_PARSER_SPELLWEAPON_PATH,         3, {0x83, 0xf9, 0x62}, {0x83, 0xf9, 0x7e}, "parser_spellweapon"},
-    {RVA_PARSER_SPELLWEAPONBONUS_PATH,    3, {0x83, 0xf9, 0x62}, {0x83, 0xf9, 0x7e}, "parser_spellweaponbonus"},
-    {RVA_PARSER_SPELLWEAPON50_PATH,       3, {0x83, 0xf9, 0x62}, {0x83, 0xf9, 0x7e}, "parser_spellweapon50"},
-    {RVA_PARSER_SPELLWEAPONSINGLE_PATH,   3, {0x83, 0xf9, 0x62}, {0x83, 0xf9, 0x7e}, "parser_spellweaponsingle"},
-    {RVA_ITEM_PATH_BOOST_BOUND,           3, {0x83, 0xf8, 0x62}, {0x83, 0xf8, 0x7e}, "item_path_boost"},
-    {RVA_STATS_SPELL_ATTACK_PATH_BOUND,   3, {0x83, 0xfb, 0x63}, {0x83, 0xfb, 0x7f}, "stats_path_level"},
-    {RVA_STATS_KNOWN_SPELLS_PATH_LOOP,    6, {0x41, 0x83, 0xff, 0x64, 0x0f, 0x8c}, {0x41, 0x83, 0xff, 0x7f, 0x0f, 0x8e}, "stats_known_spells"},
-    {RVA_LIBRARY_PATH_LOOP,               5, {0x83, 0xfe, 0x64, 0x0f, 0x8c}, {0x83, 0xfe, 0x7f, 0x0f, 0x8e}, "library"},
-    {RVA_LEARN_START_SPELLS_PATH_LOOP,    6, {0x41, 0x83, 0xfe, 0x64, 0x0f, 0x8c}, {0x41, 0x83, 0xfe, 0x7f, 0x0f, 0x8e}, "learn_start_spells"},
-    {RVA_CHOOSE_MEMORIZED_PATH_LOOP,      5, {0x83, 0xfd, 0x64, 0x0f, 0x8d}, {0x83, 0xfd, 0x7f, 0x0f, 0x8f}, "choose_memorized"},
-    {RVA_UNIT_DEBUG_PATH_BOUND,           5, {0x41, 0x83, 0xf8, 0x64, 0x7d}, {0x41, 0x83, 0xf8, 0x7f, 0x7f}, "debug_unit_screen"},
-    {RVA_SPELL_BUG_CHECK_SPELL_LOOP_SKIP, 6, {0x0f, 0x84, 0xdd, 0x00, 0x00, 0x00}, {0xe9, 0xde, 0x00, 0x00, 0x00, 0x90}, "bug_check_skip"},
+    {RVA_PARSER_SPELLWEAPON50S_PATH,    2, 0x7e, 0, 0, "parser_spellweapon50s"},
+    {RVA_PARSER_SPELLWEAPON_PATH,       2, 0x7e, 0, 0, "parser_spellweapon"},
+    {RVA_PARSER_SPELLWEAPONBONUS_PATH,  2, 0x7e, 0, 0, "parser_spellweaponbonus"},
+    {RVA_PARSER_SPELLWEAPON50_PATH,     2, 0x7e, 0, 0, "parser_spellweapon50"},
+    {RVA_PARSER_SPELLWEAPONSINGLE_PATH, 2, 0x7e, 0, 0, "parser_spellweaponsingle"},
+    {RVA_ITEM_PATH_BOOST_BOUND,         2, 0x7e, 0, 0, "item_path_boost"},
+    {RVA_STATS_SPELL_ATTACK_PATH_BOUND, 2, 0x7f, 0, 0, "stats_path_level"},
+    {RVA_STATS_KNOWN_SPELLS_PATH_LOOP,  3, 0x7f, 5, 0x8e, "stats_known_spells"},
+    {RVA_LIBRARY_PATH_LOOP,             2, 0x7f, 4, 0x8e, "library"},
+    {RVA_LEARN_START_SPELLS_PATH_LOOP,  3, 0x7f, 5, 0x8e, "learn_start_spells"},
+    {RVA_CHOOSE_MEMORIZED_PATH_LOOP,    2, 0x7f, 4, 0x8f, "choose_memorized"},
+    {RVA_UNIT_DEBUG_PATH_BOUND,         3, 0x7f, 4, 0x7f, "debug_unit_screen"},
 };
 #define PATH_BYTE_PATCH_COUNT ((int)(sizeof PATH_BYTE_PATCHES / sizeof PATH_BYTE_PATCHES[0]))
+#define PATH_BUG_CHECK_SKIP_SIZE 6
 
 // A reader of the name table.
 typedef struct {
     unsigned int rva;
-    int size, fieldOffset;
-    unsigned char shipped[8];
+    int fieldOffset;
     const char *name;
 } PathReaderSite;
 
 static const PathReaderSite PATH_READER_SITES[] = {
-    {RVA_PATH_NAMES_READ_STATS_LEVEL,   8, 4, {0x4f, 0x8b, 0x8c, 0xce, 0xe0, 0x5e, 0x40, 0x00}, "stats_path_level"},
-    {RVA_PATH_NAMES_READ_STATS_KNOWN,   8, 4, {0x4d, 0x8b, 0x8c, 0xdd, 0xe0, 0x5e, 0x40, 0x00}, "stats_known_spells"},
-    {RVA_PATH_NAMES_READ_LIBRARY,       8, 4, {0x48, 0x8d, 0x1c, 0xed, 0xe0, 0x5e, 0x40, 0x00}, "library"},
-    {RVA_PATH_NAMES_READ_LIBRARY_2,     8, 4, {0x48, 0x8d, 0x1c, 0xed, 0xe0, 0x5e, 0x40, 0x00}, "library_2"},
-    {RVA_PATH_NAMES_READ_ITEM_BOOST,    8, 4, {0x4d, 0x8b, 0x84, 0xcf, 0xe0, 0x5e, 0x40, 0x00}, "item_path_boost"},
-    {RVA_PATH_NAMES_READ_DEBUG_UNIT,    8, 4, {0x4f, 0x8b, 0x8c, 0xc7, 0xe0, 0x5e, 0x40, 0x00}, "debug_unit_screen"},
+    {RVA_PATH_NAMES_READ_STATS_LEVEL, 4, "stats_path_level"},
+    {RVA_PATH_NAMES_READ_STATS_KNOWN, 4, "stats_known_spells"},
+    {RVA_PATH_NAMES_READ_LIBRARY,     4, "library"},
+    {RVA_PATH_NAMES_READ_LIBRARY_2,   4, "library_2"},
+    {RVA_PATH_NAMES_READ_ITEM_BOOST,  4, "item_path_boost"},
+    {RVA_PATH_NAMES_READ_DEBUG_UNIT,  4, "debug_unit_screen"},
 };
 #define PATH_READER_COUNT ((int)(sizeof PATH_READER_SITES / sizeof PATH_READER_SITES[0]))
 
@@ -142,7 +140,7 @@ static const PathTransformCall PATH_TRANSFORM_CALLS[] = {
     {RVA_RITUAL_TRANSFORM_MEMORIZE_CALL, RVA_CHOOSE_MEMORIZED,        0, "ritual_transform_memorize"},
 };
 #define PATH_TRANSFORM_CALL_COUNT ((int)(sizeof PATH_TRANSFORM_CALLS / sizeof PATH_TRANSFORM_CALLS[0]))
-#define PATH_SITE_COUNT (PATH_BYTE_PATCH_COUNT + PATH_READER_COUNT + PATH_TRANSFORM_CALL_COUNT)
+#define PATH_SITE_COUNT (PATH_BYTE_PATCH_COUNT + 1 + PATH_READER_COUNT + PATH_TRANSFORM_CALL_COUNT)
 
 // The changes, queued while checking and written only once every site matched.
 static struct { unsigned char *at; int size; unsigned char bytes[8], old[8]; } pathWrites[PATH_SITE_COUNT];
@@ -156,19 +154,28 @@ static void queuePathWrite(unsigned char *at, const void *bytes, int size) {
     memcpy(pathWrites[pathWriteCount++].bytes, bytes, (size_t)size);
 }
 
-// Checks every site against the game's shipped bytes and queues its change.
+// Queues every site's change, for the copy at `copy` and the hooks' two stubs at `stubs`.
 static int queueSpellPathWrites(const char **copy, unsigned char *stubs) {
     int matched = 0;
     pathWriteCount = 0;
     for (int i = 0; i < PATH_BYTE_PATCH_COUNT; i++) {
         const PathBytePatch *s = &PATH_BYTE_PATCHES[i];
-        if (memcmp(gameBase + s->rva, s->shipped, (size_t)s->size)) {
-            writeLog("spell_paths_site_mismatch", "group=bytes name=%s rva=0x%x", s->name, s->rva);
-            continue;
-        }
-        queuePathWrite(gameBase + s->rva, s->patched, s->size);
+        unsigned char *at = gameBase + s->rva, bytes[8];
+        int size = (s->jumpAt ? s->jumpAt : s->immAt) + 1;
+        memcpy(bytes, at, (size_t)size);
+        bytes[s->immAt] = s->imm;
+        if (s->jumpAt) bytes[s->jumpAt] = s->jump;
+        queuePathWrite(at, bytes, size);
         matched++;
     }
+    unsigned char *skip = gameBase + RVA_SPELL_BUG_CHECK_SPELL_LOOP_SKIP, jump[PATH_BUG_CHECK_SKIP_SIZE] = {0xe9};
+    int rel;
+    memcpy(&rel, skip + 2, 4);
+    rel += 1;
+    memcpy(jump + 1, &rel, 4);
+    jump[5] = 0x90;
+    queuePathWrite(skip, jump, PATH_BUG_CHECK_SKIP_SIZE);
+    matched++;
     long long delta = (const unsigned char *)copy - (gameBase + RVA_SPELL_PATH_NAMES);
     for (int i = 0; i < PATH_READER_COUNT; i++) {
         const PathReaderSite *s = &PATH_READER_SITES[i];
@@ -176,9 +183,8 @@ static int queueSpellPathWrites(const char **copy, unsigned char *stubs) {
         int field;
         memcpy(&field, at + s->fieldOffset, 4);
         long long moved = field + delta;
-        if (memcmp(at, s->shipped, (size_t)s->size) || moved < INT32_MIN || moved > INT32_MAX) {
-            writeLog("spell_paths_site_mismatch", "group=reader name=%s rva=0x%x out_of_reach=%d", s->name, s->rva,
-                     moved < INT32_MIN || moved > INT32_MAX);
+        if (moved < INT32_MIN || moved > INT32_MAX) {
+            writeLog("spell_paths_site_mismatch", "group=reader name=%s rva=0x%x out_of_reach=1", s->name, s->rva);
             continue;
         }
         int out = (int)moved;
@@ -210,6 +216,10 @@ static int queueSpellPathWrites(const char **copy, unsigned char *stubs) {
 
 // Raises the game's paths to 128, or changes nothing.
 static int installSpellPathExpansion(void) {
+    if (!gameCodeMatches) {
+        writeLog("spell_paths_not_expanded", "reason=game_code_differs sites=0 of %d", PATH_SITE_COUNT);
+        return 0;
+    }
     unsigned char *stubs = allocNear(gameBase + RVA_TEXT_SECTION);
     const char **copy = (const char **)allocNearImage(SPELL_PATH_COUNT * sizeof(const char *));
     if (!copy || !stubs) {
@@ -220,11 +230,8 @@ static int installSpellPathExpansion(void) {
         return 0;
     }
     int matched = queueSpellPathWrites(copy, stubs);
-    DWORD textProtection = 0;
-    unsigned char *text = gameBase + RVA_TEXT_SECTION;
-    size_t textSize = (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION);
     const char *reason = matched != PATH_SITE_COUNT ? "game_build_differs"
-                         : !VirtualProtect(text, textSize, PAGE_EXECUTE_READWRITE, &textProtection) ? "code_unwritable" : NULL;
+                         : !openGameCode(gameBase + RVA_TEXT_SECTION, (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION)) ? "code_unwritable" : NULL;
     if (reason) {
         writeLog("spell_paths_not_expanded", "reason=%s sites=%d of %d error=%lu", reason, matched, PATH_SITE_COUNT,
                  matched == PATH_SITE_COUNT ? GetLastError() : 0UL);
@@ -232,13 +239,23 @@ static int installSpellPathExpansion(void) {
         VirtualFree(stubs, 0, MEM_RELEASE);
         return 0;
     }
+    makePagesReadExecute(stubs, 0x1000);
     unitSpellWeaponLevel = GAME_FN(int (*)(int, int), RVA_UNIT_SPELL_WEAPON_LEVEL);
     learnPromotionSpells = GAME_FN(void (*)(int, int, int), RVA_LEARN_PROMOTION_SPELLS);
     chooseMemorized = GAME_FN(void (*)(int), RVA_CHOOSE_MEMORIZED);
     startSpellPathCopy(copy);
-    for (int i = 0; i < pathWriteCount; i++) memcpy(pathWrites[i].at, pathWrites[i].bytes, (size_t)pathWrites[i].size);
-    VirtualProtect(text, textSize, textProtection, &textProtection);
-    FlushInstructionCache(GetCurrentProcess(), text, textSize);
+    for (int i = 0; i < pathWriteCount; i++) {
+        if (writeGameCode(pathWrites[i].at, pathWrites[i].bytes, (size_t)pathWrites[i].size)) continue;
+        DWORD error = GetLastError();
+        for (int j = i; j >= 0; j--) writeGameCode(pathWrites[j].at, pathWrites[j].old, (size_t)pathWrites[j].size);
+        closeGameCode();
+        writeLog("spell_paths_not_expanded", "reason=code_unwritable sites=%d of %d error=%lu", matched, PATH_SITE_COUNT, error);
+        spellPathCopy = NULL;
+        VirtualFree(copy, 0, MEM_RELEASE);
+        VirtualFree(stubs, 0, MEM_RELEASE);
+        return 0;
+    }
+    closeGameCode();
     pathStubs = stubs;
     spellPathsExpanded = 1;
     writeLog("spell_paths_expanded", "paths=%d sites=%d of %d names=%p", SPELL_PATH_COUNT, matched, PATH_SITE_COUNT, (void *)copy);
@@ -252,16 +269,19 @@ static int uninstallSpellPathExpansion(void) {
             writeLog("spell_paths_not_uninstalled", "reason=site_changed rva=0x%x", (unsigned)(pathWrites[i].at - gameBase));
             return 0;
         }
-    DWORD textProtection = 0;
-    unsigned char *text = gameBase + RVA_TEXT_SECTION;
-    size_t textSize = (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION);
-    if (!VirtualProtect(text, textSize, PAGE_EXECUTE_READWRITE, &textProtection)) {
+    if (!openGameCode(gameBase + RVA_TEXT_SECTION, (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION))) {
         writeLog("spell_paths_not_uninstalled", "reason=code_unwritable error=%lu", GetLastError());
         return 0;
     }
-    for (int i = 0; i < pathWriteCount; i++) memcpy(pathWrites[i].at, pathWrites[i].old, (size_t)pathWrites[i].size);
-    VirtualProtect(text, textSize, textProtection, &textProtection);
-    FlushInstructionCache(GetCurrentProcess(), text, textSize);
+    for (int i = 0; i < pathWriteCount; i++) {
+        if (writeGameCode(pathWrites[i].at, pathWrites[i].old, (size_t)pathWrites[i].size)) continue;
+        DWORD error = GetLastError();
+        for (int j = i; j >= 0; j--) writeGameCode(pathWrites[j].at, pathWrites[j].bytes, (size_t)pathWrites[j].size);
+        closeGameCode();
+        writeLog("spell_paths_not_uninstalled", "reason=code_unwritable error=%lu", error);
+        return 0;
+    }
+    closeGameCode();
     spellPathsExpanded = 0;
     VirtualFree((void *)spellPathCopy, 0, MEM_RELEASE);
     VirtualFree(pathStubs, 0, MEM_RELEASE);
@@ -274,40 +294,39 @@ static int uninstallSpellPathExpansion(void) {
 #else
 // ---- Mac: the patch ------------------------------------------------------------------------------
 // A compare (cmp, 32- or 64-bit) whose 12-bit immediate becomes `value`.
-typedef struct { unsigned int rva, shipped, value; const char *name; } PathCompareSite;
+typedef struct { unsigned int rva, value; const char *name; } PathCompareSite;
 
 static const PathCompareSite PATH_COMPARE_SITES[] = {
-    {RVA_PARSER_SPELLWEAPON50S_PATH,    0x7101891fu, 0x7e, "parser_spellweapon50s"},
-    {RVA_PARSER_SPELLWEAPON_PATH,       0x7101891fu, 0x7e, "parser_spellweapon"},
-    {RVA_PARSER_SPELLWEAPONBONUS_PATH,  0x7101891fu, 0x7e, "parser_spellweaponbonus"},
-    {RVA_PARSER_SPELLWEAPON50_PATH,     0x7101891fu, 0x7e, "parser_spellweapon50"},
-    {RVA_PARSER_SPELLWEAPONSINGLE_PATH, 0x7101891fu, 0x7e, "parser_spellweaponsingle"},
-    {RVA_ITEM_PATH_BOOST_BOUND,         0x7101891fu, 0x7e, "item_path_boost"},
-    {RVA_ITEM_PATH_BOOST_BOUND_2,       0x7101891fu, 0x7e, "item_path_boost_2"},
-    {RVA_ITEM_PATH_BOOST_BOUND_3,       0x7101891fu, 0x7e, "item_path_boost_3"},
-    {RVA_ITEM_PATH_BOOST_BOUND_4,       0x7101891fu, 0x7e, "item_path_boost_4"},
-    {RVA_STATS_SPELL_ATTACK_PATH_BOUND, 0x71018effu, 0x7f, "stats_path_level"},
-    {RVA_UNIT_DEBUG_PATH_BOUND,         0x71018d1fu, 0x7f, "debug_unit_screen"},
-    {RVA_STATS_KNOWN_SPELLS_PATH_LOOP,  0xf101939fu, 0x80, "stats_known_spells"},
-    {RVA_LIBRARY_PATH_LOOP,             0xf101931fu, 0x80, "library"},
-    {RVA_LEARN_START_SPELLS_PATH_LOOP,  0x7101929fu, 0x80, "learn_start_spells"},
-    {RVA_CHOOSE_MEMORIZED_PATH_LOOP,    0x7101929fu, 0x80, "choose_memorized"},
+    {RVA_PARSER_SPELLWEAPON50S_PATH,    0x7e, "parser_spellweapon50s"},
+    {RVA_PARSER_SPELLWEAPON_PATH,       0x7e, "parser_spellweapon"},
+    {RVA_PARSER_SPELLWEAPONBONUS_PATH,  0x7e, "parser_spellweaponbonus"},
+    {RVA_PARSER_SPELLWEAPON50_PATH,     0x7e, "parser_spellweapon50"},
+    {RVA_PARSER_SPELLWEAPONSINGLE_PATH, 0x7e, "parser_spellweaponsingle"},
+    {RVA_ITEM_PATH_BOOST_BOUND,         0x7e, "item_path_boost"},
+    {RVA_ITEM_PATH_BOOST_BOUND_2,       0x7e, "item_path_boost_2"},
+    {RVA_ITEM_PATH_BOOST_BOUND_3,       0x7e, "item_path_boost_3"},
+    {RVA_ITEM_PATH_BOOST_BOUND_4,       0x7e, "item_path_boost_4"},
+    {RVA_STATS_SPELL_ATTACK_PATH_BOUND, 0x7f, "stats_path_level"},
+    {RVA_UNIT_DEBUG_PATH_BOUND,         0x7f, "debug_unit_screen"},
+    {RVA_STATS_KNOWN_SPELLS_PATH_LOOP,  0x80, "stats_known_spells"},
+    {RVA_LIBRARY_PATH_LOOP,             0x80, "library"},
+    {RVA_LEARN_START_SPELLS_PATH_LOOP,  0x80, "learn_start_spells"},
+    {RVA_CHOOSE_MEMORIZED_PATH_LOOP,    0x80, "choose_memorized"},
 };
 #define PATH_COMPARE_COUNT ((int)(sizeof PATH_COMPARE_SITES / sizeof PATH_COMPARE_SITES[0]))
-#define PATH_BUG_CHECK_LOOP_HEAD 0x71018f3fu
 
-// A reader of the name table: an ADRP of its page and the ADD of its low 12 bits.
-typedef struct { unsigned int rva, adrp, add; const char *name; } PathReaderPair;
+// A reader of the name table: an ADRP of its page, then the ADD of its low 12 bits.
+typedef struct { unsigned int rva; const char *name; } PathReaderPair;
 
 static const PathReaderPair PATH_READER_PAIRS[] = {
-    {RVA_PATH_NAMES_READ_LIBRARY,      0xf00026cau, 0x9134414au, "library"},
-    {RVA_PATH_NAMES_READ_STATS_LEVEL,  0xb00018a9u, 0x91344129u, "stats_path_level"},
-    {RVA_PATH_NAMES_READ_STATS_KNOWN,  0x900018a8u, 0x91344108u, "stats_known_spells"},
-    {RVA_PATH_NAMES_READ_ITEM_BOOST,   0xf0001888u, 0x91344108u, "item_path_boost"},
-    {RVA_PATH_NAMES_READ_ITEM_BOOST_2, 0xf0001888u, 0x91344108u, "item_path_boost_2"},
-    {RVA_PATH_NAMES_READ_ITEM_BOOST_3, 0xf0001888u, 0x91344108u, "item_path_boost_3"},
-    {RVA_PATH_NAMES_READ_ITEM_BOOST_4, 0xf0001888u, 0x91344108u, "item_path_boost_4"},
-    {RVA_PATH_NAMES_READ_DEBUG_UNIT,   0xd000188au, 0x9134414au, "debug_unit_screen"},
+    {RVA_PATH_NAMES_READ_LIBRARY,      "library"},
+    {RVA_PATH_NAMES_READ_STATS_LEVEL,  "stats_path_level"},
+    {RVA_PATH_NAMES_READ_STATS_KNOWN,  "stats_known_spells"},
+    {RVA_PATH_NAMES_READ_ITEM_BOOST,   "item_path_boost"},
+    {RVA_PATH_NAMES_READ_ITEM_BOOST_2, "item_path_boost_2"},
+    {RVA_PATH_NAMES_READ_ITEM_BOOST_3, "item_path_boost_3"},
+    {RVA_PATH_NAMES_READ_ITEM_BOOST_4, "item_path_boost_4"},
+    {RVA_PATH_NAMES_READ_DEBUG_UNIT,   "debug_unit_screen"},
 };
 #define PATH_READER_COUNT ((int)(sizeof PATH_READER_PAIRS / sizeof PATH_READER_PAIRS[0]))
 
@@ -354,31 +373,23 @@ static uint32_t pathGameWord(unsigned int rva) {
     return word;
 }
 
-// Checks every site against the game's shipped words and queues its change.
+// Queues every site's change, for the copy at `copy`.
 static int queueSpellPathWrites(const char **copy) {
     int matched = 0;
     pathWriteCount = 0;
     for (int i = 0; i < PATH_COMPARE_COUNT; i++) {
         const PathCompareSite *s = &PATH_COMPARE_SITES[i];
-        if (pathGameWord(s->rva) != s->shipped) {
-            writeLog("spell_paths_site_mismatch", "group=compare name=%s va=0x%llx", s->name, s->rva + 0x100000000ULL);
-            continue;
-        }
-        queuePathWord(s->rva, compareWithImmediate(s->shipped, s->value));
+        queuePathWord(s->rva, compareWithImmediate(pathGameWord(s->rva), s->value));
         matched++;
     }
-    if (pathGameWord(RVA_SPELL_BUG_CHECK_SPELL_LOOP_SKIP) == PATH_BUG_CHECK_LOOP_HEAD) {
-        queuePathWord(RVA_SPELL_BUG_CHECK_SPELL_LOOP_SKIP,
-                      0x14000000u | ((uint32_t)((RVA_SPELL_BUG_CHECK_SPELL_LOOP_END - RVA_SPELL_BUG_CHECK_SPELL_LOOP_SKIP) >> 2) & 0x3ffffffu));
-        matched++;
-    } else {
-        writeLog("spell_paths_site_mismatch", "group=bytes name=bug_check_skip va=0x%llx", RVA_SPELL_BUG_CHECK_SPELL_LOOP_SKIP + 0x100000000ULL);
-    }
+    queuePathWord(RVA_SPELL_BUG_CHECK_SPELL_LOOP_SKIP,
+                  0x14000000u | ((uint32_t)((RVA_SPELL_BUG_CHECK_SPELL_LOOP_END - RVA_SPELL_BUG_CHECK_SPELL_LOOP_SKIP) >> 2) & 0x3ffffffu));
+    matched++;
     long long pages = ((long long)(uintptr_t)copy >> ADRP_PAGE_SHIFT) - ((long long)(uintptr_t)(gameBase + RVA_SPELL_PATH_NAMES) >> ADRP_PAGE_SHIFT);
     for (int i = 0; i < PATH_READER_COUNT; i++) {
         const PathReaderPair *s = &PATH_READER_PAIRS[i];
         uint32_t moved = 0;
-        if (pathGameWord(s->rva) != s->adrp || pathGameWord(s->rva + 4) != s->add || !adrpMovedBy(s->adrp, pages, &moved)) {
+        if (!adrpMovedBy(pathGameWord(s->rva), pages, &moved)) {
             writeLog("spell_paths_site_mismatch", "group=reader name=%s va=0x%llx", s->name, s->rva + 0x100000000ULL);
             continue;
         }
@@ -406,6 +417,10 @@ static int queueSpellPathWrites(const char **copy) {
 
 // Raises the game's paths to 128, or changes nothing.
 static int installSpellPathExpansion(void) {
+    if (!gameCodeMatches) {
+        writeLog("spell_paths_not_expanded", "reason=game_code_differs sites=0 of %d", PATH_SITE_COUNT);
+        return 0;
+    }
     size_t at = (uintptr_t)(gameBase + RVA_SPELL_PATH_NAMES) & ADRP_PAGE_MASK;
     size_t total = (at + SPELL_PATH_COUNT * sizeof(const char *) + MAC_PAGE_MASK) & ~(size_t)MAC_PAGE_MASK;
     unsigned char *memory = allocAfterImage(total);

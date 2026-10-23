@@ -443,8 +443,11 @@ static void *coe5seExport(void *module, const char *name) {
 #endif
 }
 
-// Reads CoE5SE's exports once its DLL has loaded.
+// Starts CoE5SE and reads its exports once its DLL has loaded.
 static void connectCoe5se(void *module) {
+    void (*start)(void) = (void (*)(void))coe5seExport(module, "coe5seStart");
+    writeLog("loader_coe5se_start", "export=%d", start != NULL);
+    if (start) start();
     coe5seLoadsPlugins = (int (*)(void))coe5seExport(module, "coe5seLoadsPlugins");
     coe5sePluginLoading = (void (*)(const char *))coe5seExport(module, "coe5sePluginLoading");
     coe5seCheckPlugin = (const char *(*)(const char *, const char *))coe5seExport(module, "coe5seCheckPlugin");
@@ -569,6 +572,7 @@ __declspec(dllexport) int coe5seLoaderStart(const LoaderStart *start) {
     writeLog("loader_started", "glu32_version=%u interface=%u started_from=%s", glu32Version, version,
 #ifdef __APPLE__
              startedFrom == LOADER_STARTED_IN_CONSTRUCTOR ? "constructor" :
+             startedFrom == LOADER_STARTED_AT_SRAND ? "srand" :
 #endif
              startedFrom == LOADER_STARTED_IN_DLLMAIN ? "dllmain" : "sdl_set_main_ready");
     if (!version || version > LOADER_START_VERSION) {

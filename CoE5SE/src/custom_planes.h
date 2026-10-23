@@ -1,5 +1,6 @@
 // Mods' planes: up to CUSTOM_PLANE_TARGET new planes beside the game's, at indices CoE5SE hands out.
 
+#define PLANE_FILES_DIR           "planes"
 #define SAVE_MAGIC_GAME           0x6eb65
 #define SAVE_MAGIC_CUSTOM_PLANES  SAVE_TAG('C', '5', 'P', 'L')
 #define SAVE_PLNS_VERSION         1
@@ -513,9 +514,12 @@ static int writeServerSaveMagicHook(int value, void *file) {
 static int pointCustomPlaneCall(unsigned int callRva, unsigned int targetRva, void *hook, const char *name) {
     static unsigned char *stubs;
     static int used;
-    if (!stubs && !(stubs = allocNear(gameBase + RVA_TEXT_SECTION))) {
-        writeLog("hook_skipped", "site=%s reason=no_near_page", name);
-        return 0;
+    if (!stubs) {
+        if (!(stubs = allocNear(gameBase + RVA_TEXT_SECTION))) {
+            writeLog("hook_skipped", "site=%s reason=no_near_page", name);
+            return 0;
+        }
+        makePagesReadExecute(stubs, 0x1000);
     }
     if ((used + 1) * CUSTOM_PLANE_STUB_SIZE > 0x1000) {
         writeLog("hook_skipped", "site=%s reason=no_stub_room", name);

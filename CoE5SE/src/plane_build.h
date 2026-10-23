@@ -1,6 +1,6 @@
 // Mods' planes built the game's way: coe5.gen, the recipes, population and terrain swap.
 
-#define PLANE_RECIPES_FILE   "plane_recipes.lua"
+#define PLANE_RECIPES_FILE   PLANE_FILES_DIR PATH_SEP "plane_recipes.lua"
 #define MARK_LAYER_SQUARES   (MAP_COLUMNS_MAX * MAP_COLUMN_SQUARES)
 #define TERRAIN_GATEWAY      204
 #define PORTAL_NUMBER_FIRST  1000

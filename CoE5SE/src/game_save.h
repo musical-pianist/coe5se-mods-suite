@@ -70,6 +70,7 @@ static int hookSaveFileOpens(void) {
         writeLog("hook_skipped", "site=save_fopen reason=no_near_page");
         return 0;
     }
+    makePagesReadExecute(stubs, 0x1000);
     for (size_t i = 0; i < sizeof CALLS / sizeof CALLS[0]; i++)
         redirectCall(CALLS[i], RVA_FOPEN, stubs + GAME_SAVE_STUB_SIZE * i, (void *)saveFileOpenHook, NAMES[i], NULL);
     hooked = 1;

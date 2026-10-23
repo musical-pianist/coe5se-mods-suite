@@ -70,6 +70,7 @@ static __attribute__((unused)) PluginState pluginStateNamed(const char *word) {
 #define LOADER_STARTED_AT_MAIN_READY 0
 #define LOADER_STARTED_IN_DLLMAIN    1
 #define LOADER_STARTED_IN_CONSTRUCTOR 2
+#define LOADER_STARTED_AT_SRAND      3
 
 typedef struct LoaderStart {
     uint32_t size;

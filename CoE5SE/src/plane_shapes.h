@@ -132,16 +132,15 @@ static void *planeShapeKeepR10Stub(void) {
     function->EndAddress = (DWORD)(p - page);
     function->UnwindData = PLANE_SHAPE_KEEP_UNWIND;
     if (!RtlAddFunctionTable(function, 1, (DWORD64)(uintptr_t)page)) return NULL;
-    FlushInstructionCache(GetCurrentProcess(), page, PLANE_SHAPE_KEEP_UNWIND + sizeof UNWIND);
+    makePagesReadExecute(page, 0x1000);
     return page;
 }
 
 // Points the step's ability id at planeShapeAbilityIds.
 static int patchPlaneShapeId(void) {
-    static const unsigned char SHIPPED[] = {0x8d, 0xa8, 0xd8, 0x04, 0x00, 0x00};
     unsigned char *at = GAME_PTR(RVA_UNIT_PLANE_SHAPE_ID);
-    if (memcmp(at, SHIPPED, sizeof SHIPPED)) {
-        writeLog("hook_skipped", "site=plane_shape_id reason=code_differs");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=plane_shape_id reason=game_code_differs");
         return 0;
     }
     for (int plane = 0; plane < PLANE_RECORDS_MOVED; plane++)
@@ -159,18 +158,14 @@ static int patchPlaneShapeId(void) {
     p += 8;
     *p++ = 0x43; *p++ = 0x8b; *p++ = 0x2c; *p++ = 0x93;
     *p++ = 0xc3;
-    FlushInstructionCache(GetCurrentProcess(), stub, (size_t)(p - stub));
+    makePagesReadExecute(stub, 0x1000);
     unsigned char code[6] = {0xe8, 0, 0, 0, 0, 0x90};
     int rel = (int)(stub - (at + 5));
     memcpy(code + 1, &rel, 4);
-    DWORD old;
-    if (!VirtualProtect(at, sizeof code, PAGE_EXECUTE_READWRITE, &old)) {
+    if (!writeGameCode(at, code, sizeof code)) {
         writeLog("hook_skipped", "site=plane_shape_id reason=code_unwritable");
         return 0;
     }
-    memcpy(at, code, sizeof code);
-    VirtualProtect(at, sizeof code, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), at, sizeof code);
     return 1;
 }
 

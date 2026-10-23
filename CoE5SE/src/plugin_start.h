@@ -264,11 +264,7 @@ static void *apiFrameVariable(CallSite site, const char *name) {
             for (size_t k = 0; k < FRAME_SITES[i].count; k++) reaches |= FRAME_SITES[i].sites[k] == site;
     if (!reaches) return REFUSE_API(NULL, "frameVariable", "site_not_in_that_frame", "site=%s name=%s", SITES[site].name, name);
     if (!siteInstalled[site]) return REFUSE_API(NULL, "frameVariable", "site_not_wrapped", "site=%s name=%s", SITES[site].name, name);
-#ifdef __aarch64__
     uintptr_t sp = siteCallerSp(site);
-#else
-    uintptr_t sp = *(uintptr_t *)(siteStub(site) + STUB_RSP) + 8;
-#endif
     return (void *)(sp + (uintptr_t)e->value);
 }
 

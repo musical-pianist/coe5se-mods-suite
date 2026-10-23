@@ -201,15 +201,13 @@ static int redirectTailJump(unsigned int siteRva, unsigned int targetRva, unsign
         writeLog("hook_skipped", "site=%s reason=not_the_expected_call address=%p", label, site);
         return 0;
     }
-    static const unsigned char JMP_RIP[6] = {0xff, 0x25, 0, 0, 0, 0};
-    memcpy(stub, JMP_RIP, sizeof JMP_RIP);
-    memcpy(stub + sizeof JMP_RIP, &hook, 8);
+    unsigned char code[14] = {0xff, 0x25, 0, 0, 0, 0};
+    memcpy(code + 6, &hook, 8);
     rel = (int)(stub - (site + 5));
-    DWORD old;
-    VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old);
-    memcpy(site + 1, &rel, 4);
-    VirtualProtect(site, 5, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), site, 5);
+    if (!writeGameCode(stub, code, sizeof code) || !writeGameCode(site + 1, &rel, 4)) {
+        writeLog("hook_skipped", "site=%s reason=code_unwritable address=%p", label, site);
+        return 0;
+    }
     return 1;
 }
 
@@ -224,6 +222,7 @@ static int installNameListHooks(void) {
         writeLog("name_list_hooks_skipped", "reason=no_near_page");
         return 0;
     }
+    makePagesReadExecute(stubs, 0x1000);
     int ok = 0;
     for (int i = 0; i < NAME_LIST_HOOKS; i++) {
         unsigned char *stub = stubs + NAME_LIST_STUB_SIZE * i;

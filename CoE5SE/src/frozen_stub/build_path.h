@@ -23,7 +23,6 @@ static __attribute__((unused)) PRINTF_FORMAT(4, 5) int buildPath(char *out, size
         writeLog("path_refused", "call=%s reason=too_long needed=%d size=0", call, needed);
         return 0;
     }
-    // A printf that returns -1 on a cut may leave the buffer unterminated, so end it here.
     out[size - 1] = '\0';
     writeLog("path_refused", "call=%s reason=too_long needed=%d size=%d start=%s", call, needed, (int)size, out);
     out[0] = '\0';

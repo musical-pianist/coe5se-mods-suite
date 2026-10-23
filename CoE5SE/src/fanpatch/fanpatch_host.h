@@ -4,7 +4,6 @@ typedef struct {
     const char *name;
     unsigned int rva;
     int size;
-    unsigned char shipped[16];
     int fixupCount;
     struct { unsigned char at; unsigned int target; } fixups[2];
 } EntryHookSite;
@@ -12,7 +11,7 @@ typedef struct {
 #include "entry_hook_sites.h"
 #include "fanpatch_bridge.h"
 
-static struct { unsigned char *trampoline, *stub; void *detour; int enabled; } entryHooks[ENTRY_HOOK_COUNT];
+static struct { unsigned char *trampoline, *stub; void *detour; int enabled; unsigned char saved[16]; } entryHooks[ENTRY_HOOK_COUNT];
 
 // The hook at `target`, the start of a listed game function, or -1.
 static int entryHookAt(const void *target) {
@@ -23,17 +22,8 @@ static int entryHookAt(const void *target) {
 
 #ifndef __APPLE__
 #define ENTRY_HOOK_SLOT 64
+#define ENTRY_HOOK_STUB 40
 static unsigned char *entryHookPage;
-
-// Writes `size` bytes of code at `at`.
-static int writeEntryCode(unsigned char *at, const void *bytes, size_t size) {
-    DWORD old;
-    if (!VirtualProtect(at, size, PAGE_EXECUTE_READWRITE, &old)) return 0;
-    memcpy(at, bytes, size);
-    VirtualProtect(at, size, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), at, size);
-    return 1;
-}
 #endif
 
 int fanpatchHookCreate(void *target, void *detour, void **original) {
@@ -44,17 +34,27 @@ int fanpatchHookCreate(void *target, void *detour, void **original) {
     }
     const EntryHookSite *s = &ENTRY_HOOK_SITES[i];
     unsigned char *at = gameBase + s->rva;
-    if (memcmp(at, s->shipped, (size_t)s->size)) {
-        writeLog("entry_hook_refused", "name=%s rva=0x%x reason=not_the_expected_code", s->name, s->rva);
+    if (!gameCodeMatches) {
+        writeLog("entry_hook_refused", "name=%s rva=0x%x reason=game_code_differs", s->name, s->rva);
         return 0;
     }
+    if (entryHooks[i].enabled) {
+        writeLog("entry_hook_refused", "name=%s rva=0x%x reason=already_hooked", s->name, s->rva);
+        return 0;
+    }
+    _Static_assert(sizeof entryHooks[0].saved == 16, "a hook replaces at most 16 bytes");
+    memcpy(entryHooks[i].saved, at, (size_t)s->size);
 #ifndef __APPLE__
-    if (!entryHookPage && !(entryHookPage = allocNearBytes(gameBase + RVA_TEXT_SECTION, ENTRY_HOOK_COUNT * ENTRY_HOOK_SLOT))) {
-        writeLog("entry_hook_refused", "name=%s reason=no_near_page", s->name);
-        return 0;
+    if (!entryHookPage) {
+        if (!(entryHookPage = allocNearBytes(gameBase + RVA_TEXT_SECTION, ENTRY_HOOK_COUNT * ENTRY_HOOK_SLOT))) {
+            writeLog("entry_hook_refused", "name=%s reason=no_near_page", s->name);
+            return 0;
+        }
+        makePagesReadExecute(entryHookPage, ENTRY_HOOK_COUNT * ENTRY_HOOK_SLOT);
     }
-    unsigned char *t = entryHookPage + i * ENTRY_HOOK_SLOT, *stub = t + 40;
-    memcpy(t, at, (size_t)s->size);
+    unsigned char *t = entryHookPage + i * ENTRY_HOOK_SLOT, *stub = t + ENTRY_HOOK_STUB, slot[ENTRY_HOOK_SLOT];
+    memset(slot, 0, sizeof slot);
+    memcpy(slot, entryHooks[i].saved, (size_t)s->size);
     for (int k = 0; k < s->fixupCount; k++) {
         long long rel = (gameBase + s->fixups[k].target) - (t + s->fixups[k].at + 4);
         int rel32 = (int)rel;
@@ -62,14 +62,18 @@ int fanpatchHookCreate(void *target, void *detour, void **original) {
             writeLog("entry_hook_refused", "name=%s reason=fixup_out_of_reach", s->name);
             return 0;
         }
-        memcpy(t + s->fixups[k].at, &rel32, 4);
+        memcpy(slot + s->fixups[k].at, &rel32, 4);
     }
-    t[s->size] = 0xe9;
+    slot[s->size] = 0xe9;
     int back = (int)((at + s->size) - (t + s->size + 5));
-    memcpy(t + s->size + 1, &back, 4);
+    memcpy(slot + s->size + 1, &back, 4);
     static const unsigned char JMP_RIP[6] = {0xff, 0x25, 0, 0, 0, 0};
-    memcpy(stub, JMP_RIP, sizeof JMP_RIP);
-    memcpy(stub + 6, &detour, 8);
+    memcpy(slot + ENTRY_HOOK_STUB, JMP_RIP, sizeof JMP_RIP);
+    memcpy(slot + ENTRY_HOOK_STUB + 6, &detour, 8);
+    if (!writeGameCode(t, slot, ENTRY_HOOK_STUB + 14)) {
+        writeLog("entry_hook_refused", "name=%s reason=trampoline_unwritable", s->name);
+        return 0;
+    }
     entryHooks[i].trampoline = t;
     entryHooks[i].stub = stub;
 #else
@@ -79,7 +83,7 @@ int fanpatchHookCreate(void *target, void *detour, void **original) {
         return 0;
     }
     uint32_t code[8];
-    memcpy(code, at, 16);
+    memcpy(code, entryHooks[i].saved, 16);
     code[4] = 0x58000050u;
     code[5] = 0xd61f0200u;
     unsigned char *back = at + 16;
@@ -101,7 +105,7 @@ int fanpatchHookEnable(void *target, int enable) {
     const EntryHookSite *s = &ENTRY_HOOK_SITES[i];
     unsigned char *at = gameBase + s->rva, code[16];
     if (!enable) {
-        memcpy(code, s->shipped, (size_t)s->size);
+        memcpy(code, entryHooks[i].saved, (size_t)s->size);
     } else {
 #ifndef __APPLE__
         code[0] = 0xe9;
@@ -114,11 +118,7 @@ int fanpatchHookEnable(void *target, int enable) {
         memcpy(code + 8, &entryHooks[i].detour, 8);
 #endif
     }
-#ifndef __APPLE__
-    int ok = writeEntryCode(at, code, (size_t)s->size);
-#else
     int ok = writeGameCode(at, code, (size_t)s->size);
-#endif
     if (ok) entryHooks[i].enabled = enable;
     writeLog("entry_hook_set", "name=%s rva=0x%x on=%d ok=%d", s->name, s->rva, enable, ok);
     return ok;
@@ -143,9 +143,10 @@ void fanpatchLog(const char *fmt, ...) {
     writeLog("fanpatch_log", "text=%s", text);
 }
 
-int fanpatchCheckBytes(size_t va, const unsigned char *sig, size_t size, const char *what) {
-    if (!memcmp(gameBase + va, sig, size)) return 1;
-    writeLog("fanpatch_check_failed", "what=%s rva=0x%zx", what, va);
+// Whether the game's code is the build's, which every function a fix hooks or reads was checked on.
+int fanpatchGameCodeMatches(const char *fix) {
+    if (gameCodeMatches) return 1;
+    writeLog("fanpatch_check_failed", "fix=%s reason=game_code_differs", fix);
     return 0;
 }
 
@@ -173,17 +174,6 @@ int fanpatchReplacedSprite(unsigned file, unsigned spr) {
     return lists[file] ? lists[file][spr] : -1;
 }
 
-void *fanpatchCallTarget(size_t callVa) {
-    const unsigned char *call = gameBase + callVa;
-#ifndef __APPLE__
-    int rel;
-    if (call[0] != 0xe8) return NULL;
-    memcpy(&rel, call + 1, 4);
-    return (void *)(call + 5 + rel);
-#else
-    return blTarget(call);
-#endif
-}
 
 static void fanpatchReport(void) {
     fix_item_reset_report();

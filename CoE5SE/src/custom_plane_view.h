@@ -1,6 +1,6 @@
 // Mods' planes on screen: their plane buttons on the game's four plane rows, with each mod's icon.
 
-#define PLANE_ICON_FALLBACK  "plane_icon_%d.tga"
+#define PLANE_ICON_FALLBACK  PLANE_FILES_DIR PATH_SEP "plane_icon_%d.tga"
 #define PLANE_ROW_GREY       0.3f
 #define PLANE_ICON_FLAGS     4
 #define PLANE_ICON_FLAGS_GREY 0xe

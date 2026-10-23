@@ -40,18 +40,9 @@
 #define ITEM_SPRFILE      2
 #define CENTRE            0.5f
 
-#ifdef __APPLE__
-/* CoE5SE: the Mac build's first bytes of draw_sprite and the sprite file loader. */
-static const BYTE SIG_DRAW_SPRITE[]   = { 0xFF,0x43,0x02,0xD1,0xEF,0x3B,0x02,0x6D,0xED,0x33,0x03,0x6D,0xEB,0x2B,0x04,0x6D };
-static const BYTE SIG_LOAD_SPRFILE[]  = { 0xFC,0x6F,0xBA,0xA9,0xFA,0x67,0x01,0xA9,0xF8,0x5F,0x02,0xA9 };
-#else
-static const BYTE SIG_DRAW_SPRITE[]   = { 0x48,0x8B,0xC4,0x48,0x89,0x58,0x08,0x48,0x89,0x70,0x10,0x57,0x48,0x81,0xEC,0xA0 };
-static const BYTE SIG_LOAD_SPRFILE[]  = { 0x40,0x55,0x57,0x41,0x54,0x41,0x57,0x48,0x81,0xEC,0x18,0x0A };
-static const BYTE SIG_REPLACED_SPR[]  = { 0x48,0x89,0x5C,0x24,0x08,0x48,0x89,0x74,0x24,0x10,0x48,0x89,0x7C,0x24,0x18,0x41 };
-/* The token's icon draw: "addss xmm3,xmm6 / call draw_sprite / cmp esi,r15d" */
-static const BYTE SIG_TOKEN_CALL[]    = { 0xF3,0x0F,0x58,0xDE,0xE8 };
-static const BYTE SIG_TOKEN_RET[]     = { 0x41,0x3B,0xF7 };
-#endif
+/* CoE5SE: the signatures (draw_sprite's, the sprite file loader's and replaced_spr's first bytes, and
+   the token's icon draw: "addss xmm3,xmm6 / call draw_sprite / cmp esi,r15d") are checked by
+   CoE5SE's game code hash, fp_game_code_matches. */
 
 /* ----------------------------------------------------- function types */
 
@@ -167,17 +158,7 @@ int fix_token_sprites_install(void)
     }
     s_log_limit = fp_config_int("debug", "token_sprite_log_lines", 20);
 
-    if (
-#ifdef __APPLE__   /* CoE5SE: the token's bl goes to draw_sprite */
-        fanpatchCallTarget(VA_TOKEN_ICON_RET - 4) != GAME_PTR(void *, VA_DRAW_SPRITE) ||
-#else
-        !fp_check_bytes(VA_TOKEN_ICON_RET - 9, SIG_TOKEN_CALL, sizeof SIG_TOKEN_CALL, "token icon call") ||
-        !fp_check_bytes(VA_TOKEN_ICON_RET, SIG_TOKEN_RET, sizeof SIG_TOKEN_RET, "token icon return") ||
-        *GAME_PTR(int *, VA_TOKEN_ICON_RET - 4) != (int)(VA_DRAW_SPRITE - VA_TOKEN_ICON_RET) ||
-        !fp_check_bytes(VA_REPLACED_SPR, SIG_REPLACED_SPR, sizeof SIG_REPLACED_SPR, "replaced sprite") ||
-#endif
-        !fp_check_bytes(VA_DRAW_SPRITE, SIG_DRAW_SPRITE, sizeof SIG_DRAW_SPRITE, "draw sprite") ||
-        !fp_check_bytes(VA_LOAD_SPRFILE, SIG_LOAD_SPRFILE, sizeof SIG_LOAD_SPRFILE, "load sprite file")) {
+    if (!fp_game_code_matches("token_sprites")) {   /* CoE5SE: the signatures' check */
         fp_log("fix token_sprites: NOT installed (code does not match " GAME_VERSION_TEXT ")");
         return 0;
     }

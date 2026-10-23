@@ -160,9 +160,12 @@ typedef struct {
 #define EVENT_FINDERS_STUB_SIZE 0x20
 static int pointEventFinderCall(const EventFinderCall *c, int index) {
     static unsigned char *stubs;
-    if (!stubs && !(stubs = allocNear(gameBase + RVA_TEXT_SECTION))) {
-        writeLog("hook_skipped", "site=%s reason=no_near_page", c->name);
-        return 0;
+    if (!stubs) {
+        if (!(stubs = allocNear(gameBase + RVA_TEXT_SECTION))) {
+            writeLog("hook_skipped", "site=%s reason=no_near_page", c->name);
+            return 0;
+        }
+        makePagesReadExecute(stubs, 0x1000);
     }
     return redirectCall(c->callRva, c->targetRva, stubs + EVENT_FINDERS_STUB_SIZE * index, c->hook, c->name, NULL);
 }

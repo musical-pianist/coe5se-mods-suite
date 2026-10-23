@@ -226,6 +226,7 @@ static void weaponTextHook(int weapon, unsigned long long dmg, int chained) {
 #define WEAPON_HIT_REDIRECTS     0x200
 #define WEAPON_HIT_CHAIN_MAX     16
 #define UNWIND_FLAG_CHAININFO    4
+#define WEAPON_HIT_TEST_SIZE     3
 
 // Copies the hit's unwind info for the stub, its chain of entries made one, with no prolog.
 static size_t copyWeaponHitUnwind(unsigned char *out) {
@@ -264,8 +265,8 @@ static int patchWeaponHit(unsigned char *page) {
         return 0;
     }
     static const unsigned char ARGS[] = {0x44, 0x89, 0xf1, 0x89, 0xf2, 0x44, 0x8b, 0x45, 0x60, 0x45, 0x89, 0xf9};
-    static const unsigned char AFTER[] = {0x41, 0x89, 0xc7, 0x89, 0x44, 0x24, 0x40, 0x4c, 0x8b, 0x44, 0x24, 0x58, 0x45, 0x85, 0xff};
-    unsigned char *stub = page + WEAPON_HIT_STUB, *p = stub;
+    static const unsigned char AFTER[] = {0x41, 0x89, 0xc7, 0x89, 0x44, 0x24, 0x40, 0x4c, 0x8b, 0x44, 0x24, 0x58};
+    unsigned char *stub = page + WEAPON_HIT_STUB, *p = stub, *check = GAME_PTR(RVA_WEAPON_HIT_DAMAGE_CHECK);
     void *hook = (void *)weaponTraitDamage;
     memcpy(p, ARGS, sizeof ARGS);
     p += sizeof ARGS;
@@ -273,6 +274,8 @@ static int patchWeaponHit(unsigned char *page) {
     *p++ = 0xff; *p++ = 0xd0;
     memcpy(p, AFTER, sizeof AFTER);
     p += sizeof AFTER;
+    memcpy(p, check, WEAPON_HIT_TEST_SIZE);
+    p += WEAPON_HIT_TEST_SIZE;
     *p++ = 0x0f; *p++ = 0x8e; emitWeaponHitRel32(&p, GAME_PTR(RVA_WEAPON_HIT_NO_DAMAGE));
     *p++ = 0xe9; emitWeaponHitRel32(&p, GAME_PTR(RVA_WEAPON_HIT_DAMAGE_GO_ON));
     RUNTIME_FUNCTION *function = (RUNTIME_FUNCTION *)(page + WEAPON_HIT_FUNCTION);
@@ -283,18 +286,14 @@ static int patchWeaponHit(unsigned char *page) {
         writeLog("weapon_hit_patched", "ok=0 reason=unwind_not_added");
         return 0;
     }
-    FlushInstructionCache(GetCurrentProcess(), page, WEAPON_HIT_REDIRECTS);
+    makePagesReadExecute(page, 0x1000);
     unsigned char *at = GAME_PTR(RVA_WEAPON_HIT_DAMAGE_CHECK), code[9] = {0xe9, 0, 0, 0, 0, 0x90, 0x90, 0x90, 0x90};
     int rel = (int)(stub - (at + 5));
     memcpy(code + 1, &rel, 4);
-    DWORD old;
-    if (!VirtualProtect(at, sizeof code, PAGE_EXECUTE_READWRITE, &old)) {
+    if (!writeGameCode(at, code, sizeof code)) {
         writeLog("weapon_hit_patched", "ok=0 reason=code_unwritable");
         return 0;
     }
-    memcpy(at, code, sizeof code);
-    VirtualProtect(at, sizeof code, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), at, sizeof code);
     writeLog("weapon_hit_patched", "ok=1 address=%p stub=%p", (void *)at, (void *)stub);
     return 1;
 }
@@ -443,11 +442,7 @@ static void weaponTraitsInit(void) {
     int words = apiAddModCommand("onlyaffects", onlyaffectsLine) + apiAddModCommand("doesntaffect", doesntaffectLine) +
                 apiAddModCommand("doubledmgvs", doubledmgvsLine);
     int hit = 0, calls = 0;
-    if (checkGameFunction("weapon_hit_check", "part=prologue ", RVA_WEAPON_HIT, RVA_WEAPON_HIT_PROLOGUE_END, WEAPON_HIT_PROLOGUE_CODE,
-                          WEAPON_HIT_PROLOGUE_CALLS, WEAPON_HIT_PROLOGUE_CALL_COUNT) &&
-        checkGameFunction("weapon_hit_check", "part=multiply ", RVA_WEAPON_HIT_MULTIPLY, RVA_WEAPON_HIT_MULTIPLY_END,
-                          WEAPON_HIT_MULTIPLY_CODE, WEAPON_HIT_MULTIPLY_CALLS,
-                          (int)(sizeof WEAPON_HIT_MULTIPLY_CALLS / sizeof WEAPON_HIT_MULTIPLY_CALLS[0])))
+    if (checkGameFunction("weapon_hit_check", "part=prologue ") && checkGameFunction("weapon_hit_check", "part=multiply "))
         calls = installWeaponTraitHooks(&hit);
     writeLog("weapon_trait_words_installed", "words=%d of 3 hit=%d calls=%d of 4", words, hit, calls);
 }

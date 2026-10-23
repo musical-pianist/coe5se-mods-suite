@@ -27,7 +27,6 @@ typedef long LONG;
 #define VA_FIND_ALL_MODS        RVA_RUN_ENABLED_MODS   /* Mac inlines find_all_mods into SDL_main; see fix_item_reset.c */
 #else
 #define VA_FIND_ALL_MODS        RVA_FIND_ALL_MODS
-#define VA_FIND_ALL_MODS_CALL   RVA_SDL_MAIN_FIND_ALL_MODS_CALL
 #define VA_REPLACED_SPR         RVA_REPLACED_SPRITE    /* Mac inlines it; see fix_token_sprites.c */
 #endif
 #define VA_RESTORE_TABLES       RVA_RESET_MODS
@@ -57,4 +56,5 @@ typedef long LONG;
 /* The fan patch's helpers. fp_config_int: CoE5SE has no fanpatch.ini, so every fix takes its default. */
 #define fp_log                  fanpatchLog
 #define fp_config_int(section, key, def) (def)
-#define fp_check_bytes          fanpatchCheckBytes
+/* CoE5SE: the fixes' byte signatures became one check of CoE5SE's game code hash. */
+#define fp_game_code_matches    fanpatchGameCodeMatches

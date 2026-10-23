@@ -301,6 +301,7 @@ static int closeSaveRead(void *file) {
 }
 
 // The turn file writer's player, which the marker's stub stores here.
+static volatile int turnWriterPlayer;
 static volatile int *turnWriterPlayerSlot;
 
 static size_t writeTurnEnd(const void *marker, size_t size, size_t count, void *file) {
@@ -333,17 +334,23 @@ static int installSaveTailHooks(void) {
         writeLog("save_tail_hooks_skipped", "reason=no_near_page");
         return 0;
     }
+    makePagesReadExecute(stubs, 0x1000);
     int ok = 0;
     for (size_t i = 0; i < sizeof CALLS / sizeof CALLS[0]; i++) {
         void *hook = CALLS[i].hook;
         if (CALLS[i].keepR14) {
-            unsigned char *code = stubs + SAVE_TAIL_R14_CODE, *slot = stubs + SAVE_TAIL_R14_CODE + 0x20;
-            int disp = (int)(slot - (code + 7));
-            code[0] = 0x44; code[1] = 0x89; code[2] = 0x35; memcpy(code + 3, &disp, 4);
-            code[7] = 0xff; code[8] = 0x25; memset(code + 9, 0, 4);
-            memcpy(code + 13, &hook, 8);
-            hook = code;
-            turnWriterPlayerSlot = (volatile int *)slot;
+            unsigned char *at = stubs + SAVE_TAIL_R14_CODE, code[27];
+            volatile int *slot = &turnWriterPlayer;
+            code[0] = 0x48; code[1] = 0xb8; memcpy(code + 2, &slot, 8);
+            code[10] = 0x44; code[11] = 0x89; code[12] = 0x30;
+            code[13] = 0xff; code[14] = 0x25; memset(code + 15, 0, 4);
+            memcpy(code + 19, &hook, 8);
+            if (!writeGameCode(at, code, sizeof code)) {
+                writeLog("hook_skipped", "site=%s reason=code_unwritable", CALLS[i].name);
+                continue;
+            }
+            hook = at;
+            turnWriterPlayerSlot = slot;
         }
         ok += redirectCall(CALLS[i].callRva, CALLS[i].targetRva, stubs + SAVE_TAIL_STUB_SIZE * i, hook, CALLS[i].name, NULL);
     }

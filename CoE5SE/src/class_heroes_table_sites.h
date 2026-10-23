@@ -1,14 +1,13 @@
-// Every instruction in CoE5.exe that builds an address in the game's class_heroes table, as shipped.
+// Every instruction in CoE5.exe that builds an address in the game's class_heroes table.
 #pragma once
 
-#define CLASS_HEROES_SITES_EXE_SHA256 "c894c3d0d208fb3cfa6a5a87964b6c1cf14837ae8caffa1cb4d8a81226aa0bb2"
 #define CLASS_HEROES_TABLE_SITE_COUNT 7
 static const TableMoveSite CLASS_HEROES_TABLE_SITES[CLASS_HEROES_TABLE_SITE_COUNT] = {
-    {0x089f99, 3, TABLE_FIELD_DISP32, {0x49, 0x8d, 0x9e, 0x94, 0x58, 0x44, 0x00}},
-    {0x08a040, 4, TABLE_FIELD_DISP32, {0x46, 0x8b, 0xa4, 0x33, 0x80, 0x58, 0x44, 0x00}},
-    {0x08a04e, 4, TABLE_FIELD_DISP32, {0x46, 0x8b, 0xac, 0x33, 0x84, 0x58, 0x44, 0x00}},
-    {0x08a190, 3, TABLE_FIELD_DISP32, {0x48, 0x8d, 0x9b, 0x50, 0x58, 0x44, 0x00}},
-    {0x08a4b3, 3, TABLE_FIELD_DISP32, {0x4d, 0x8d, 0x99, 0x94, 0x58, 0x44, 0x00}},
-    {0x1bd8a1, 3, TABLE_FIELD_DISP32, {0x48, 0x8d, 0x8e, 0x20, 0x58, 0x44, 0x00}},
-    {0x1bd8b0, 3, TABLE_FIELD_DISP32, {0x89, 0xbc, 0x33, 0x80, 0x58, 0x44, 0x00}},
+    {0x08a1a9, 3, TABLE_FIELD_DISP32},
+    {0x08a250, 4, TABLE_FIELD_DISP32},
+    {0x08a25e, 4, TABLE_FIELD_DISP32},
+    {0x08a3a0, 3, TABLE_FIELD_DISP32},
+    {0x08a6c3, 3, TABLE_FIELD_DISP32},
+    {0x1bdb01, 3, TABLE_FIELD_DISP32},
+    {0x1bdb10, 3, TABLE_FIELD_DISP32},
 };

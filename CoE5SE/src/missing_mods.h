@@ -499,6 +499,7 @@ static int installMissingModsHooks(int *wanted) {
         writeLog("missing_mods_hooks_skipped", "reason=no_near_page");
         return 0;
     }
+    makePagesReadExecute(stubs, 0x1000);
     loadGameOpenHooked = redirectCall(RVA_LOAD_GAME_FOPEN_CALL, RVA_FOPEN, stubs, (void *)loadGameOpenHook, "load_game_fopen", NULL);
     return loadGameOpenHooked + redirectCall(RVA_LOAD_GAME_MOD_CRC_READ, RVA_FREAD, stubs + MISSING_MODS_STUB_SIZE,
                                              (void *)readSavedModChecksumHook, "load_game_mod_checksum", NULL);
@@ -531,6 +532,7 @@ static int installSaveModListHooks(void) {
         writeLog("save_mod_list_hooks_skipped", "reason=no_near_page");
         return 0;
     }
+    makePagesReadExecute(stubs, 0x1000);
     int ok = hookSavedModListWrites(RVA_SAVE_GAME_MOD_CRC_WRITE, RVA_SAVE_GAME_MOD_NAME_WRITE, stubs, "save_game_mod_checksum",
                                     "save_game_mod_name");
     saveModListHooked = ok == 2;

@@ -1,5 +1,4 @@
 // The interface between the game-folder stub and CoE5SE's loader.
-
 #pragma once
 #include <stdint.h>
 #include <string.h>
@@ -13,14 +12,14 @@
 #define LOADER_ENTRY_NAME  "coe5seLoaderStart"
 #define LOADER_START_VERSION 1
 
-// CoE5SE's mod name and its former Workshop items.
+// CoE5SE's mod name and Workshop items.
 #define COE5SE_MOD                "CoE5SE"
 #define COE5SE_WORKSHOP_ID        "3809951834"
 #define COE5SE_BACKUP_WORKSHOP_ID "3812078572"
 static const char *const COE5SE_WORKSHOP_IDS[] __attribute__((unused)) = {COE5SE_WORKSHOP_ID, COE5SE_BACKUP_WORKSHOP_ID};
 #define COE5SE_WORKSHOP_ID_COUNT 2
 
-// 1 if `item` (a Workshop folder's name) is one of CoE5SE's items.
+// 1 if `item` is one of CoE5SE's Workshop items.
 static __attribute__((unused)) int isCoe5seWorkshopItem(const char *item) {
     for (int i = 0; i < COE5SE_WORKSHOP_ID_COUNT; i++)
         if (!strcmp(item, COE5SE_WORKSHOP_IDS[i])) return 1;
@@ -48,42 +47,41 @@ static __attribute__((unused)) int findWorkshopRoot(const char *gameDir, char *o
 // The loader's list of the plugins it found.
 #define PLUGINS_FOUND_FILE "plugins_found.txt"
 typedef enum {
-    PLUGIN_FOUND,        // found in an enabled mod's folder, not tried yet
-    PLUGIN_CONFLICT,     // another folder claims its mod name or its file name
-    PLUGIN_INACTIVE,     // not tried, because CoE5SE's own DLL didn't load
-    PLUGIN_REFUSED,      // CoE5SE refused it before loading, such as built for another game version
-    PLUGIN_FAILED,       // unreadable, or the load failed
-    PLUGIN_UNAPPROVED,   // its hash isn't approved and the player said No
+    PLUGIN_FOUND,
+    PLUGIN_CONFLICT,
+    PLUGIN_INACTIVE,
+    PLUGIN_REFUSED,
+    PLUGIN_FAILED,
+    PLUGIN_UNAPPROVED,
     PLUGIN_LOADED,
     PLUGIN_STATE_COUNT
 } PluginState;
 static const char *const PLUGIN_STATE_NAMES[PLUGIN_STATE_COUNT] __attribute__((unused)) = {
     "found", "conflict", "inactive", "refused", "failed", "unapproved", "loaded"};
 
-// The state a PLUGIN_STATE_NAMES word names, or PLUGIN_STATE_COUNT for a word this build doesn't know.
+// The state a word names; PLUGIN_STATE_COUNT for an unknown one.
 static __attribute__((unused)) PluginState pluginStateNamed(const char *word) {
     for (int s = 0; s < PLUGIN_STATE_COUNT; s++)
         if (!strcmp(PLUGIN_STATE_NAMES[s], word)) return (PluginState)s;
     return PLUGIN_STATE_COUNT;
 }
 
-// Where glu32.dll called the loader from (LoaderStart.startedFrom).
-#define LOADER_STARTED_AT_MAIN_READY 0   // CoE5.exe's SDL_SetMainReady call: outside the loader lock
-#define LOADER_STARTED_IN_DLLMAIN    1   // glu32.dll's DllMain, when the exe doesn't import SDL_SetMainReady
-#define LOADER_STARTED_IN_CONSTRUCTOR 2  // the Mac stub's constructor, which dyld runs before the game's main
+// Where the stub called the loader from.
+#define LOADER_STARTED_AT_MAIN_READY 0
+#define LOADER_STARTED_IN_DLLMAIN    1
+#define LOADER_STARTED_IN_CONSTRUCTOR 2
+#define LOADER_STARTED_AT_SRAND      3
 
 typedef struct LoaderStart {
-    uint32_t size;           // sizeof(LoaderStart) as the caller's build has it
-    uint32_t version;        // LOADER_START_VERSION of the caller's build
-    uint32_t glu32Version;   // the calling stub's GLU32_VERSION or STUB_VERSION
-    uint32_t startedFrom;    // one of the LOADER_STARTED_* values above
-    const char *modDir;      // CoE5SE's mod folder, which glu32.dll picked and loaded the loader DLL from
-    const char *source;      // "local" or "workshop": where modDir is
-    const char *loaderSha256;   // the loader DLL's SHA-256 as lowercase hex, as stubs up to version 7
-                                // approved it; "" from version 8, which no longer hashes the loader
-    const char *userDir;     // from stub version 8: the game's user folder, found by the game's rule
-                             // (approvals.h, findGameUserDir), which the stub read coe5config in
+    uint32_t size;
+    uint32_t version;
+    uint32_t glu32Version;
+    uint32_t startedFrom;
+    const char *modDir;
+    const char *source;
+    const char *loaderSha256;
+    const char *userDir;
 } LoaderStart;
 
-// The loader DLL's entry. It returns 1 when CoE5SE's own DLL loaded, and 0 when nothing did.
+// The loader's entry: 1 when CoE5SE's own DLL loaded, 0 when nothing did.
 typedef int (*LoaderStartFn)(const LoaderStart *start);

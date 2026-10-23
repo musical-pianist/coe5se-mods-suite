@@ -307,7 +307,8 @@ static inline const PluginApi *jazzyConnect(void) {
 
 // Writes a printf-style line to coe5mod.log, tagged with this DLL's file name.
 static inline PRINTF_FORMAT(1, 2) void jazzyLog(const char *fmt, ...) {
-    const PluginApi *connected = jazzyConnect();
+    static const PluginApi *connected;
+    if (!connected) connected = jazzyConnect();
     if (!connected) return;
     char text[1024];
     va_list ap;

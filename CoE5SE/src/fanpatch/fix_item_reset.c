@@ -42,15 +42,8 @@
 
 #define ITEM_TABLE_BYTES   ((size_t)ITEM_MAX * ITEM_STRIDE)
 
-#ifdef __APPLE__
-/* CoE5SE: the Mac build's first bytes of run_enabled_mods and resetmods. */
-static const BYTE SIG_FIND_ALL_MODS[] = { 0xFF,0x43,0x01,0xD1,0xF6,0x57,0x02,0xA9,0xF4,0x4F,0x03,0xA9,0xFD,0x7B,0x04,0xA9 };
-static const BYTE SIG_RESTORE[] = { 0xFC,0x6F,0xBA,0xA9,0xFA,0x67,0x01,0xA9,0xF8,0x5F,0x02,0xA9,0xF6,0x57,0x03,0xA9 };
-#else
-static const BYTE SIG_FIND_ALL_MODS[] = { 0x48,0x89,0x5C,0x24,0x08,0x48,0x89,0x6C,0x24,0x10,0x48,0x89,0x74,0x24,0x18,0x48 };
-static const BYTE SIG_FIND_CALL[]     = { 0xE8 };
-static const BYTE SIG_RESTORE[] = { 0x40,0x57,0x41,0x54,0x41,0x57,0x48,0x81,0xEC,0x10,0x0A,0x00,0x00 };
-#endif
+/* CoE5SE: the signatures (findallmods' and the restore's first bytes, and on Windows the call to
+   findallmods) are checked by CoE5SE's game code hash, fp_game_code_matches. */
 
 typedef void (*VoidFn_t)(void);
 #ifdef __APPLE__
@@ -143,13 +136,7 @@ int fix_item_reset_install(void)
         fp_log("fix item_reset: off in fanpatch.ini");
         return 0;
     }
-    if (
-#ifndef __APPLE__   /* CoE5SE: Mac has no call to findallmods to check */
-        !fp_check_bytes(VA_FIND_ALL_MODS_CALL, SIG_FIND_CALL, sizeof SIG_FIND_CALL, "findallmods call") ||
-        *GAME_PTR(int *, VA_FIND_ALL_MODS_CALL + 1) != (int)(VA_FIND_ALL_MODS - (VA_FIND_ALL_MODS_CALL + 5)) ||
-#endif
-        !fp_check_bytes(VA_FIND_ALL_MODS, SIG_FIND_ALL_MODS, sizeof SIG_FIND_ALL_MODS, "findallmods") ||
-        !fp_check_bytes(VA_RESTORE_TABLES, SIG_RESTORE, sizeof SIG_RESTORE, "table restore")) {
+    if (!fp_game_code_matches("item_reset")) {   /* CoE5SE: the signatures' check */
         fp_log("fix item_reset: NOT installed (code does not match " GAME_VERSION_TEXT ")");
         return 0;
     }

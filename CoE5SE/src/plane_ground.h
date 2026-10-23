@@ -34,11 +34,11 @@ static size_t writePlaneGroundStubWin(unsigned char *stub, const unsigned char *
     return (size_t)(p - stub);
 }
 
+#define PLANE_GROUND_JA_REL 7
 static int patchPlaneGroundLike(void) {
-    static const unsigned char SHIPPED[] = {0x8d, 0x46, 0xfd, 0x83, 0xf8, 0x01, 0x77, 0xcb};
     unsigned char *at = GAME_PTR(RVA_SET_GROUND_PLANE_FOUND);
-    if (memcmp(at, SHIPPED, sizeof SHIPPED)) {
-        writeLog("hook_skipped", "site=plane_ground reason=code_differs");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=plane_ground reason=game_code_differs");
         return 0;
     }
     unsigned char *stub = allocNear(at);
@@ -46,27 +46,21 @@ static int patchPlaneGroundLike(void) {
         writeLog("hook_skipped", "site=plane_ground reason=no_near_page");
         return 0;
     }
-    size_t size = writePlaneGroundStubWin(stub, at, at + 8 + (signed char)SHIPPED[7]);
-    FlushInstructionCache(GetCurrentProcess(), stub, size);
+    writePlaneGroundStubWin(stub, at, at + 8 + (signed char)at[PLANE_GROUND_JA_REL]);
+    makePagesReadExecute(stub, 0x1000);
     unsigned char code[6] = {0xe9, 0, 0, 0, 0, 0x90};
     int rel = (int)(stub - (at + 5));
     memcpy(code + 1, &rel, 4);
-    DWORD old;
-    if (!VirtualProtect(at, sizeof code, PAGE_EXECUTE_READWRITE, &old)) {
+    if (!writeGameCode(at, code, sizeof code)) {
         writeLog("hook_skipped", "site=plane_ground reason=code_unwritable");
         return 0;
     }
-    memcpy(at, code, sizeof code);
-    VirtualProtect(at, sizeof code, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), at, sizeof code);
     return 1;
 }
 #else
-#define PLANE_GROUND_FOUND_SHIPPED 0x11000d99u
-
 // Fills the Mac stub for the match at `at`, placed at `stub`.
 static void writePlaneGroundStubMac(uint32_t code[8], const unsigned char *stub, const unsigned char *at, uint64_t table) {
-    code[0] = PLANE_GROUND_FOUND_SHIPPED;
+    memcpy(&code[0], at, 4);
     code[1] = 0x580000adu;
     code[2] = 0xb87959b9u;
     code[3] = 0x51000f2cu;
@@ -77,10 +71,8 @@ static void writePlaneGroundStubMac(uint32_t code[8], const unsigned char *stub,
 
 static int patchPlaneGroundLike(void) {
     unsigned char *at = GAME_PTR(RVA_SET_GROUND_PLANE_FOUND);
-    uint32_t insn;
-    memcpy(&insn, at, 4);
-    if (insn != PLANE_GROUND_FOUND_SHIPPED) {
-        writeLog("hook_skipped", "site=plane_ground reason=code_differs");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=plane_ground reason=game_code_differs");
         return 0;
     }
     unsigned char *stub = takePadding(32);

@@ -57,35 +57,33 @@ static void finishPlaneArraysMove(unsigned char *const arrays[PLANE_GROUP_COUNT]
 
 #ifndef __APPLE__
 // ---- Windows: the patch ------------------------------------------------------------------------
-// A rewrite whose new value isn't a distance.
+// A rewrite whose new value isn't a distance: `value` written over `valueSize` bytes at rva + fieldOffset.
 typedef struct {
     unsigned int rva;
-    int size, fieldOffset, valueSize;
-    unsigned char shipped[8];
+    int fieldOffset, valueSize;
     int value;
     const char *name;
 } PlaneValueSite;
 
 #define PLANE_KEY_NEXT_STOP_JUMP (RVA_MAP_VIEW_PLANE_LAST_STOP + 3)
 static const PlaneValueSite PLANE_VALUE_SITES[] = {
-    {RVA_PLANE_SAME_SPOT_CAP_CHECK,  3, 2, 1, {0x83, 0xfb, 0x0a},             PLANE_INDEX_LAST_MOVED, "plane_same_spot"},
-    {RVA_RITUAL_PLANESWAP_DST_CHECK, 4, 3, 1, {0x49, 0x83, 0xfe, 0x0a},       PLANE_INDEX_LAST_MOVED, "planeswap_dst"},
-    {RVA_VIEW_PLANE_CLAMP,           5, 1, 4, {0xbb, 0x0a, 0x00, 0x00, 0x00}, PLANE_INDEX_LAST_MOVED, "view_plane_clamp"},
-    {RVA_MAP_DRAW_PLANE_CLAMP,       3, 2, 1, {0x83, 0xfa, 0x0a},             PLANE_INDEX_LAST_MOVED, "map_draw_clamp"},
-    {RVA_MAP_BG_DIRTY_CHECK,         4, 3, 1, {0x41, 0x83, 0xf8, 0x0a},       PLANE_INDEX_LAST_MOVED, "bg_dirty_check"},
-    {RVA_MAP_BG_DIRTY_CHECK_EDITOR,  4, 3, 1, {0x41, 0x83, 0xfb, 0x0b},       PLANE_RECORDS_MOVED,    "bg_dirty_check_editor"},
-    {RVA_MAP_BG_MARK_CHECK,          3, 2, 1, {0x83, 0xfd, 0x0b},             PLANE_RECORDS_MOVED,    "bg_mark_check"},
-    {PLANE_KEY_NEXT_STOP_JUMP,       2, 0, 1, {0x74, 0x2f},                   0x7d,                   "view_next_stop"},
+    {RVA_PLANE_SAME_SPOT_CAP_CHECK,  2, 1, PLANE_INDEX_LAST_MOVED, "plane_same_spot"},
+    {RVA_RITUAL_PLANESWAP_DST_CHECK, 3, 1, PLANE_INDEX_LAST_MOVED, "planeswap_dst"},
+    {RVA_VIEW_PLANE_CLAMP,           1, 4, PLANE_INDEX_LAST_MOVED, "view_plane_clamp"},
+    {RVA_MAP_DRAW_PLANE_CLAMP,       2, 1, PLANE_INDEX_LAST_MOVED, "map_draw_clamp"},
+    {RVA_MAP_BG_DIRTY_CHECK,         3, 1, PLANE_INDEX_LAST_MOVED, "bg_dirty_check"},
+    {RVA_MAP_BG_DIRTY_CHECK_EDITOR,  3, 1, PLANE_RECORDS_MOVED,    "bg_dirty_check_editor"},
+    {RVA_MAP_BG_MARK_CHECK,          2, 1, PLANE_RECORDS_MOVED,    "bg_mark_check"},
+    {PLANE_KEY_NEXT_STOP_JUMP,       0, 1, 0x7d,                   "view_next_stop"},
 };
 
 // The top bar's plane slot width, (free - x - 20) times 1/11: one of 19 instead.
-static const unsigned char PLANE_SLOT_WIDTH_SHIPPED[9] = {0xf3, 0x44, 0x0f, 0x59, 0x0d, 0xa0, 0x92, 0x36, 0x00};
 #define PLANE_SLOT_WIDTH_SIZE   9
 #define PLANE_SLOT_WIDTH_FIELD  5
 #define PLANE_VALUE_SITE_COUNT ((int)(sizeof PLANE_VALUE_SITES / sizeof PLANE_VALUE_SITES[0]))
 #define PLANE_MOVE_SITE_COUNT  (PLANE_TABLE_SITE_COUNT + PLANE_COUNT_SITE_COUNT + PLANE_VALUE_SITE_COUNT + 1)
 
-static struct { unsigned char *at; int value, size; } planeMoveWrites[PLANE_MOVE_SITE_COUNT];
+static struct { unsigned char *at; int value, size, old; } planeMoveWrites[PLANE_MOVE_SITE_COUNT];
 static int planeMoveWriteCount;
 
 static void queuePlaneWrite(unsigned char *at, int value, int size) {
@@ -94,7 +92,7 @@ static void queuePlaneWrite(unsigned char *at, int value, int size) {
     planeMoveWrites[planeMoveWriteCount++].size = size;
 }
 
-// Checks every site against the game's shipped bytes and queues its new field.
+// Queues every site's new field.
 static int queuePlaneTableWrites(unsigned char *const arrays[PLANE_GROUP_COUNT], unsigned char *slotScale) {
     int matched = 0;
     planeMoveWriteCount = 0;
@@ -105,35 +103,27 @@ static int queuePlaneTableWrites(unsigned char *const arrays[PLANE_GROUP_COUNT],
         int field;
         memcpy(&field, at + s->fieldOffset, 4);
         long long moved = field + delta;
-        if (memcmp(at, s->bytes, (size_t)s->fieldOffset + 4) || moved < INT32_MIN || moved > INT32_MAX) {
-            writeLog("plane_table_site_mismatch", "group=%d rva=0x%x out_of_reach=%d", s->group, s->rva, moved < INT32_MIN || moved > INT32_MAX);
+        if (moved < INT32_MIN || moved > INT32_MAX) {
+            writeLog("plane_table_site_mismatch", "group=%d rva=0x%x out_of_reach=1", s->group, s->rva);
             continue;
         }
         queuePlaneWrite(at + s->fieldOffset, (int)moved, 4);
         matched++;
     }
     for (int i = 0; i < PLANE_COUNT_SITE_COUNT; i++) {
-        const PlaneCountSite *s = &PLANE_COUNT_SITES[i];
-        if (memcmp(gameBase + s->rva, s->bytes, 3)) {
-            writeLog("plane_table_site_mismatch", "group=count rva=0x%x", s->rva);
-            continue;
-        }
-        queuePlaneWrite(gameBase + s->rva + 2, PLANE_RECORDS_MOVED, 1);
+        queuePlaneWrite(gameBase + PLANE_COUNT_SITES[i].rva + 2, PLANE_RECORDS_MOVED, 1);
         matched++;
     }
     for (int i = 0; i < PLANE_VALUE_SITE_COUNT; i++) {
         const PlaneValueSite *s = &PLANE_VALUE_SITES[i];
-        if (memcmp(gameBase + s->rva, s->shipped, (size_t)s->size)) {
-            writeLog("plane_table_site_mismatch", "group=value name=%s rva=0x%x", s->name, s->rva);
-            continue;
-        }
         queuePlaneWrite(gameBase + s->rva + s->fieldOffset, s->value, s->valueSize);
         matched++;
     }
     unsigned char *at = gameBase + RVA_TOP_BAR_PLANE_SLOT_WIDTH;
     long long rel = slotScale - (at + PLANE_SLOT_WIDTH_SIZE);
-    if (memcmp(at, PLANE_SLOT_WIDTH_SHIPPED, PLANE_SLOT_WIDTH_SIZE) || rel < INT32_MIN || rel > INT32_MAX)
-        writeLog("plane_table_site_mismatch", "group=value name=top_bar_slot_width rva=0x%x", RVA_TOP_BAR_PLANE_SLOT_WIDTH);
+    if (!gameCodeMatches || rel < INT32_MIN || rel > INT32_MAX)
+        writeLog("plane_table_site_mismatch", "group=value name=top_bar_slot_width rva=0x%x reason=%s", RVA_TOP_BAR_PLANE_SLOT_WIDTH,
+                 gameCodeMatches ? "out_of_reach" : "game_code_differs");
     else {
         queuePlaneWrite(at + PLANE_SLOT_WIDTH_FIELD, (int)rel, 4);
         matched++;
@@ -150,6 +140,10 @@ static const unsigned short PLANE_BLOCK_AT[PLANE_GROUP_COUNT] = {
 _Static_assert(PLANE_RECORDS_MOVED * PLANE_SIZE <= 0x600 && PLANE_RECORDS_MOVED * 8 <= 0x100 && PLANE_RECORDS_MOVED * 4 <= 0x80,
                "the arrays don't overlap");
 static int installPlaneTableMove(void) {
+    if (!gameCodeMatches) {
+        writeLog("plane_table_not_moved", "reason=game_code_differs sites=0 of %d", PLANE_MOVE_SITE_COUNT);
+        return 0;
+    }
     size_t size = 0x1000;
     unsigned char *block = allocNearImage(size);
     if (!block) {
@@ -162,20 +156,28 @@ static int installPlaneTableMove(void) {
     memcpy(block + PLANE_SLOT_SCALE_AT, &slotScale, 4);
     unsigned char *table = arrays[PLANE_GROUP_TABLE];
     int matched = queuePlaneTableWrites(arrays, block + PLANE_SLOT_SCALE_AT);
-    DWORD textProtection = 0;
-    unsigned char *text = gameBase + RVA_TEXT_SECTION;
-    size_t textSize = (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION);
     const char *reason = matched != PLANE_MOVE_SITE_COUNT ? "game_build_differs"
-                         : !VirtualProtect(text, textSize, PAGE_EXECUTE_READWRITE, &textProtection) ? "code_unwritable" : NULL;
+                         : !openGameCode(gameBase + RVA_TEXT_SECTION, (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION)) ? "code_unwritable" : NULL;
     if (reason) {
         writeLog("plane_table_not_moved", "reason=%s sites=%d of %d", reason, matched, PLANE_MOVE_SITE_COUNT);
         VirtualFree(block, 0, MEM_RELEASE);
         return 0;
     }
+    unsigned char *moved[3] = {movedPlaneTable, movedPlaneCameraX, movedPlaneCameraY};
+    unsigned char *movedBuilt = movedPlaneBuilt;
     finishPlaneArraysMove(arrays);
-    for (int i = 0; i < planeMoveWriteCount; i++) memcpy(planeMoveWrites[i].at, &planeMoveWrites[i].value, (size_t)planeMoveWrites[i].size);
-    VirtualProtect(text, textSize, textProtection, &textProtection);
-    FlushInstructionCache(GetCurrentProcess(), text, textSize);
+    for (int i = 0; i < planeMoveWriteCount; i++) {
+        size_t n = (size_t)planeMoveWrites[i].size;
+        memcpy(&planeMoveWrites[i].old, planeMoveWrites[i].at, n);
+        if (writeGameCode(planeMoveWrites[i].at, &planeMoveWrites[i].value, n)) continue;
+        for (int j = i; j >= 0; j--) writeGameCode(planeMoveWrites[j].at, &planeMoveWrites[j].old, (size_t)planeMoveWrites[j].size);
+        closeGameCode();
+        writeLog("plane_table_not_moved", "reason=code_unwritable sites=%d of %d", matched, PLANE_MOVE_SITE_COUNT);
+        movedPlaneTable = moved[0], movedPlaneCameraX = moved[1], movedPlaneCameraY = moved[2], movedPlaneBuilt = movedBuilt;
+        VirtualFree(block, 0, MEM_RELEASE);
+        return 0;
+    }
+    closeGameCode();
     planeTableMoved = 1;
     writeLog("plane_table_moved", "from=%p to=%p rva=0x%llx records=%d sites=%d of %d", (void *)(gameBase + RVA_PLANES), (void *)table,
              (unsigned long long)(table - gameBase), PLANE_RECORDS_MOVED, matched, PLANE_MOVE_SITE_COUNT);
@@ -184,31 +186,32 @@ static int installPlaneTableMove(void) {
 #else
 // ---- Mac: the patch ----------------------------------------------------------------------------
 // The Mac side: the ADRPs move their page, and every other change is one instruction word.
-typedef struct { unsigned int rva; uint32_t shipped, word; const char *name; } PlaneWordSite;
+typedef struct { unsigned int rva; uint32_t mask, value; const char *name; } PlaneWordSite;
 
-#define PLANE_CMP_IMM(word, value) (((word) & ~(0xfffu << 10)) | (uint32_t)(value) << 10)
-#define PLANE_SHARED_ADRP_NOP  0x100516260
-#define PLANE_MOVZ_W(rd, imm16)   (0x52800000u | (uint32_t)(imm16) << 5 | (uint32_t)(rd))
-#define PLANE_MOVK_W16(rd, imm16) (0x72a00000u | (uint32_t)(imm16) << 5 | (uint32_t)(rd))
+#define PLANE_IMM12   (0xfffu << 10)
+#define PLANE_IMM16   (0xffffu << 5)
+#define PLANE_COND    0xfu
+#define PLANE_ADRP(rd, from, to) (0x90000000u | (uint32_t)((((to) >> 12) - ((from) >> 12)) & 3u) << 29 | \
+                                  (uint32_t)(((((to) >> 12) - ((from) >> 12)) >> 2) & 0x7ffffu) << 5 | (uint32_t)(rd))
 #define PLANE_SLOT_OFFSET_BITS 0xbf86bca2u
 #define PLANE_SLOT_SCALE_BITS  0x3d579436u
 static const PlaneWordSite PLANE_WORD_SITES[] = {
-    {RVA_ADDPLANE_CAP_CHECK,          0x71002b1fu, PLANE_CMP_IMM(0x71002b1fu, PLANE_INDEX_LAST_MOVED), "addplane_cap"},
-    {RVA_PLANE_SAME_SPOT_CAP_CHECK,   0x7100281fu, PLANE_CMP_IMM(0x7100281fu, PLANE_INDEX_LAST_MOVED), "plane_same_spot"},
-    {RVA_PLANE_SAME_SPOT_CAP_CHECK + 0x10, 0x7100281fu, PLANE_CMP_IMM(0x7100281fu, PLANE_INDEX_LAST_MOVED), "plane_same_spot_2"},
-    {RVA_RITUAL_PLANESWAP_DST_CHECK,  0xf1002edfu, PLANE_CMP_IMM(0xf1002edfu, PLANE_RECORDS_MOVED), "planeswap_dst"},
-    {MAC(PLANE_SHARED_ADRP_NOP),      0xd503201fu, 0x9008dfe8u, "shared_adrp_restore"},
-    {RVA_VIEW_PLANE_CLAMP,            0x52800149u, PLANE_MOVZ_W(9, PLANE_INDEX_LAST_MOVED), "view_plane_clamp"},
-    {RVA_VIEW_PLANE_CLAMP + 4,        0x7100291fu, PLANE_CMP_IMM(0x7100291fu, PLANE_INDEX_LAST_MOVED), "view_plane_clamp_cmp"},
-    {RVA_MAP_BG_DIRTY_CHECK,          0x7100291fu, PLANE_CMP_IMM(0x7100291fu, PLANE_INDEX_LAST_MOVED), "bg_dirty_check"},
-    {RVA_MAP_BG_DIRTY_CHECK_EDITOR,   0x7100291fu, PLANE_CMP_IMM(0x7100291fu, PLANE_INDEX_LAST_MOVED), "bg_dirty_check_editor"},
-    {RVA_MAP_BG_MARK_CHECK,           0x51002c08u, PLANE_CMP_IMM(0x51002c08u, PLANE_RECORDS_MOVED), "bg_mark_check"},
-    {RVA_MAP_BG_MARK_CHECK + 4,       0x3100311fu, PLANE_CMP_IMM(0x3100311fu, PLANE_RECORDS_MOVED + 1), "bg_mark_check_cmn"},
-    {RVA_MAP_VIEW_PLANE_LAST_STOP + 4, 0x54000800u, 0x5400080au, "view_next_stop"},
-    {RVA_TOP_BAR_PLANE_SLOT_WIDTH,        0x529745e8u, PLANE_MOVZ_W(8, PLANE_SLOT_OFFSET_BITS & 0xffffu), "slot_width_offset_lo"},
-    {RVA_TOP_BAR_PLANE_SLOT_WIDTH + 4,    0x72b7fd08u, PLANE_MOVK_W16(8, PLANE_SLOT_OFFSET_BITS >> 16), "slot_width_offset_hi"},
-    {RVA_TOP_BAR_PLANE_SLOT_WIDTH + 0xc,  0x5285d188u, PLANE_MOVZ_W(8, PLANE_SLOT_SCALE_BITS & 0xffffu), "slot_width_scale_lo"},
-    {RVA_TOP_BAR_PLANE_SLOT_WIDTH + 0x10, 0x72a7b748u, PLANE_MOVK_W16(8, PLANE_SLOT_SCALE_BITS >> 16), "slot_width_scale_hi"},
+    {RVA_ADDPLANE_CAP_CHECK,          PLANE_IMM12, PLANE_INDEX_LAST_MOVED << 10, "addplane_cap"},
+    {RVA_PLANE_SAME_SPOT_CAP_CHECK,   PLANE_IMM12, PLANE_INDEX_LAST_MOVED << 10, "plane_same_spot"},
+    {RVA_PLANE_SAME_SPOT_CAP_CHECK + 0x10, PLANE_IMM12, PLANE_INDEX_LAST_MOVED << 10, "plane_same_spot_2"},
+    {RVA_RITUAL_PLANESWAP_DST_CHECK,  PLANE_IMM12, PLANE_RECORDS_MOVED << 10, "planeswap_dst"},
+    {RVA_MAP_EDITOR_DEPTH_NOP,        0xffffffffu, PLANE_ADRP(8, RVA_MAP_EDITOR_DEPTH_NOP, RVA_MAP_DEPTH), "shared_adrp_restore"},
+    {RVA_VIEW_PLANE_CLAMP,            PLANE_IMM16, PLANE_INDEX_LAST_MOVED << 5, "view_plane_clamp"},
+    {RVA_VIEW_PLANE_CLAMP + 4,        PLANE_IMM12, PLANE_INDEX_LAST_MOVED << 10, "view_plane_clamp_cmp"},
+    {RVA_MAP_BG_DIRTY_CHECK,          PLANE_IMM12, PLANE_INDEX_LAST_MOVED << 10, "bg_dirty_check"},
+    {RVA_MAP_BG_DIRTY_CHECK_EDITOR,   PLANE_IMM12, PLANE_INDEX_LAST_MOVED << 10, "bg_dirty_check_editor"},
+    {RVA_MAP_BG_MARK_CHECK,           PLANE_IMM12, PLANE_RECORDS_MOVED << 10, "bg_mark_check"},
+    {RVA_MAP_BG_MARK_CHECK + 4,       PLANE_IMM12, (PLANE_RECORDS_MOVED + 1) << 10, "bg_mark_check_cmn"},
+    {RVA_MAP_VIEW_PLANE_LAST_STOP + 4, PLANE_COND, 0xa, "view_next_stop"},
+    {RVA_TOP_BAR_PLANE_SLOT_WIDTH,        PLANE_IMM16, (PLANE_SLOT_OFFSET_BITS & 0xffffu) << 5, "slot_width_offset_lo"},
+    {RVA_TOP_BAR_PLANE_SLOT_WIDTH + 4,    PLANE_IMM16, (PLANE_SLOT_OFFSET_BITS >> 16) << 5, "slot_width_offset_hi"},
+    {RVA_TOP_BAR_PLANE_SLOT_WIDTH + 0xc,  PLANE_IMM16, (PLANE_SLOT_SCALE_BITS & 0xffffu) << 5, "slot_width_scale_lo"},
+    {RVA_TOP_BAR_PLANE_SLOT_WIDTH + 0x10, PLANE_IMM16, (PLANE_SLOT_SCALE_BITS >> 16) << 5, "slot_width_scale_hi"},
 };
 #define PLANE_WORD_SITE_COUNT ((int)(sizeof PLANE_WORD_SITES / sizeof PLANE_WORD_SITES[0]))
 #define PLANE_MOVE_SITE_COUNT (PLANE_MAC_TABLE_SITE_COUNT + PLANE_WORD_SITE_COUNT)
@@ -228,7 +231,7 @@ static uint32_t planeGameWord(unsigned int rva) {
     return word;
 }
 
-// Checks every site against the game's shipped words and queues its new word.
+// Queues every site's new word.
 static int queuePlaneTableWrites(unsigned char *const arrays[PLANE_GROUP_COUNT]) {
     int matched = 0;
     planeMoveWriteCount = 0;
@@ -237,7 +240,7 @@ static int queuePlaneTableWrites(unsigned char *const arrays[PLANE_GROUP_COUNT])
         long long pages = ((long long)(uintptr_t)arrays[s->group] >> ADRP_PAGE_SHIFT) -
                           ((long long)(uintptr_t)planeGroupOld(s->group) >> ADRP_PAGE_SHIFT);
         uint32_t moved = 0;
-        if (planeGameWord(s->rva) != s->word || !adrpMovedBy(s->word, pages, &moved)) {
+        if (!adrpMovedBy(planeGameWord(s->rva), pages, &moved)) {
             writeLog("plane_table_site_mismatch", "group=%d va=0x%llx", s->group, s->rva + 0x100000000ULL);
             continue;
         }
@@ -246,11 +249,7 @@ static int queuePlaneTableWrites(unsigned char *const arrays[PLANE_GROUP_COUNT])
     }
     for (int i = 0; i < PLANE_WORD_SITE_COUNT; i++) {
         const PlaneWordSite *s = &PLANE_WORD_SITES[i];
-        if (planeGameWord(s->rva) != s->shipped) {
-            writeLog("plane_table_site_mismatch", "group=value name=%s va=0x%llx", s->name, s->rva + 0x100000000ULL);
-            continue;
-        }
-        queuePlaneWord(s->rva, s->word);
+        queuePlaneWord(s->rva, patchedWord(planeGameWord(s->rva), s->mask, s->value));
         matched++;
     }
     return matched;
@@ -274,6 +273,10 @@ static int writePlaneWords(void) {
 
 // Moves the table, or changes nothing.
 static int installPlaneTableMove(void) {
+    if (!gameCodeMatches) {
+        writeLog("plane_table_not_moved", "reason=game_code_differs sites=0 of %d", PLANE_MOVE_SITE_COUNT);
+        return 0;
+    }
     size_t total = ((size_t)PLANE_GROUP_COUNT * 0x1000 + MAC_PAGE_MASK) & ~(size_t)MAC_PAGE_MASK;
     unsigned char *memory = allocAfterImage(total);
     if (!memory) {

@@ -121,11 +121,11 @@ static int traceFilterState;
 static int installTraceFilter(void) {
     if (traceFilterState) return traceFilterState > 0;
     traceFilterState = -1;
-    static const struct { unsigned int rva, size; const char *code, *head; } FUNCTIONS[] = {
-        {RVA_TRACE, TRACE_PROLOGUE_SIZE, TRACE_PROLOGUE_CODE, "function=trace "},
-        {RVA_TRACE_C, TRACE_PROLOGUE_SIZE, TRACE_PROLOGUE_CODE, "function=trace_c "},
-        {RVA_TRACE_B, TRACE_PROLOGUE_SIZE, TRACE_PROLOGUE_CODE, "function=trace_b "},
-        {RVA_TRACE_ERROR, TRACE_ERROR_PROLOGUE_SIZE, TRACE_ERROR_PROLOGUE_CODE, "function=trace_error "},
+    static const struct { unsigned int rva; const char *head; } FUNCTIONS[] = {
+        {RVA_TRACE, "function=trace "},
+        {RVA_TRACE_C, "function=trace_c "},
+        {RVA_TRACE_B, "function=trace_b "},
+        {RVA_TRACE_ERROR, "function=trace_error "},
     };
     enum { COUNT = sizeof FUNCTIONS / sizeof FUNCTIONS[0] };
     if (!gameBuild) {
@@ -134,8 +134,7 @@ static int installTraceFilter(void) {
     }
     int matched = 0;
     for (int i = 0; i < COUNT; i++)
-        matched += checkGameFunction("trace_filter_check", FUNCTIONS[i].head, FUNCTIONS[i].rva, FUNCTIONS[i].rva + FUNCTIONS[i].size,
-                                     FUNCTIONS[i].code, TRACE_PROLOGUE_CALLS, 1);
+        matched += checkGameFunction("trace_filter_check", FUNCTIONS[i].head);
     if (matched != COUNT) {
         writeLog("trace_filter_installed", "ok=0 of %d reason=game_code_changed", COUNT);
         return 0;
@@ -161,21 +160,18 @@ static int installTraceFilter(void) {
         *p++ = 0xff; *p++ = 0x25; memset(p, 0, 4); p += 4;
         memcpy(p, &hook, 8);
     }
-    FlushInstructionCache(GetCurrentProcess(), page, COUNT * TRACE_STUB_SIZE);
+    makePagesReadExecute(page, 0x1000);
+    int ok = 0;
     for (int i = 0; i < COUNT; i++) {
         unsigned char *fn = gameBase + FUNCTIONS[i].rva, *entry = page + i * TRACE_STUB_SIZE;
         unsigned long long word;
         memcpy(&word, fn, 8);
         unsigned int rel = (unsigned int)(int)(entry - (fn + 5));
         word = (word & 0xffffff0000000000ULL) | (unsigned long long)rel << 8 | 0xe9;
-        DWORD old;
-        VirtualProtect(fn, 8, PAGE_EXECUTE_READWRITE, &old);
-        InterlockedExchange64((volatile LONG64 *)fn, (LONG64)word);
-        VirtualProtect(fn, 8, old, &old);
-        FlushInstructionCache(GetCurrentProcess(), fn, 8);
+        ok += writeGameCode(fn, &word, 8);
     }
-    traceFilterState = 1;
-    writeLog("trace_filter_installed", "ok=%d of %d", COUNT, COUNT);
-    return 1;
+    traceFilterState = ok ? 1 : -1;
+    writeLog("trace_filter_installed", "ok=%d of %d", ok, COUNT);
+    return ok > 0;
 }
 #endif

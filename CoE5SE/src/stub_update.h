@@ -13,6 +13,8 @@
 #define SHIPPED_STUB_VERSION GLU32_VERSION
 #define SHIPPED_STUB_SHA256  SHIPPED_GLU32_SHA256
 #endif
+// The oldest stub a player needs: only an older one is offered the shipped stub. A stub newer than
+#define STUB_NEEDED_VERSION 8
 #define STUB_NEW_FILE     STUB_FILE ".new"
 #define STUB_OLD_FILE     STUB_FILE ".old"
 #define STUB_OFFERED_FILE "stub_update_offered.txt"
@@ -147,7 +149,12 @@ static const char *updateStubAndRestart(const char *shipped, const char *install
     return NULL;
 }
 
-// Once per launch: offers the player a newer stub when CoE5SE's release has one.
+// 1 if a player whose stub is version `running` is offered the shipped stub.
+static int stubOfferWanted(uint32_t running) {
+    return running && running < STUB_NEEDED_VERSION && running < SHIPPED_STUB_VERSION;
+}
+
+// Once per launch: offers the player a newer stub when CoE5SE's release has one they need.
 static void offerStubUpdate(void) {
     char shipped[MAX_PATH], installed[MAX_PATH], fresh[MAX_PATH], old[MAX_PATH], hash[SHA256_HEX_LEN + 1] = "";
     if (!stubUpdatePaths(shipped, installed, fresh, old)) return;
@@ -159,6 +166,11 @@ static void offerStubUpdate(void) {
     uint32_t (*stubVersionOf)(void) = (uint32_t (*)(void))(void *)GetProcAddress(loader, "coe5seStubVersion");
     uint32_t running = stubVersionOf ? stubVersionOf() : 0;
     if (!running || running >= SHIPPED_STUB_VERSION) return;
+    if (!stubOfferWanted(running)) {
+        writeLog("stub_update_skipped", "reason=not_needed running_version=%u version=%d needed=%d", running, SHIPPED_STUB_VERSION,
+                 STUB_NEEDED_VERSION);
+        return;
+    }
     if (!stubFileSha256(installed, hash)) {
         writeLog("stub_update_skipped", "reason=no_stub_in_game_folder path=%s", installed);
         return;

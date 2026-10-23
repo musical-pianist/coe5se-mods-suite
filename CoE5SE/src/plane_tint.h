@@ -92,8 +92,8 @@ extern const unsigned char coe5sePlaneTintCall[];
 #define PLANE_TINT_STUB_WORDS 12
 #define PLANE_TINT_RED_ZONE   0x90
 
-// Fills the Mac stub for the join at `at`, placed at `stub`, whose shipped instruction is `shipped`.
-static void writePlaneTintStubMac(uint32_t code[PLANE_TINT_STUB_WORDS], const unsigned char *stub, const unsigned char *at, uint32_t shipped,
+// Fills the Mac stub for the join at `at`, placed at `stub`, whose instruction there is `moved`.
+static void writePlaneTintStubMac(uint32_t code[PLANE_TINT_STUB_WORDS], const unsigned char *stub, const unsigned char *at, uint32_t moved,
                                   uint64_t routine) {
     code[0] = 0xd10243ffu;
     code[1] = 0xa9007bf0u;
@@ -101,27 +101,28 @@ static void writePlaneTintStubMac(uint32_t code[PLANE_TINT_STUB_WORDS], const un
     code[3] = 0xd63f0200u;
     code[4] = 0xa9407bf0u;
     code[5] = 0x910243ffu;
-    code[6] = shipped;
+    code[6] = moved;
     code[7] = 0x14000000u | ((uint32_t)(((at + 4) - (stub + 28)) >> 2) & 0x3ffffffu);
     code[8] = code[9] = 0xd503201fu;
     memcpy(&code[10], &routine, 8);
 }
 
-static int patchPlaneTintJoin(unsigned int rva, uint32_t shipped, const char *name) {
+// Points the join at `rva` at the stub, which runs the game's instruction there after the routine.
+static int patchPlaneTintJoin(unsigned int rva, const char *name) {
     unsigned char *at = GAME_PTR(rva);
     uint32_t insn;
-    memcpy(&insn, at, 4);
-    if (insn != shipped) {
-        writeLog("hook_skipped", "site=%s reason=code_differs", name);
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=%s reason=game_code_differs", name);
         return 0;
     }
+    memcpy(&insn, at, 4);
     unsigned char *stub = takePadding(sizeof(uint32_t) * PLANE_TINT_STUB_WORDS);
     if (!stub) {
         writeLog("hook_skipped", "site=%s reason=no_padding", name);
         return 0;
     }
     uint32_t code[PLANE_TINT_STUB_WORDS];
-    writePlaneTintStubMac(code, stub, at, shipped, (uint64_t)(uintptr_t)coe5sePlaneTintCall);
+    writePlaneTintStubMac(code, stub, at, insn, (uint64_t)(uintptr_t)coe5sePlaneTintCall);
     uint32_t branch = 0x14000000u | ((uint32_t)((stub - at) >> 2) & 0x3ffffffu);
     if (!writeGameCode(stub, code, sizeof code) || !writeGameCode(at, &branch, 4)) {
         writeLog("hook_skipped", "site=%s reason=code_unwritable", name);
@@ -130,12 +131,9 @@ static int patchPlaneTintJoin(unsigned int rva, uint32_t shipped, const char *na
     return 1;
 }
 
-#define MAP_SCREEN_BLOOD_SUN_DONE_SHIPPED 0xb941b108u
-#define RITUAL_BLOOD_SUN_DONE_SHIPPED     0xaa1803e0u
-
 static int patchPlaneTintUpdates(void) {
-    return patchPlaneTintJoin(RVA_MAP_SCREEN_BLOOD_SUN_DONE, MAP_SCREEN_BLOOD_SUN_DONE_SHIPPED, "map_screen_blood_sun") +
-           patchPlaneTintJoin(RVA_RITUAL_BLOOD_SUN_DONE, RITUAL_BLOOD_SUN_DONE_SHIPPED, "ritual_blood_sun");
+    return patchPlaneTintJoin(RVA_MAP_SCREEN_BLOOD_SUN_DONE, "map_screen_blood_sun") +
+           patchPlaneTintJoin(RVA_RITUAL_BLOOD_SUN_DONE, "ritual_blood_sun");
 }
 #endif
 

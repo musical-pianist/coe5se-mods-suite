@@ -1,15 +1,14 @@
-// Every instruction in CoE5.exe that builds an address in the game's army_list_least_a table, as shipped.
+// Every instruction in CoE5.exe that builds an address in the game's army_list_least_a table.
 #pragma once
 
-#define ARMY_LIST_LEAST_A_SITES_EXE_SHA256 "c894c3d0d208fb3cfa6a5a87964b6c1cf14837ae8caffa1cb4d8a81226aa0bb2"
 #define ARMY_LIST_LEAST_A_TABLE_SITE_COUNT 8
 static const TableMoveSite ARMY_LIST_LEAST_A_TABLE_SITES[ARMY_LIST_LEAST_A_TABLE_SITE_COUNT] = {
-    {0x10457f, 3, TABLE_FIELD_REL32, {0x48, 0x8d, 0x0d, 0x7a, 0x34, 0xe9, 0x11}},
-    {0x104668, 3, TABLE_FIELD_REL32, {0x4c, 0x8d, 0x05, 0x91, 0x33, 0xe9, 0x11}},
-    {0x104714, 3, TABLE_FIELD_REL32, {0x4c, 0x8d, 0x05, 0xe5, 0x32, 0xe9, 0x11}},
-    {0x10482a, 3, TABLE_FIELD_REL32, {0x4c, 0x8d, 0x05, 0xcf, 0x31, 0xe9, 0x11}},
-    {0x11d594, 3, TABLE_FIELD_REL32, {0x48, 0x8d, 0x05, 0x65, 0xa4, 0xe7, 0x11}},
-    {0x11dd0e, 3, TABLE_FIELD_REL32, {0x48, 0x8d, 0x0d, 0xeb, 0x9c, 0xe7, 0x11}},
-    {0x11de9c, 3, TABLE_FIELD_REL32, {0x4c, 0x8d, 0x0d, 0x5d, 0x9b, 0xe7, 0x11}},
-    {0x11df0b, 3, TABLE_FIELD_REL32, {0x4c, 0x8d, 0x25, 0xee, 0x9a, 0xe7, 0x11}},
+    {0x1047bf, 3, TABLE_FIELD_REL32},
+    {0x1048a8, 3, TABLE_FIELD_REL32},
+    {0x104954, 3, TABLE_FIELD_REL32},
+    {0x104a6a, 3, TABLE_FIELD_REL32},
+    {0x11d824, 3, TABLE_FIELD_REL32},
+    {0x11df9e, 3, TABLE_FIELD_REL32},
+    {0x11e12c, 3, TABLE_FIELD_REL32},
+    {0x11e19b, 3, TABLE_FIELD_REL32},
 };

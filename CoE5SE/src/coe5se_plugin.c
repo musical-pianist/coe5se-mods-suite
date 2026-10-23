@@ -522,32 +522,52 @@ static int menuWaitHook(int a, int b) {
 #define GAME_ADDRESSES_SITE_TABLE
 #include "game_addresses.h"
 
+// 1 when the game's code section hashed to its known build's (checkGameCode): every patch of the
+static int gameCodeMatches;
+
 // The sites whose calls are an inlined button_row's layout_new.
 static int isInlinedButtonRowSite(CallSite site) {
     return site == SITE_PARTICIPANTS_BUTTON_ROW || site == SITE_SQUARE_INFO_BUTTON_ROW;
 }
 
 #ifndef __aarch64__
-// Each site's stub is 0x40 bytes, and all of them share two pages near the game's code.
+// Each site's stub is 0x40 bytes of code, and all of them share two read-execute pages near the game's
+typedef struct {
+    void *head;
+    uintptr_t rsp;
+    float xmm12;
+    float xmm13;
+} StubData;
 #define STUB_SIZE  0x40
-#define STUB_HEAD  0x28
-#define STUB_RSP   0x30
-#define STUB_XMM12 0x38
-#define STUB_XMM13 0x3c
 #define STUB_PAGES_BYTES 0x2000
+#define STUB_DATA_BYTES  0x1000
 _Static_assert(SITE_COUNT * STUB_SIZE <= STUB_PAGES_BYTES, "every site's stub must fit the pages allocNearBytes gives");
+_Static_assert(SITE_COUNT * sizeof(StubData) <= STUB_DATA_BYTES, "every site's data must fit the data page");
 static unsigned char *stubPage;
 static int siteInstalled[SITE_COUNT];
 static int setupIsAutomated;
 
 static unsigned char *siteStub(CallSite site) { return stubPage + site * STUB_SIZE; }
+static StubData *siteStubData(CallSite site) { return (StubData *)(stubPage + STUB_PAGES_BYTES) + site; }
+
+// The caller's rsp at the site's call, as on Mac.
+static uintptr_t siteCallerSp(CallSite site) { return siteStubData(site)->rsp + 8; }
 
 // Writes `opcode` and a 32-bit displacement to `slot`, and moves *p past it.
-static void emitRipStore(unsigned char **p, const unsigned char *opcode, int opcodeLen, unsigned char *slot) {
+static void emitRipStore(unsigned char **p, const unsigned char *opcode, int opcodeLen, const void *slot, const unsigned char *runsAt) {
     memcpy(*p, opcode, opcodeLen);
-    int disp = (int)(slot - (*p + opcodeLen + 4));
+    int disp = (int)((const unsigned char *)slot - (runsAt + opcodeLen + 4));
     memcpy(*p + opcodeLen, &disp, 4);
     *p += opcodeLen + 4;
+}
+
+// The stubs' pages: code read-execute, data read-write, within 2 GB of `target`; NULL when there is no room.
+static unsigned char *allocStubPages(unsigned char *target) {
+    unsigned char *pages = allocNearBytes(target, STUB_PAGES_BYTES + STUB_DATA_BYTES);
+    if (!pages) return NULL;
+    makePagesReadExecute(pages, STUB_PAGES_BYTES);
+    makePagesReadWrite(pages + STUB_PAGES_BYTES, STUB_DATA_BYTES);
+    return pages;
 }
 
 // Makes game data in .rdata writable.
@@ -608,41 +628,48 @@ static int installSite(CallSite site) {
         }
     }
     siteThroughSlot[site] = slot != NULL;
-    if (!stubPage && !(stubPage = allocNearBytes(first, STUB_PAGES_BYTES))) {
+    if (!stubPage && !(stubPage = allocStubPages(first))) {
         writeLog("site_skipped", "site=%s reason=no_near_page", info->name);
         return 0;
     }
-    unsigned char *stub = siteStub(site), *p = stub;
+    unsigned char *stub = siteStub(site), code[STUB_SIZE], *p = code;
+    StubData *data = siteStubData(site);
     static const unsigned char MOVSS_XMM12[] = {0xf3, 0x44, 0x0f, 0x11, 0x25};
     static const unsigned char MOVSS_XMM13[] = {0xf3, 0x44, 0x0f, 0x11, 0x2d};
     static const unsigned char MOV_RSP[] = {0x48, 0x89, 0x25};
     static const unsigned char JMP_INDIRECT[] = {0xff, 0x25};
     static const unsigned char MOV_ECX[] = {0x8b, 0x0d};
+#define STUB_RUNS_AT (stub + (p - code))
     if (info->captureMenuFade) {
-        emitRipStore(&p, MOVSS_XMM12, 5, stub + STUB_XMM12);
-        emitRipStore(&p, MOVSS_XMM13, 5, stub + STUB_XMM13);
+        emitRipStore(&p, MOVSS_XMM12, 5, &data->xmm12, STUB_RUNS_AT);
+        emitRipStore(&p, MOVSS_XMM13, 5, &data->xmm13, STUB_RUNS_AT);
     }
-    if (site == SITE_AI_TURN) emitRipStore(&p, MOV_ECX, 2, GAME_PTR(RVA_ACTIVE_PLAYER));
+    if (site == SITE_AI_TURN) emitRipStore(&p, MOV_ECX, 2, GAME_PTR(RVA_ACTIVE_PLAYER), STUB_RUNS_AT);
     if (site == SITE_GAME_START) {
         static const unsigned char ZERO_ECX_EDX[] = {0x31, 0xc9, 0x31, 0xd2};
         memcpy(p, ZERO_ECX_EDX, sizeof ZERO_ECX_EDX);
         p += sizeof ZERO_ECX_EDX;
     }
-    emitRipStore(&p, MOV_RSP, 3, stub + STUB_RSP);
-    emitRipStore(&p, JMP_INDIRECT, 2, stub + STUB_HEAD);
-    void *gameTarget = site == SITE_GAME_START ? (void *)gameStartPrepOnce : target;
-    memcpy(stub + STUB_HEAD, &gameTarget, 8);
+    emitRipStore(&p, MOV_RSP, 3, &data->rsp, STUB_RUNS_AT);
+    emitRipStore(&p, JMP_INDIRECT, 2, &data->head, STUB_RUNS_AT);
+#undef STUB_RUNS_AT
+    data->head = site == SITE_GAME_START ? (void *)gameStartPrepOnce : target;
+    if (!writeGameCode(stub, code, (size_t)(p - code))) {
+        writeLog("site_skipped", "site=%s reason=code_unwritable", info->name);
+        return 0;
+    }
 
+    unsigned char saved[MAX_SITE_CALLS + 1][6];
     for (int i = 0; siteCallAt(site, i); i++) {
-        unsigned char *call = siteCallAt(site, i), code[6] = {0xe8, 0, 0, 0, 0, 0x90};
+        unsigned char *call = siteCallAt(site, i), callCode[6] = {0xe8, 0, 0, 0, 0, 0x90};
         size_t size = slot ? 6 : 5;
         rel = (int)(stub - (call + 5));
-        memcpy(code + 1, &rel, 4);
-        DWORD old;
-        VirtualProtect(call, size, PAGE_EXECUTE_READWRITE, &old);
-        memcpy(call, code, size);
-        VirtualProtect(call, size, old, &old);
-        FlushInstructionCache(GetCurrentProcess(), call, size);
+        memcpy(callCode + 1, &rel, 4);
+        memcpy(saved[i], call, size);
+        if (writeGameCode(call, callCode, size)) continue;
+        while (--i >= 0) writeGameCode(siteCallAt(site, i), saved[i], size);
+        writeLog("site_skipped", "site=%s reason=code_unwritable address=%p", info->name, call);
+        return 0;
     }
     if (site == SITE_GAME_START) removeGameStartOnceJump();
     siteInstalled[site] = 1;
@@ -657,15 +684,21 @@ static int setupIsAutomated;
 // ---- Multiplayer gate -----------------------------------------------------------------------
 // No plugin runs in network games.
 #ifndef __aarch64__
-#define GATE_SIZE      0x60
-#define GATE_HOOK      0x50
-#define GATE_NEXT      0x58
-#define GATE_PAGE_SIZE 0x10000
+#define GATE_SIZE       0x50
+#define GATE_PAGE_SIZE  0x10000
+#define GATES_PER_PAGE  (GATE_PAGE_SIZE / GATE_SIZE)
+#define GATE_DATA_BYTES 0x4000
+typedef struct { void *hook, *next; } GateData;
+_Static_assert(GATES_PER_PAGE * sizeof(GateData) <= GATE_DATA_BYTES, "every gate's data must fit its block");
 static unsigned char *gatePage;
 static size_t gatePageUsed = GATE_PAGE_SIZE;
 static void *volatile enteredGateAddress;
 static void *enteredGate(void) { return enteredGateAddress; }
-static void setGateNext(void *gate, void *next) { memcpy((unsigned char *)gate + GATE_NEXT, &next, 8); }
+static GateData *gateData(void *gate) {
+    uintptr_t at = (uintptr_t)gate, block = at & ~(uintptr_t)(GATE_PAGE_SIZE - 1);
+    return (GateData *)(block + GATE_PAGE_SIZE) + (at - block) / GATE_SIZE;
+}
+static void setGateNext(void *gate, void *next) { gateData(gate)->next = next; }
 #endif
 
 // Returns the loaded module (EXE or DLL) that holds `address`, or NULL.
@@ -710,16 +743,9 @@ static HMODULE callingPlugin(void *returnAddress) {
 #endif
 
 #ifndef __aarch64__
-// Builds a gate that jumps to `next` in a network game and to `hook` otherwise.
-static void *makeGate(void *hook, void *next) {
-    if (gatePageUsed + GATE_SIZE > GATE_PAGE_SIZE) {
-        unsigned char *page = VirtualAlloc(NULL, GATE_PAGE_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-        if (!page) return NULL;
-        gatePage = page;
-        gatePageUsed = 0;
-    }
-    unsigned char *gate = gatePage + gatePageUsed, *p = gate, *fixups[3];
-    gatePageUsed += GATE_SIZE;
+// Writes a gate's code at `gate`, in a block that is still writable.
+static void writeGateCode(unsigned char *gate) {
+    unsigned char *p = gate, *fixups[3];
     const struct { unsigned int rva; unsigned char jcc; } checks[3] = {
         {RVA_NET_CLIENT, 0x7f}, {RVA_NET_SERVER, 0x75}, {RVA_NET_LOBBY, 0x75},
     };
@@ -732,13 +758,29 @@ static void *makeGate(void *hook, void *next) {
     uintptr_t self = (uintptr_t)gate, entered = (uintptr_t)&enteredGateAddress;
     *p++ = 0x48; *p++ = 0xb8; memcpy(p, &self, 8); p += 8;
     *p++ = 0x48; *p++ = 0xa3; memcpy(p, &entered, 8); p += 8;
-    unsigned char *hookSlot = gate + GATE_HOOK, *nextSlot = gate + GATE_NEXT;
-    emitRipStore(&p, (const unsigned char[]){0xff, 0x25}, 2, hookSlot);
+    GateData *data = gateData(gate);
+    emitRipStore(&p, (const unsigned char[]){0xff, 0x25}, 2, &data->hook, p);
     unsigned char *skip = p;
-    emitRipStore(&p, (const unsigned char[]){0xff, 0x25}, 2, nextSlot);
+    emitRipStore(&p, (const unsigned char[]){0xff, 0x25}, 2, &data->next, p);
     for (int i = 0; i < 3; i++) *fixups[i] = (unsigned char)(skip - (fixups[i] + 1));
-    memcpy(hookSlot, &hook, 8);
-    memcpy(nextSlot, &next, 8);
+}
+
+// Builds a gate that jumps to `next` in a network game and to `hook` otherwise.
+static void *makeGate(void *hook, void *next) {
+    if (gatePageUsed + GATE_SIZE > GATE_PAGE_SIZE) {
+        unsigned char *page = VirtualAlloc(NULL, GATE_PAGE_SIZE + GATE_DATA_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!page) return NULL;
+        for (int i = 0; i < GATES_PER_PAGE; i++) writeGateCode(page + i * GATE_SIZE);
+        makePagesReadExecute(page, GATE_PAGE_SIZE);
+        makePagesReadWrite(page + GATE_PAGE_SIZE, GATE_DATA_BYTES);
+        gatePage = page;
+        gatePageUsed = 0;
+    }
+    unsigned char *gate = gatePage + gatePageUsed;
+    gatePageUsed += GATE_SIZE;
+    GateData *data = gateData(gate);
+    data->hook = hook;
+    data->next = next;
     return gate;
 }
 #endif
@@ -798,7 +840,7 @@ static void **siteHeadSlot(CallSite site) {
 #ifdef __aarch64__
     return siteHead(site);
 #else
-    return (void **)(siteStub(site) + STUB_HEAD);
+    return &siteStubData(site)->head;
 #endif
 }
 
@@ -818,13 +860,6 @@ static int saveGameToOpenFile(const char *path, const char *name);
 
 // GAME_START in every game.
 #define GAME_START_ONCE_JNE 0x12
-// Whether play_game's code at `test` is the done test and jne CoE5SE removes.
-static __attribute__((unused)) int gameStartOnceCodeOk(const unsigned char *test, const unsigned char *flag) {
-    int disp;
-    memcpy(&disp, test + 2, 4);
-    return test[0] == 0x39 && test[1] == 0x35 && test + 6 + disp == flag && test[GAME_START_ONCE_JNE] == 0x75 &&
-           test[GAME_START_ONCE_JNE + 1] == 0x05 && test[GAME_START_ONCE_JNE + 2] == 0xe8;
-}
 #ifndef __aarch64__
 // GAME_START's game end on Windows: game_start_prep while it hasn't run in this launch.
 static void gameStartPrepOnce(void) {
@@ -832,20 +867,16 @@ static void gameStartPrepOnce(void) {
 }
 // installSite's step for GAME_START before it points the call at the stub.
 static int checkGameStartOnceCode(void) {
-    if (gameStartOnceCodeOk(GAME_PTR(RVA_GAME_START_ONCE_TEST), GAME_PTR(RVA_GAME_START_PREP_DONE))) return 1;
-    writeLog("game_start_once_check", "ok=0 reason=not_the_expected_code address=%p", (void *)GAME_PTR(RVA_GAME_START_ONCE_TEST));
+    if (gameCodeMatches) return 1;
+    writeLog("game_start_once_check", "ok=0 reason=game_code_differs address=%p", (void *)GAME_PTR(RVA_GAME_START_ONCE_TEST));
     return 0;
 }
 // Removes play_game's jne over the GAME_START call, once the call goes to the site's stub.
 static void removeGameStartOnceJump(void) {
     unsigned char *jne = GAME_PTR(RVA_GAME_START_ONCE_TEST) + GAME_START_ONCE_JNE;
     static const unsigned char NOP2[] = {0x66, 0x90};
-    DWORD old;
-    VirtualProtect(jne, sizeof NOP2, PAGE_EXECUTE_READWRITE, &old);
-    memcpy(jne, NOP2, sizeof NOP2);
-    VirtualProtect(jne, sizeof NOP2, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), jne, sizeof NOP2);
-    writeLog("game_start_once_removed", "ok=1 address=%p", (void *)jne);
+    int ok = writeGameCode(jne, NOP2, sizeof NOP2);
+    writeLog("game_start_once_removed", "ok=%d address=%p", ok, (void *)jne);
 }
 #endif
 
@@ -1013,370 +1044,9 @@ static int isNetworkGame(void) {
 #endif
 }
 
-// ---- Restart prompt after the Mods screen -----------------------------------------------------
-// Turning a mod with a DLL or a script on or off takes effect after a restart.
-static struct CodeMod { char folder[MAX_PATH]; int enabled; } *codeMods;
-static int codeModCount, codeModCapacity, codeModSnapshotFailed;
-static u64 (*nextModsScreen)(u64, u64, u64, u64);
+#include "restart_prompt.h"
 
-// A mod's file names: <ModName>.c5m and its sidecar, <ModName>.c5se.
-#define MOD_FILE_SUFFIX ".c5m"
-#define SIDECAR_SUFFIX  ".c5se"
-
-// A .c5m line that starts with #!@ holds a line the sidecar could hold.
-#define SIDECAR_LINE_PREFIX "#!@"
-
-// Where the text of a #!@ line starts, past the prefix, or NULL when `line` isn't one.
-static const char *sidecarLineText(const char *line) {
-    while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n') line++;
-    size_t n = sizeof SIDECAR_LINE_PREFIX - 1;
-    return strncmp(line, SIDECAR_LINE_PREFIX, n) ? NULL : line + n;
-}
-
-// The folder of mod `mod`.
-static const char *modFolder(int mod) {
-    return (const char *)(gameBase + RVA_MOD_FOLDERS + (size_t)mod * MOD_RECORD_SIZE);
-}
-
-static const char *modName(int mod);
-
-static int modEnabled(int mod) {
-    return *(short *)(gameBase + RVA_MOD_NAMES + (size_t)mod * MOD_RECORD_SIZE + MOD_RECORD_ENABLED) != 0;
-}
-
-// Turns mod `mod` on (1) or off (0) as the game's own writers do.
-static void setModEnabled(int mod, int on) {
-    *(short *)(gameBase + RVA_MOD_NAMES + (size_t)mod * MOD_RECORD_SIZE + MOD_RECORD_ENABLED) = (short)(on != 0);
-}
-
-static int folderHasPlugin(const char *dir) {
-    char pattern[MAX_PATH];
-    if (!buildPath(pattern, sizeof pattern, __func__, "%s" PATH_SEP "*" PLUGIN_SUFFIX, dir)) return 0;
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern, &fd);
-    if (h == INVALID_HANDLE_VALUE) return 0;
-    FindClose(h);
-    return 1;
-}
-
-// Whether mod `mod` has a script, <folder>/<name>.lua.
-static int modHasScript(int mod) {
-    char path[MAX_PATH];
-    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s.lua", modFolder(mod), modName(mod))) return 0;
-    FILE *f = fopen(path, "rb");
-    if (f) fclose(f);
-    return f != NULL;
-}
-
-static int modHasCode(int mod) {
-    return folderHasPlugin(modFolder(mod)) || modHasScript(mod);
-}
-
-static void takeCodeModSnapshot(void) {
-    codeModCount = 0;
-    codeModSnapshotFailed = 0;
-    for (int m = 0; m <= G32(RVA_MOD_LAST_INDEX); m++) {
-        if (!modHasCode(m)) continue;
-        if (!growList((void **)&codeMods, &codeModCapacity, codeModCount + 1, sizeof codeMods[0])) {
-            codeModSnapshotFailed = 1;
-            writeLog("mods_with_code_snapshot_failed", "reason=out_of_memory count=%d", codeModCount);
-            return;
-        }
-        snprintf(codeMods[codeModCount].folder, MAX_PATH, "%s", modFolder(m));
-        codeMods[codeModCount++].enabled = modEnabled(m);
-    }
-}
-
-// Whether a mod with code (modHasCode) was turned on or off since the snapshot.
-static int codeModsChanged(void) {
-    if (codeModSnapshotFailed) return 0;
-    int seen = 0;
-    for (int m = 0; m <= G32(RVA_MOD_LAST_INDEX); m++) {
-        if (!modHasCode(m)) continue;
-        int k = 0;
-        while (k < codeModCount && _stricmp(codeMods[k].folder, modFolder(m))) k++;
-        if (k == codeModCount) {
-            if (modEnabled(m)) return 1;
-            continue;
-        }
-        if (codeMods[k].enabled != modEnabled(m)) return 1;
-        seen++;
-    }
-    for (int k = 0; k < codeModCount; k++)
-        if (codeMods[k].enabled) seen--;
-    return seen < 0;
-}
-
-// A mod with a DLL that is on now but wasn't at the snapshot: its index, or -1.
-static int dllModOnSinceSnapshot(void) {
-    if (codeModSnapshotFailed) return -1;
-    for (int m = 0; m <= G32(RVA_MOD_LAST_INDEX); m++) {
-        if (!modEnabled(m) || !folderHasPlugin(modFolder(m))) continue;
-        int k = 0;
-        while (k < codeModCount && _stricmp(codeMods[k].folder, modFolder(m))) k++;
-        if (k == codeModCount || !codeMods[k].enabled) return m;
-    }
-    return -1;
-}
-
-#ifdef __APPLE__
-// Starts the game again and exits this copy, logging `reason`.
-static void relaunchGame(const char *reason) {
-    char exe[MAX_PATH];
-    GetModuleFileNameA(NULL, exe, sizeof exe);
-    pid_t pid;
-    int error = posix_spawn(&pid, exe, NULL, NULL, *_NSGetArgv(), *_NSGetEnviron());
-    if (error) {
-        writeLog("restart_failed", "error=%d", error);
-        return;
-    }
-    writeLog("restarting", "reason=%s", reason);
-    exit(0);
-}
-#else
-// Starts CoE5.exe again with the same command line, and exits this copy.
-static void relaunchGame(const char *reason) {
-    char exe[MAX_PATH], dir[MAX_PATH], cmd[2048];
-    GetModuleFileNameA(NULL, exe, sizeof exe);
-    snprintf(dir, sizeof dir, "%s", exe);
-    char *slash = strrchr(dir, '\\');
-    if (slash) *slash = '\0';
-    snprintf(cmd, sizeof cmd, "%s", GetCommandLineA());
-    STARTUPINFOA si;
-    ZeroMemory(&si, sizeof si);
-    si.cb = sizeof si;
-    PROCESS_INFORMATION pi;
-    if (!CreateProcessA(exe, cmd, NULL, NULL, FALSE, 0, NULL, dir, &si, &pi)) {
-        writeLog("restart_failed", "error=%lu", GetLastError());
-        return;
-    }
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    writeLog("restarting", "reason=%s", reason);
-    ExitProcess(0);
-}
-#endif
-
-// Runs after the Mods screen, and offers a restart when a mod with a DLL or a script changed.
-static u64 modsScreenWrapper(u64 a1, u64 a2, u64 a3, u64 a4) {
-    unsigned int readingsBefore = settingsPassCount(), spellPassesBefore = spellPassCount();
-    u64 result = nextModsScreen(a1, a2, a3, a4);
-    rereadSettingsWithoutPass(readingsBefore);
-    spellsAfterModsScreen(spellPassesBefore);
-    if (!codeModsChanged()) return result;
-    writeLog("mods_with_code_changed", "count=%d", codeModCount);
-    if (messageBox("CoE5SE: Restart needed", "Mod with DLL or script turned on or off.\nRestart required. Restart now?",
-                   "Yes", "No", 0, 0, 0) == 1)
-        relaunchGame("mods_with_code_changed");
-    takeCodeModSnapshot();
-    return result;
-}
-
-// Writes the last folder and the file name of a path as "<folder>\<file>".
-static void folderAndFile(const char *path, char *out, size_t outSize) {
-    char copy[MAX_PATH];
-    out[0] = '\0';
-    if (!buildPath(copy, sizeof copy, __func__, "%s", path)) return;
-    for (char *c = copy; *c; c++) if (*c == '/') *c = '\\';
-    char *file = strrchr(copy, '\\');
-    if (!file) {
-        buildPath(out, outSize, __func__, "%s", copy);
-        return;
-    }
-    *file = '\0';
-    char *folder = strrchr(copy, '\\');
-    buildPath(out, outSize, __func__, "%s\\%s", folder ? folder + 1 : copy, file + 1);
-}
-
-// One line of plugins_found.txt: name|source|state|path|sha256.
-typedef struct {
-    char name[MAX_PATH], source[16], path[MAX_PATH], hash[SHA256_HEX_LEN + 1];
-    PluginState state;
-} FoundLine;
-#define FOUND_LINE_MAX (3 * MAX_PATH)
-
-// Splits `line` at its |s into *out.
-static int readFoundLine(char *line, FoundLine *out) {
-    line[strcspn(line, "\r\n")] = '\0';
-    char *field[5] = {line};
-    int n = 1;
-    for (char *c = line; *c && n < 5; c++)
-        if (*c == '|') {
-            *c = '\0';
-            field[n++] = c + 1;
-        }
-    if (n < 4) return 0;
-    snprintf(out->name, sizeof out->name, "%s", field[0]);
-    snprintf(out->source, sizeof out->source, "%s", field[1]);
-    out->state = pluginStateNamed(field[2]);
-    snprintf(out->path, sizeof out->path, "%s", field[3]);
-    snprintf(out->hash, sizeof out->hash, "%s", n > 4 ? field[4] : "");
-    return 1;
-}
-
-// Whether the loader saw this plugin at launch, in any state in plugins_found.txt.
-static int foundAtLaunch(const char *path) {
-    typedef char FoundPath[MAX_PATH];
-    static FoundPath *seen;
-    static int seenCount = -1, seenCapacity;
-    if (seenCount < 0) {
-        seenCount = 0;
-        static char line[FOUND_LINE_MAX];
-        char file[MAX_PATH];
-        FoundLine found;
-        FILE *f = coe5seUserFile(PLUGINS_FOUND_FILE, file, sizeof file) ? fopen(file, "r") : NULL;
-        while (f && fgets(line, sizeof line, f)) {
-            if (!readFoundLine(line, &found)) continue;
-            if (!growList((void **)&seen, &seenCapacity, seenCount + 1, sizeof seen[0])) break;
-            folderAndFile(found.path, seen[seenCount], MAX_PATH);
-            if (seen[seenCount][0]) seenCount++;
-        }
-        if (f) fclose(f);
-    }
-    char key[MAX_PATH];
-    folderAndFile(path, key, sizeof key);
-    for (int i = 0; key[0] && i < seenCount; i++)
-        if (!_stricmp(seen[i], key)) return 1;
-    return 0;
-}
-
-// Whether mod `mod`'s folder has a *.c5plugin.dll that was turned on after launch.
-static int modHasUnloadedPlugin(int mod) {
-    if (mod < 0 || mod > G32(RVA_MOD_LAST_INDEX)) return 0;
-    const char *dir = (const char *)(gameBase + RVA_MOD_FOLDERS + (size_t)mod * MOD_RECORD_SIZE);
-    char pattern[MAX_PATH], path[MAX_PATH];
-    if (!buildPath(pattern, sizeof pattern, __func__, "%s" PATH_SEP "*" PLUGIN_SUFFIX, dir)) return 0;
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern, &fd);
-    if (h == INVALID_HANDLE_VALUE) return 0;
-    int unloaded = 0;
-    do {
-        if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s", dir, fd.cFileName)) unloaded = 1;
-        else unloaded = GetModuleHandleA(path) == NULL && !foundAtLaunch(path);
-    } while (!unloaded && FindNextFileA(h, &fd));
-    FindClose(h);
-    return unloaded;
-}
-
-// Whether any enabled mod has a DLL that hasn't loaded, because it was turned on this session.
-static int anyEnabledModWaitsForItsPlugin(void) {
-    for (int m = 0; m <= G32(RVA_MOD_LAST_INDEX); m++)
-        if (modEnabled(m) && modHasUnloadedPlugin(m)) return 1;
-    return 0;
-}
-
-// isGameC5mWord's answer from a hash table.
-#define GAME_WORD_SLOTS 2048
-_Static_assert(sizeof GAME_C5M_WORDS / sizeof GAME_C5M_WORDS[0] * 2 <= GAME_WORD_SLOTS, "GAME_WORD_SLOTS is too small");
-static short gameWordSlots[GAME_WORD_SLOTS];
-
-static unsigned int gameWordHash(const char *lower) {
-    unsigned int h = 2166136261u;
-    for (; *lower; lower++) h = (h ^ (unsigned char)*lower) * 16777619u;
-    return h;
-}
-
-static int isGameWord(const char *word) {
-    static int built;
-    if (!built) {
-        for (size_t i = 0; i < sizeof GAME_C5M_WORDS / sizeof GAME_C5M_WORDS[0]; i++) {
-            unsigned int h = gameWordHash(GAME_C5M_WORDS[i]) & (GAME_WORD_SLOTS - 1);
-            while (gameWordSlots[h]) h = (h + 1) & (GAME_WORD_SLOTS - 1);
-            gameWordSlots[h] = (short)(i + 1);
-        }
-        built = 1;
-    }
-    char lower[64];
-    size_t n = strlen(word);
-    if (n >= sizeof lower) return isGameC5mWord(word);
-    for (size_t i = 0; i <= n; i++) lower[i] = word[i] >= 'A' && word[i] <= 'Z' ? (char)(word[i] - 'A' + 'a') : word[i];
-    for (unsigned int h = gameWordHash(lower) & (GAME_WORD_SLOTS - 1); gameWordSlots[h]; h = (h + 1) & (GAME_WORD_SLOTS - 1))
-        if (!strcmp(GAME_C5M_WORDS[gameWordSlots[h] - 1], lower)) return 1;
-    return 0;
-}
-
-// Wraps each .c5m line outside an event.
-static int modCommandMod = -1, modCommandLevel = -1;
-static void modCommandHook(const char *line, int mod, int level) {
-    modCommandMod = mod;
-    modCommandLevel = level;
-    if (mod >= 0 && mod <= G32(RVA_MOD_LAST_INDEX)) noteModLine(modName(mod), level);
-    size_t len = strcspn(line, " \t");
-    if (refusedRitualLine(line, len, mod, level)) return;
-    if (refusedTableLine(line, len, mod, level)) return;
-    if (spellLineHook(line, len, mod, level)) return;
-    line = spellPathLineHook(line, len, mod, level);
-    if (!line) return;
-    line = offsetNameLineHook(line, len, mod, level);
-    if (!line) return;
-    line = nameListLineHook(line, len, mod, level);
-    if (!line) return;
-    len = strcspn(line, " \t");
-    line = planeWordLineHook(line, len, mod, level);
-    if (!line) return;
-    len = strcspn(line, " \t");
-    line = terrainLooksLineHook(line, len, mod, level);
-    if (!line) return;
-    if (settingLineHook(line, len, mod, level)) return;
-    if (flagOffLineHook(line, len, mod, level)) return;
-    weaponTraitLineHook(line, len, level);
-    for (int i = 0; i < modCommandCount; i++) {
-        if (strlen(modCommands[i].name) != len || strncmp(modCommands[i].name, line, len)) continue;
-        const char *args = line + len;
-        while (*args == ' ' || *args == '\t') args++;
-        if (!isNetworkGame() || runsInNetworkGames((void *)modCommands[i].handler))
-            modCommands[i].handler(args, mod, level);
-        return;
-    }
-    char word[64];
-    snprintf(word, sizeof word, "%.*s", (int)(len < sizeof word ? len : sizeof word - 1), line);
-    if (word[0] && !isGameWord(word) && (modHasUnloadedPlugin(mod) || anyEnabledModWaitsForItsPlugin())) {
-        writeLog("mod_command_deferred", "word=%s mod=%d level=%d reason=plugin_not_loaded_yet", word, mod, level);
-        return;
-    }
-    nextModCommand(line, mod, level);
-}
-
-// The .c5m line hook used when the player declined mods on an unknown game build.
-static void declinedModCommandHook(const char *line, int mod, int level) {
-    char word[64];
-    size_t len = strcspn(line, " \t");
-    snprintf(word, sizeof word, "%.*s", (int)(len < sizeof word ? len : sizeof word - 1), line);
-    int pathName = declinedSpellPathLine(word, mod, level);
-    int planeLine = declinedPlaneLine(line, len, mod, level) | declinedTerrainLooksLine(line, len, mod, level);
-    if (word[0] && (!isGameWord(word) || declinedSpellLine(word, mod, level) || pathName || planeLine || declinedOffsetNameLine(line, len, level) || declinedNameListLine(line, len, level) || declinedFlagOffLine(line))) {
-        writeLog("mod_command_skipped", "word=%s mod=%d level=%d reason=plugins_declined", word, mod, level);
-        return;
-    }
-    nextModCommand(line, mod, level);
-}
-
-static int apiAddModCommand(const char *name, ModCommandHandler handler) {
-    if (!name || !name[0]) return REFUSE_API(0, "addModCommand", "no_name", "name=%s", name ? name : "");
-    if (strlen(name) >= sizeof modCommands[0].name || strcspn(name, " \t") != strlen(name))
-        return REFUSE_API(0, "addModCommand", "bad_name", "name=%s", name);
-    if (!handler) return REFUSE_API(0, "addModCommand", "no_callback", "name=%s", name);
-    for (int i = 0; i < modCommandCount; i++)
-        if (!strcmp(modCommands[i].name, name)) return REFUSE_API(0, "addModCommand", "duplicate", "name=%s", name);
-    if (isGameWord(name)) return REFUSE_API(0, "addModCommand", "game_command", "name=%s", name);
-    if (!nextModCommand) return REFUSE_API(0, "addModCommand", "site_unavailable", "name=%s", name);
-    if (!growList((void **)&modCommands, &modCommandCapacity, modCommandCount + 1, sizeof modCommands[0]))
-        return REFUSE_API(0, "addModCommand", "out_of_memory", "name=%s", name);
-    snprintf(modCommands[modCommandCount].name, sizeof modCommands[0].name, "%s", name);
-    modCommands[modCommandCount++].handler = handler;
-    writeLog("mod_command_added", "name=%s", name);
-    return 1;
-}
-
-// The .c5m line that makes a mod stop the game without CoE5SE.
-static void needsCoe5seLine(const char *args, int mod, int level) {
-    (void)args; (void)mod; (void)level;
-}
-
-static void needsCoe5seInit(void) {
-    int ok = apiAddModCommand("needs_glu32.dll_and_CoE5SE_enabled_at_launch", needsCoe5seLine);
-    writeLog("needs_coe5se_word_installed", "ok=%d", ok);
-}
+#include "mod_command_hook.h"
 
 // ---- Observers ---------------------------------------------------------------------------------
 // CoE5SE puts one wrapper on each observe-only site.
@@ -1440,525 +1110,7 @@ static int apiObserve(CallSite site, ObserverFn before, ObserverFn after) {
     return 1;
 }
 
-// ---- Game Menu lines -------------------------------------------------------------------------
-// A Game Menu line: a plugin's C callbacks, or a script's Lua callback.
-#define MENU_LINE_FIRST_ID  9000
-#define MENU_SECTION_NAMED  2
-typedef struct {
-    char label[64], tip[256], sectionName[64];
-    int (*visible)(void);
-    int (*onClick)(void);
-    int lua, section;
-} MenuLine;
-static MenuLine *menuLines;
-static int menuLineCount, menuLineCapacity;
-static int (*nextMenuSectionEnd)(void);
-static int (*nextSettingsSectionEnd)(void);
-static int (*nextGameMenuWait)(int, int);
-static int menuLineClicking;
-
-// ---- Restarting a game (restartGame) ---------------------------------------------------------
-// A mod asks from its Game Menu line's onClick.
-static int restartPhase;
-static int restartAsked;
-static char restartAskedBy[64];
-static int playGameEntries;
-static u64 (*nextPlayGame)(int);
-
-// Names the plugin DLL or script that made an API call.
-static void nameApiCaller(void *caller, char *out, size_t size) {
-    HMODULE m = callingPlugin(caller);
-    const char *luaMod = m && isCoe5seCode((void *)m) ? runningLuaMod() : NULL;
-    if (luaMod) snprintf(out, size, "%.59s.lua", luaMod);
-    else moduleFileName(m ? (const void *)m : caller, out, size);
-}
-
-// The human players in the game: slots whose controller is CONTROLLER_HUMAN.
-static int humanPlayerCount(void) {
-    int humans = 0;
-    for (int i = 0; i < PLAYER_SLOTS; i++) humans += G16(RVA_SLOT_CONTROLLER + 2 * i) == CONTROLLER_HUMAN;
-    return humans;
-}
-
-static int apiRestartGame(void) {
-    if (!menuLineClicking) return REFUSE_API(0, "restartGame", "not_in_game_menu", "phase=%d", restartPhase);
-    if (isNetworkGame()) return REFUSE_API(0, "restartGame", "network_game", "phase=%d", restartPhase);
-    int humans = humanPlayerCount();
-    if (humans != 1) return REFUSE_API(0, "restartGame", "not_single_player", "humans=%d", humans);
-    if (!nextPlayGame) return REFUSE_API(0, "restartGame", "site_unavailable", "site=%s", SITES[SITE_MAIN_MENU_PLAY_GAME].name);
-    restartAsked = 1;
-    nameApiCaller(__builtin_return_address(0), restartAskedBy, sizeof restartAskedBy);
-    return 1;
-}
-
-static int apiRestartPhase(void) { return restartPhase; }
-
-// ---- Loading a save from the Game Menu (coe5.loadGame) ---------------------------------------
-// A script's Game Menu line shows the game's Load Game list in the middle of a game.
-#define LOAD_PATH_SIZE 2500
-static char loadPath[LOAD_PATH_SIZE];
-static int loadAsked;
-static char loadAskedBy[64];
-static int pickingSave;
-
-typedef int (*FileBrowserFn)(const char *title, int a, int mode, int b, int c, const char *folder, const char *const *skips,
-                             const char *name, char *path, int pathSize);
-typedef u64 (*LoadGameFn)(const char *path, int arg);
-
-// Load Game's list, as main_menu shows it.
-static int pickSaveToLoad(char *path) {
-    static const char *const skips[] = {".", "END"};
-    FileBrowserFn browse = (FileBrowserFn)siteEntry(SITE_LOAD_GAME_BROWSER, GAME_PTR(RVA_FILE_BROWSER));
-    for (;;) {
-        int result = browse((const char *)GAME_PTR(RVA_STR_LOAD_GAME_TITLE), -1, 2, 0, 2, (const char *)GAME_PTR(RVA_SAVES_DIR),
-                            skips, (const char *)GAME_PTR(RVA_LOAD_GAME_BROWSER_NAME), path, LOAD_PATH_SIZE);
-        if (result == 0) return 0;
-        if (result > 0) return 1;
-        ((void (*)(int))GAME_PTR(RVA_KEYBOARD_SHORTCUTS))(10);
-    }
-}
-
-static int apiLoadGame(void) {
-    if (!menuLineClicking) return REFUSE_API(0, "loadGame", "not_in_game_menu", "phase=%d", restartPhase);
-    if (isNetworkGame()) return REFUSE_API(0, "loadGame", "network_game", "phase=%d", restartPhase);
-    int humans = humanPlayerCount();
-    if (humans != 1) return REFUSE_API(0, "loadGame", "not_single_player", "humans=%d", humans);
-    if (!nextPlayGame) return REFUSE_API(0, "loadGame", "site_unavailable", "site=%s", SITES[SITE_MAIN_MENU_PLAY_GAME].name);
-    if (pickingSave) return REFUSE_API(0, "loadGame", "already_picking", "phase=%d", restartPhase);
-    char path[LOAD_PATH_SIZE] = "";
-    pickingSave = 1;
-    int picked = pickSaveToLoad(path);
-    pickingSave = 0;
-    if (!picked) {
-        writeLog("load_game", "phase=cancelled reason=no_save_picked");
-        return 0;
-    }
-    snprintf(loadPath, sizeof loadPath, "%s", path);
-    loadAsked = 1;
-    nameApiCaller(__builtin_return_address(0), loadAskedBy, sizeof loadAskedBy);
-    return 1;
-}
-
-// Ends a game for loadGame, answering each screen the resign waits on.
-#define WARN_OK        1
-#define GAME_OVER_EXIT 1
-#define MESSAGES_OK    1
-static u64 (*nextEliminatedWarn)(const char *fmt, ...);
-static int (*nextWarnWait)(int, int);
-static int (*nextGameOverWait)(int, int);
-static u64 (*nextTurnMessages)(int);
-static int (*nextMessagesWait)(int, int);
-static int inEliminatedBox;
-static int inTurnMessages;
-static int loadedTurn = -1;
-
-static int isEndingForLoad(void) { return restartPhase == RESTART_ENDING && loadPath[0]; }
-
-static u64 watchEliminatedWarn(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    const char *text = va_arg(args, const char *);
-    va_end(args);
-    inEliminatedBox = 1;
-    u64 result = nextEliminatedWarn(fmt, text);
-    inEliminatedBox = 0;
-    return result;
-}
-
-static int answerWarnWait(int block, int mode) {
-    if (!inEliminatedBox || !isEndingForLoad()) return nextWarnWait(block, mode);
-    writeLog("load_game", "phase=ending answered=eliminated_box");
-    return WARN_OK;
-}
-
-static int answerGameOverWait(int block, int mode) {
-    if (!isEndingForLoad()) return nextGameOverWait(block, mode);
-    writeLog("load_game", "phase=ending answered=game_over");
-    return GAME_OVER_EXIT;
-}
-
-static u64 watchTurnMessages(int player) {
-    inTurnMessages = 1;
-    u64 result = nextTurnMessages(player);
-    inTurnMessages = 0;
-    return result;
-}
-
-// The loaded turn's number, so a later turn's Messages aren't answered.
-static int answerMessagesWait(int block, int mode) {
-    if (!inTurnMessages) return nextMessagesWait(block, mode);
-    if (isEndingForLoad()) {
-        writeLog("load_game", "phase=ending answered=messages");
-        return MESSAGES_OK;
-    }
-    int loaded = loadedTurn >= 0 && loadedTurn == G32(RVA_TURN);
-    loadedTurn = -1;
-    if (!loaded) return nextMessagesWait(block, mode);
-    writeLog("load_game", "phase=loaded answered=messages");
-    return MESSAGES_OK;
-}
-
-// main_menu's Load Game, with the save picked during the game that just ended.
-static int loadPickedSave(void) {
-    char path[LOAD_PATH_SIZE];
-    snprintf(path, sizeof path, "%s", loadPath);
-    loadPath[0] = 0;
-    ((void (*)(void))GAME_PTR(RVA_RESET_GAME_STATE))();
-    LoadGameFn load = (LoadGameFn)siteEntry(SITE_GAME_LOAD, GAME_PTR(RVA_LOAD_GAME));
-    int loaded = (int)load(path, 0);
-    writeLog("load_game", "phase=loaded result=%d", loaded);
-    if (loaded < 1) return 0;
-    loadedTurn = G32(RVA_TURN);
-#ifdef __APPLE__
-    G8(RVA_LOADED_GAME) = 1;
-#else
-    G32(RVA_LOADED_GAME) = 1;
-#endif
-    ((void (*)(const char *, int))GAME_PTR(RVA_SPELL_BUG_CHECK))((const char *)GAME_PTR(RVA_STR_LOADED_START_MM), 100);
-    if (G32(RVA_LOAD_START_TEST) == 0) {
-#ifdef __APPLE__
-        G8(RVA_LOAD_START_MARK) = 1;
-#else
-        G32(RVA_LOAD_START_MARK) = 1;
-#endif
-    }
-    return 1;
-}
-
-// The loaded-game flag: an int on Windows, a byte on Mac.
-static int isLoadedGame(void) {
-#ifdef __APPLE__
-    return G8(RVA_LOADED_GAME) != 0;
-#else
-    return G32(RVA_LOADED_GAME) != 0;
-#endif
-}
-
-static void clearLoadedGame(void) {
-#ifdef __APPLE__
-    G8(RVA_LOADED_GAME) = 0;
-#else
-    G32(RVA_LOADED_GAME) = 0;
-#endif
-}
-
-static int askAboutChangedSpells(void);
-
-// CoE5SE's outermost play_game wrapper.
-static u64 playGameHook(int arg) {
-    restartPhase = RESTART_NONE;
-    loadedTurn = -1;
-    dropSpellsOfDisabledMods();
-    if (!askAboutChangedSpells()) return 0;
-    playGameEntries = 0;
-    u64 result = nextPlayGame(arg);
-    while (restartPhase == RESTART_ENDING) {
-        if (loadPath[0]) {
-            restartPhase = RESTART_NONE;
-            if (!loadPickedSave()) break;
-            dropSpellsOfDisabledMods();
-            if (!askAboutChangedSpells()) break;
-            playGameEntries = 0;
-            result = nextPlayGame(0);
-            continue;
-        }
-        restartPhase = RESTART_STARTING;
-        clearLoadedGame();
-        writeLog("restart_game", "phase=starting");
-        playGameEntries = 0;
-        result = nextPlayGame(0);
-    }
-    restartPhase = RESTART_NONE;
-    return result;
-}
-
-// CoE5SE's innermost play_game wrapper.
-static u64 (*nextPlayGameInner)(int);
-static u64 playGameInnermost(int arg) {
-    if (playGameEntries++) loadedTurn = -1;
-    if (playGameEntries > 1 && restartPhase != RESTART_NONE) {
-        writeLog("restart_game", "phase=cancelled reason=play_game_reentered");
-        restartPhase = RESTART_NONE;
-        loadPath[0] = 0;
-    }
-    return nextPlayGameInner(arg);
-}
-
-// A line shows when its `visible` says so.
-static int isMenuLineShown(int i) {
-    if (menuLines[i].lua >= 0) return runLuaVisible(menuLines[i].lua);
-    if (isNetworkGame() && !runsInNetworkGames((void *)menuLines[i].onClick)) return 0;
-    return !menuLines[i].visible || menuLines[i].visible();
-}
-
-static void drawMenuLine(int i) {
-    textButton(MENU_LINE_FIRST_ID + i, menuLines[i].label);
-    if (menuLines[i].tip[0]) tooltip(menuLines[i].tip);
-}
-
-// Draws the shown lines of one section, in the order they were added.
-static void drawSectionLines(int section) {
-    for (int i = 0; i < menuLineCount; i++) {
-        if (menuLines[i].section != section || !isMenuLineShown(i)) continue;
-        drawMenuLine(i);
-    }
-}
-
-// 1 when lines i and j are in the same named section: names match whatever their case.
-static int isSameNamedSection(int i, int j) {
-    return menuLines[i].section == MENU_SECTION_NAMED && menuLines[j].section == MENU_SECTION_NAMED &&
-           !_stricmp(menuLines[i].sectionName, menuLines[j].sectionName);
-}
-
-// Draws the scripts' named sections after "Saving & Exiting".
-static void drawNamedSections(void) {
-    for (int i = 0; i < menuLineCount; i++) {
-        if (menuLines[i].section != MENU_SECTION_NAMED) continue;
-        int first = 1;
-        for (int k = 0; k < i && first; k++) first = !isSameNamedSection(k, i);
-        if (!first) continue;
-        int begun = 0;
-        for (int j = i; j < menuLineCount; j++) {
-            if (!isSameNamedSection(i, j) || !isMenuLineShown(j)) continue;
-            if (!begun) {
-                sectionBegin();
-                sectionHeader(menuLines[i].sectionName);
-                begun = 1;
-            }
-            drawMenuLine(j);
-        }
-        if (begun) sectionEnd();
-    }
-}
-
-// Draws the lines at the end of the Game Menu's "Saving & Exiting" section, then the named sections.
-static int drawMenuLines(void) {
-    drawSectionLines(GAME_MENU_SECTION_SAVING);
-    int result = nextMenuSectionEnd();
-    drawNamedSections();
-    return result;
-}
-
-// Draws the lines at the end of the Game Menu's "Settings" section.
-static int drawSettingsMenuLines(void) {
-    drawSectionLines(GAME_MENU_SECTION_SETTINGS);
-    return nextSettingsSectionEnd();
-}
-
-// CoE5SE's outermost Game Menu wrapper.
-static int dispatchMenuLineClick(int a, int b) {
-    loadedTurn = -1;
-    if (restartPhase == RESTART_ENDING) {
-        restartPhase = RESTART_NONE;
-        loadPath[0] = 0;
-        writeLog("restart_game", "phase=cancelled reason=game_continued");
-    }
-    int id = nextGameMenuWait(a, b);
-    int i = id - MENU_LINE_FIRST_ID;
-    if (i < 0 || i >= menuLineCount || !isMenuLineShown(i)) return id;
-    writeLog("game_menu_line_clicked", "label=%s", menuLines[i].label);
-    restartAsked = loadAsked = 0;
-    menuLineClicking = 1;
-    int result = menuLines[i].lua >= 0 ? runLuaCallback(menuLines[i].lua, 1, 0) : menuLines[i].onClick();
-    menuLineClicking = 0;
-    if (!restartAsked && !loadAsked) return result;
-    if (!loadAsked) loadPath[0] = 0;
-    if (loadAsked)
-        writeLog("load_game", "phase=ending label=%s asked_by=%s turn=%d", menuLines[i].label, loadAskedBy, G32(RVA_TURN));
-    else writeLog("restart_game", "phase=ending label=%s asked_by=%s turn=%d", menuLines[i].label, restartAskedBy, G32(RVA_TURN));
-    restartAsked = loadAsked = 0;
-    restartPhase = RESTART_ENDING;
-    return GAME_MENU_RESIGN;
-}
-
-// Wraps the Game Menu's three sites and play_game, at startup.
-static int installGameMenuHooks(void) {
-    char owner[64];
-    moduleFileName((void *)drawMenuLines, owner, sizeof owner);
-    int sectionEnd = wrapSite(SITE_GAME_MENU_SAVING_SECTION_END, (void *)drawMenuLines, (void **)&nextMenuSectionEnd);
-    int settingsEnd = wrapSite(SITE_GAME_MENU_SETTINGS_SECTION_END, (void *)drawSettingsMenuLines, (void **)&nextSettingsSectionEnd);
-    const WrapPlace outermost = {.priority = WRAP_PRIORITY_DEFAULT, .layer = WRAP_LAYER_OUTERMOST};
-    int wait = insertWrap(SITE_GAME_MENU_WAIT, (void *)dispatchMenuLineClick, (void **)&nextGameMenuWait, outermost, owner, NULL);
-    int playGame = insertWrap(SITE_MAIN_MENU_PLAY_GAME, (void *)playGameHook, (void **)&nextPlayGame, outermost, owner, NULL) &&
-                   insertWrap(SITE_MAIN_MENU_PLAY_GAME, (void *)playGameInnermost, (void **)&nextPlayGameInner,
-                              (WrapPlace){.priority = INT_MIN}, owner, NULL);
-    int eliminated = wrapSite(SITE_ELIMINATED_WARN, (void *)watchEliminatedWarn, (void **)&nextEliminatedWarn) &&
-                     wrapSite(SITE_WARN_WAIT, (void *)answerWarnWait, (void **)&nextWarnWait);
-    int gameOver = insertWrap(SITE_GAME_OVER_WAIT, (void *)answerGameOverWait, (void **)&nextGameOverWait, outermost, owner, NULL);
-    int messages = wrapSite(SITE_TURN_MESSAGES, (void *)watchTurnMessages, (void **)&nextTurnMessages) &&
-                   wrapSite(SITE_MESSAGES_WAIT, (void *)answerMessagesWait, (void **)&nextMessagesWait);
-    writeLog("game_menu_hooks_installed",
-             "section_end=%d settings_end=%d wait=%d play_game=%d eliminated_box=%d game_over=%d messages=%d", sectionEnd,
-             settingsEnd, wait, playGame, eliminated, gameOver, messages);
-    return sectionEnd && wait;
-}
-
-// ---- Inlined button rows ------------------------------------------------------------------------
-// Setup Participants and the square info window start their Ok row with an inlined button_row(9).
-static uint64_t (*nextParticipantsRowInlined)(short style);
-static int participantsRowInlined(void) {
-    nextParticipantsRowInlined(LAYOUT_TYPE_BUTTON_ROW);
-    return -1;
-}
-
-static uint64_t (*nextSquareInfoRowInlined)(short style);
-static int squareInfoRowInlined(void) {
-    nextSquareInfoRowInlined(LAYOUT_TYPE_BUTTON_ROW);
-    return -1;
-}
-
-// CoE5SE's outermost wrapper of each, so every other wrapper sees a button_row(9) call.
-static void installInlinedButtonRows(void) {
-    char owner[64];
-    moduleFileName((void *)participantsRowInlined, owner, sizeof owner);
-    const WrapPlace outermost = {.priority = WRAP_PRIORITY_DEFAULT, .layer = WRAP_LAYER_OUTERMOST};
-    int participants = insertWrap(SITE_PARTICIPANTS_BUTTON_ROW, (void *)participantsRowInlined, (void **)&nextParticipantsRowInlined,
-                                  outermost, owner, NULL);
-    int squareInfo = insertWrap(SITE_SQUARE_INFO_BUTTON_ROW, (void *)squareInfoRowInlined, (void **)&nextSquareInfoRowInlined,
-                                outermost, owner, NULL);
-    writeLog("button_row_sites_installed", "participants=%d square_info=%d", participants, squareInfo);
-}
-
-// ---- The file browser's rows ------------------------------------------------------------------
-// The browser lists rows 0 to RVA_FILE_BROWSER_LAST and gives row n the id FILE_BROWSER_ROW_FIRST + n.
-static const char *siteResultMod[SITE_COUNT];
-
-static int isRowPastList(int id, int last) {
-    return id >= FILE_BROWSER_ROW_FIRST && id - FILE_BROWSER_ROW_FIRST > last;
-}
-
-static int (*nextFileBrowserWait)(int, int);
-static int boundFileBrowserWait(int a, int b) {
-    siteResultMod[SITE_FILE_BROWSER_WAIT] = NULL;
-    int id = nextFileBrowserWait(a, b);
-    int last = G32(RVA_FILE_BROWSER_LAST);
-    const char *mod = siteResultMod[SITE_FILE_BROWSER_WAIT];
-    if (isRowPastList(id, last)) {
-        refuseLuaCall(mod ? mod : "?", "FILE_BROWSER_WAIT", "row_past_list", "id=%d last=%d", id, last);
-        return 0;
-    }
-    int hovered = G32(RVA_HOVERED_ID);
-    if (id == FILE_BROWSER_DELETE && isRowPastList(hovered, last)) {
-        refuseLuaCall(mod ? mod : "?", "FILE_BROWSER_WAIT", "hovered_row_past_list", "hovered=%d last=%d", hovered, last);
-        return 0;
-    }
-    return id;
-}
-
-// At startup.
-static void installFileBrowserBounds(void) {
-    char owner[64];
-    moduleFileName((void *)boundFileBrowserWait, owner, sizeof owner);
-    const WrapPlace outermost = {.priority = WRAP_PRIORITY_DEFAULT, .layer = WRAP_LAYER_OUTERMOST};
-    int wait = insertWrap(SITE_FILE_BROWSER_WAIT, (void *)boundFileBrowserWait, (void **)&nextFileBrowserWait, outermost, owner, NULL);
-    writeLog("file_browser_bounds_installed", "wait=%d", wait);
-}
-
-// The other screens whose wait's id indexes a game table with no upper bound.
-#define UNIT_LIST_UNIT_ID 100000
-#define MAP_COMMANDER_ID  20000
-
-static int unitIdPast(int id, int lastUnit) {
-    if (id > -UNIT_LIST_UNIT_ID && id < UNIT_LIST_UNIT_ID) return 0;
-    long long unit = (id < 0 ? -(long long)id : (long long)id) - UNIT_LIST_UNIT_ID;
-    return unit > lastUnit;
-}
-
-static int commanderIdPast(int id, int lastCommander) {
-    long long magnitude = id < 0 ? -(long long)id : (long long)id;
-    if (magnitude < MAP_COMMANDER_ID || magnitude >= 2 * MAP_COMMANDER_ID) return 0;
-    return magnitude - MAP_COMMANDER_ID > lastCommander;
-}
-
-static int unitListSheetOpen, unitListNeedsSheet;
-
-static int (*nextUnitListWait)(int, int);
-static int boundUnitListWait(int a, int b) {
-    siteResultMod[SITE_UNIT_LIST_WAIT] = NULL;
-    int id = nextUnitListWait(a, b);
-    if (unitListNeedsSheet && !unitListSheetOpen) return id;
-    int last = G32(RVA_UNIT_COUNT);
-    const char *mod = siteResultMod[SITE_UNIT_LIST_WAIT];
-    if (unitIdPast(id, last)) {
-        refuseLuaCall(mod ? mod : "?", "UNIT_LIST_WAIT", "unit_past_table", "id=%d last=%d", id, last);
-        return 0;
-    }
-    return id;
-}
-
-static int (*nextMapScreenWait)(int, int);
-static int boundMapScreenWait(int a, int b) {
-    siteResultMod[SITE_MAP_SCREEN_WAIT] = NULL;
-    int id = nextMapScreenWait(a, b);
-    int last = G32(RVA_LAST_COMMANDER);
-    const char *mod = siteResultMod[SITE_MAP_SCREEN_WAIT];
-    if (commanderIdPast(id, last)) {
-        refuseLuaCall(mod ? mod : "?", "MAP_SCREEN_WAIT", "commander_past_table", "id=%d last=%d", id, last);
-        return 0;
-    }
-    if (!id) showLuaNotices();
-    return id;
-}
-
-// At startup.
-static void installWaitIdBounds(void) {
-    char owner[64];
-    moduleFileName((void *)boundUnitListWait, owner, sizeof owner);
-    const WrapPlace outermost = {.priority = WRAP_PRIORITY_DEFAULT, .layer = WRAP_LAYER_OUTERMOST};
-    int unitList = insertWrap(SITE_UNIT_LIST_WAIT, (void *)boundUnitListWait, (void **)&nextUnitListWait, outermost, owner, NULL);
-    int mapScreen = insertWrap(SITE_MAP_SCREEN_WAIT, (void *)boundMapScreenWait, (void **)&nextMapScreenWait, outermost, owner, NULL);
-    writeLog("wait_id_bounds_installed", "unit_list=%d map_screen=%d", unitList, mapScreen);
-}
-
-// Adds a Game Menu line to `section` for the plugin or script that called.
-static int addGameMenuLineFor(void *caller, const char *label, const char *tip, int (*visible)(void), int (*onClick)(void), int lua,
-                              int section, const char *sectionName) {
-    if (!label || !label[0]) {
-        refuseApiCall(caller, "addGameMenuLine", "no_label", "tooltip=%s", tip ? tip : "");
-        return 0;
-    }
-    if (!onClick && lua < 0) {
-        refuseApiCall(caller, "addGameMenuLine", "no_callback", "label=%s", label);
-        return 0;
-    }
-    int named = section == MENU_SECTION_NAMED && sectionName;
-    if (section != GAME_MENU_SECTION_SAVING && section != GAME_MENU_SECTION_SETTINGS && !named) {
-        refuseApiCall(caller, "addGameMenuLine", "unknown_section", "label=%s section=%d", label, section);
-        return 0;
-    }
-    if (named && !sectionName[0]) {
-        refuseApiCall(caller, "addGameMenuLine", "no_section_name", "label=%s", label);
-        return 0;
-    }
-    if (!nextGameMenuWait || !(section == GAME_MENU_SECTION_SETTINGS ? nextSettingsSectionEnd : nextMenuSectionEnd)) {
-        refuseApiCall(caller, "addGameMenuLine", "site_unavailable", "label=%s section=%d", label, section);
-        return 0;
-    }
-    if (!growList((void **)&menuLines, &menuLineCapacity, menuLineCount + 1, sizeof menuLines[0])) {
-        refuseApiCall(caller, "addGameMenuLine", "out_of_memory", "label=%s", label);
-        return 0;
-    }
-    MenuLine *line = &menuLines[menuLineCount++];
-    noteApiCut(caller, "addGameMenuLine", "label", label, (int)sizeof line->label - 1);
-    noteApiCut(caller, "addGameMenuLine", "tooltip", tip ? tip : "", (int)sizeof line->tip - 1);
-    snprintf(line->label, sizeof line->label, "%.63s", label);
-    snprintf(line->tip, sizeof line->tip, "%.255s", tip ? tip : "");
-    if (named) noteApiCut(caller, "addGameMenuLine", "section", sectionName, (int)sizeof line->sectionName - 1);
-    snprintf(line->sectionName, sizeof line->sectionName, "%.63s", named ? sectionName : "");
-    line->visible = visible;
-    line->onClick = onClick;
-    line->lua = lua;
-    line->section = section;
-    char owner[MAX_PATH];
-    const char *ownerField = apiCallerName(caller, owner, sizeof owner);
-    if (named) writeLog("game_menu_line_added", "%s=%s label=%s section=%d section_name=%s", ownerField, owner, label, section, line->sectionName);
-    else writeLog("game_menu_line_added", "%s=%s label=%s section=%d", ownerField, owner, label, section);
-    return 1;
-}
-
-static int apiAddGameMenuLine(const char *label, const char *tip, int (*visible)(void), int (*onClick)(void)) {
-    return addGameMenuLineFor(__builtin_return_address(0), label, tip, visible, onClick, -1, GAME_MENU_SECTION_SAVING, NULL);
-}
+#include "game_menu.h"
 
 // ---- Mod names ----------------------------------------------------------------------------------
 // A mod's name is its .c5m's file name without ".c5m", as the game names mods.
@@ -1994,223 +1146,7 @@ static void modDisplayName(const char *mod, char *out, size_t size) {
     out[o] = '\0';
 }
 
-// ---- Plugin entries in Mod Settings: screen lines ---------------------------------------------
-// A mod's settings live only in its settings files.
-#define ID_SCREEN_FIRST   400
-#define ID_SCREEN_END     1000
-enum { ENTRY_SCREEN, ENTRY_LEFT_OUT };
-typedef struct {
-    int type;
-    char section[MAX_PATH];
-    char mod[MOD_NAME_MAX];
-    char modulePath[MAX_PATH];
-    char label[SETTING_TEXT_MAX + 1], tip[SETTING_TIP_MAX + 1];
-    void (*open)(void);
-    int lua;
-    char problem[160];
-} SettingEntry;
-static SettingEntry **entries;
-static int entryCount, entryCapacity;
-
-// Writes the calling plugin's DLL path, its folder, and its mod.
-static void pluginModOf(void *caller, char *path, char *dir, char *mod, size_t modSize) {
-    HMODULE m = callingPlugin(caller);
-    path[0] = '\0';
-    if (m) GetModuleFileNameA(m, path, MAX_PATH);
-    const char *file = strrchr(path, PATH_SEP[0]) ? strrchr(path, PATH_SEP[0]) + 1 : path;
-    snprintf(dir, MAX_PATH, "%s", path);
-    char *slash = strrchr(dir, PATH_SEP[0]);
-    if (slash) *slash = '\0';
-    if (!slash || !c5mNameInFolder(dir, mod, modSize))
-        snprintf(mod, modSize, "%.*s", (int)(strlen(file) > strlen(PLUGIN_SUFFIX) ? strlen(file) - strlen(PLUGIN_SUFFIX) : strlen(file)), file);
-}
-
-// Adds an entry for the plugin that called, or for mod `luaMod`'s script.
-static SettingEntry *addEntry(void *caller, const char *luaMod, int type, const char *label, const char *tip) {
-    SettingEntry *e = calloc(1, sizeof *e);
-    if (!e) return NULL;
-    if (!growList((void **)&entries, &entryCapacity, entryCount + 1, sizeof entries[0])) {
-        free(e);
-        return NULL;
-    }
-    char dir[MAX_PATH];
-    if (luaMod) {
-        snprintf(e->mod, sizeof e->mod, "%s", luaMod);
-        snprintf(e->section, sizeof e->section, "%s.lua", luaMod);
-    } else {
-        pluginModOf(caller, e->modulePath, dir, e->mod, sizeof e->mod);
-        const char *file = strrchr(e->modulePath, PATH_SEP[0]) ? strrchr(e->modulePath, PATH_SEP[0]) + 1 : e->modulePath;
-        snprintf(e->section, sizeof e->section, "%s", file);
-    }
-    e->type = type;
-    e->lua = -1;
-    snprintf(e->label, sizeof e->label, "%.*s", SETTING_TEXT_MAX, label ? label : "");
-    snprintf(e->tip, sizeof e->tip, "%.*s", SETTING_TIP_MAX, tip ? tip : "");
-    entries[entryCount++] = e;
-    return e;
-}
-
-// Makes `e` a left-out entry, logged with the rule's reason.
-static void leaveEntryOut(SettingEntry *e, void *caller, const char *call, const SettingProblem *p) {
-    refuseApiCall(caller, call, p->reason, "label=%s problem=%s", e->label, p->text);
-    snprintf(e->problem, sizeof e->problem, "%.20s %.32s: %.79s", call, e->label, p->text);
-    e->type = ENTRY_LEFT_OUT;
-    leftOutVersion++;
-}
-
-// The lines a mod's screen lines take on its page.
-static int pluginPageLines(const char *mod) {
-    int lines = 0, boxOpen = 0;
-    for (int i = 0; i < entryCount; i++)
-        if (entries[i]->type == ENTRY_SCREEN && !_stricmp(entries[i]->mod, mod)) lines += settingPageLines(0, 0, 0, &boxOpen);
-    return lines;
-}
-
-// Adds a screen line for the plugin that called, or for mod `luaMod`'s script.
-static int addScreenFor(void *caller, const char *luaMod, const char *label, const char *tip, void (*open)(void), int lua) {
-    if (!open && lua < 0) {
-        refuseApiCall(caller, "addScreen", "no_callback", "label=%s", label ? label : "");
-        return 0;
-    }
-    SettingEntry *e = addEntry(caller, luaMod, ENTRY_SCREEN, label, tip);
-    if (!e) {
-        refuseApiCall(caller, "addScreen", "out_of_memory", "label=%s", label ? label : "");
-        return 0;
-    }
-    e->open = open;
-    e->lua = lua;
-    SettingProblem p;
-    int bad = checkSettingText("label", label, SETTING_TEXT_MAX, &p) || checkSettingText("tip", tip, SETTING_TIP_MAX, &p);
-    if (bad) {
-        leaveEntryOut(e, caller, "addScreen", &p);
-        return 0;
-    }
-    writeLog("plugin_screen_added", "plugin=%s label=%s", e->section, label);
-    return 1;
-}
-
-static int apiAddScreen(const char *label, const char *tip, void (*open)(void)) {
-    return addScreenFor(__builtin_return_address(0), NULL, label, tip, open, -1);
-}
-
-// api->setting: the calling plugin's own mod's setting.
-static const int *pluginSetting(void *caller, const char *mod, const char *dir, const char *name);
-static const int *apiSetting(const char *name) {
-    void *caller = __builtin_return_address(0);
-    char path[MAX_PATH], dir[MAX_PATH], mod[MOD_NAME_MAX];
-    pluginModOf(caller, path, dir, mod, sizeof mod);
-    return pluginSetting(caller, mod, dir, name);
-}
-
-// ---- The game's screen widgets for plugins (UiApi) --------------------------------------------
-// A mod's text for a game draw function's buffer of `size` bytes, cut to fit.
-static const char *fitGameText(void *caller, const char *call, const char *text, char *buf, size_t size) {
-    if (strlen(text) < size) return text;
-    noteApiCut(caller, call, "text", text, (int)size - 1);
-    memcpy(buf, text, size - 1);
-    buf[size - 1] = '\0';
-    return buf;
-}
-
-// common.h's screenTitle, with the translated title cut to screen_title's buffer.
-static void uiScreenBegin(const char *title) {
-    static char translated[TRANSLATED_SIZE];
-    _Static_assert(SCREEN_TITLE_TEXT_SIZE <= TRANSLATED_SIZE, "the title is cut inside the translation buffer");
-    screenBegin();
-    translateText(title ? title : "", translated, sizeof translated);
-    noteApiCut(__builtin_return_address(0), "ui.screenBegin", "title", translated, SCREEN_TITLE_TEXT_SIZE - 1);
-    translated[SCREEN_TITLE_TEXT_SIZE - 1] = '\0';
-    GAME_FN(void (*)(FMT_ARGS), RVA_SCREEN_TITLE)("%s", translated);
-    screenWidth(setupScreenWidth());
-}
-static void uiSectionBegin(const char *header) {
-    sectionBegin();
-    if (header) sectionHeader(header);
-}
-static void uiText(int id, const char *text) {
-    char cut[TEXT_BUTTON_TEXT_SIZE];
-    textButton(id, fitGameText(__builtin_return_address(0), "ui.text", text ? text : "", cut, sizeof cut));
-}
-static void uiCheckbox(int id, int *value, const char *label) {
-    char cut[CHECKBOX_TEXT_SIZE];
-    if (value) checkbox(id, value, fitGameText(__builtin_return_address(0), "ui.checkbox", label ? label : "", cut, sizeof cut));
-}
-static void uiChoice(int id, int selected, const char *label) {
-    char cut[RADIO_OPTION_TEXT_SIZE];
-    radioOption(id, selected, fitGameText(__builtin_return_address(0), "ui.choice", label ? label : "", cut, sizeof cut));
-}
-static void uiTooltip(const char *text) {
-    char cut[TOOLTIP_TEXT_SIZE];
-    if (text) tooltip(fitGameText(__builtin_return_address(0), "ui.tooltip", text, cut, sizeof cut));
-}
-// UI_KEY_ESCAPE binds the game's own Escape key, which is 0 while the game binds none.
-static void uiBindKey(int id, int key) {
-    if (key == UI_KEY_ESCAPE) key = ESCAPE_KEY();
-    if (key) bindHotkey(id, key);
-}
-
-// The List layout makes the same calls, in the same order, as Load Game's list.
-#define LIST_WIDTH         450.0f
-#define LIST_GAP           3.0f
-static int listRowIndex;
-#ifdef __APPLE__
-static void uiListBegin(void) {
-    screenWidth(LIST_WIDTH);
-    buttonRowStyle(LAYOUT_TYPE_LIST_STYLE);
-    listRowIndex = 0;
-}
-static void uiListRow(int id, const char *text) {
-    rowBegin(1);
-    GAME_FN(void (*)(int, int), RVA_ROW_STRIPE)(listRowIndex++ & 1, (int)LIST_WIDTH);
-    rowArea(id, LIST_WIDTH);
-    columnX(0.0f);
-    char cut[TEXT_BUTTON_TEXT_SIZE];
-    textButton(id, fitGameText(__builtin_return_address(0), "ui.listRow", text ? text : "", cut, sizeof cut));
-    rowBegin(0);
-}
-static void uiListEnd(void) { listGap(LIST_GAP); }
-#else
-static void uiListBegin(void) {
-    screenWidth(LIST_WIDTH);
-    GAME_FN(unsigned long long (*)(short), RVA_LIST_STYLE)(LAYOUT_TYPE_LIST_STYLE);
-    listRowIndex = 0;
-}
-static void uiListRow(int id, const char *text) {
-    GAME_FN(void (*)(int), RVA_ROW_BEGIN)(0);
-    GAME_FN(void (*)(int, int), RVA_ROW_STRIPE)(listRowIndex++ & 1, (int)LIST_WIDTH);
-    GAME_FN(void (*)(int, float, float, float, float, float), RVA_ROW_AREA)(id, LIST_WIDTH, 0.0f, 0.0f, 0.0f, 0.0f);
-    GAME_FN(void (*)(float), RVA_COLUMN_X)(0.0f);
-    char cut[TEXT_BUTTON_TEXT_SIZE];
-    textButton(id, fitGameText(__builtin_return_address(0), "ui.listRow", text ? text : "", cut, sizeof cut));
-    GAME_FN(void (*)(int), RVA_ROW_BEGIN)(1);
-}
-static void uiListEnd(void) { GAME_FN(void (*)(float), RVA_LIST_GAP)(LIST_GAP); }
-#endif
-
-static const UiApi UI = {
-    .screenBegin = uiScreenBegin, .sectionBegin = uiSectionBegin, .sectionEnd = sectionEnd, .text = uiText,
-    .checkbox = uiCheckbox, .choice = uiChoice, .tooltip = uiTooltip, .buttonRow = buttonRow, .bindKey = uiBindKey,
-    .wait = screenWait, .listBegin = uiListBegin, .listRow = uiListRow, .listEnd = uiListEnd,
-};
-
-// The screen that More on the main menu opens: the buttons the column has no room for.
-#define MORE_ID_BACK      9
-#define MORE_ID_FIRST_ROW 100
-static void moreButtonsScreen(int first) {
-    writeLog("main_menu_more_opened", "buttons=%d", mainButtonCount - first);
-    for (;;) {
-        uiScreenBegin(MORE_LABEL);
-        uiListBegin();
-        for (int i = first; i < mainButtonCount; i++) uiListRow(MORE_ID_FIRST_ROW + i, mainButtons[i].label);
-        uiListEnd();
-        buttonRow();
-        uiText(MORE_ID_BACK, "Back");
-        uiBindKey(MORE_ID_BACK, UI_KEY_ESCAPE);
-        int id = screenWait();
-        if (id == MORE_ID_BACK) return;
-        if (id >= MORE_ID_FIRST_ROW + first && id < MORE_ID_FIRST_ROW + mainButtonCount) runMainButton(id - MORE_ID_FIRST_ROW);
-    }
-}
+#include "plugin_ui.h"
 
 // ---- Messages --------------------------------------------------------------------------------
 // The game's add_message.
@@ -2243,11 +1179,7 @@ static void apiLogLine(const void *self, const char *text) {
 static uintptr_t apiCallerRsp(CallSite site) {
     if ((unsigned)site >= SITE_COUNT) return REFUSE_API(0, "callerRsp", "unknown_site", "site=%d", (int)site);
     if (!siteInstalled[site]) return REFUSE_API(0, "callerRsp", "site_not_wrapped", "site=%s", SITES[site].name);
-#ifdef __aarch64__
     return siteCallerSp(site);
-#else
-    return *(uintptr_t *)(siteStub(site) + STUB_RSP) + 8;
-#endif
 }
 
 static int apiSetupAutomated(void) { return setupIsAutomated; }
@@ -2285,12 +1217,18 @@ static const PluginApi API = {
 
 // ---- Game build check -------------------------------------------------------------------------
 // Every address in CoE5SE and in the plugins belongs to one build of the game.
-typedef struct { const char *gameVersion; unsigned int timeDateStamp, imageSize; unsigned char uuid[16]; } GameBuild;
+typedef struct {
+    const char *gameVersion;
+    unsigned int timeDateStamp, imageSize;
+    unsigned char uuid[16];
+    const char *codeSha256;
+} GameBuild;
 static const GameBuild KNOWN_BUILDS[] = {
 #ifdef __APPLE__
-    {"5.41", 0, 0, {0xd9, 0xa2, 0x7a, 0xa9, 0xc4, 0xec, 0x37, 0x07, 0x9b, 0x33, 0xb9, 0x4e, 0x2c, 0x57, 0x90, 0x3d}},
+    {"5.42", 0, 0, {0x2e, 0xc7, 0xe0, 0x27, 0xac, 0xe0, 0x36, 0x5a, 0x86, 0x02, 0x4e, 0x17, 0xa6, 0x2f, 0x85, 0x60},
+     "7a1cf5a99f08b6f1f42cbaad5a875c037d1acf2620940bcf554880208c4ce127"},
 #else
-    {"5.41", 0x6ad240f0, 0x13728000, {0}},
+    {"5.42", 0x6ada0282, 0x13728000, {0}, "d39ea78899effadc76a0214b2eb5c8bcbd4aac5991f7862aaccb48a99ff4bfa8"},
 #endif
 };
 #define KNOWN_BUILD_COUNT (int)(sizeof KNOWN_BUILDS / sizeof KNOWN_BUILDS[0])
@@ -2300,6 +1238,24 @@ static int pluginsDeclined;
 static int notStartedByLoader;
 
 #include "plugin_start.h"
+#include "game_code_hash.h"
+
+// Hashes the game's code section and sets gameCodeMatches when gameBuild's hash is that.
+static void checkGameCode(void) {
+    const unsigned char *code;
+    size_t size;
+    char hex[GAME_CODE_SHA256_HEX_LEN + 1] = "";
+    if (!findGameCode(gameBase, &code, &size)) {
+        writeLog("game_code_check", "match=0 reason=no_code_section");
+        return;
+    }
+    if (!hashMemorySha256(code, size, hex)) {
+        writeLog("game_code_check", "match=0 reason=hash_failed bytes=%zu", size);
+        return;
+    }
+    gameCodeMatches = gameBuild && !strcmp(hex, gameBuild->codeSha256);
+    writeLog("game_code_check", "match=%d bytes=%zu sha256=%s", gameCodeMatches, size, hex);
+}
 
 // Reads the running game's build id and sets gameBuild if it is one of KNOWN_BUILDS.
 static void identifyGameBuild(void) {
@@ -2320,6 +1276,7 @@ static void identifyGameBuild(void) {
     for (int i = 0; i < KNOWN_BUILD_COUNT; i++)
         if (KNOWN_BUILDS[i].timeDateStamp == stamp && KNOWN_BUILDS[i].imageSize == size) gameBuild = &KNOWN_BUILDS[i];
 #endif
+    checkGameCode();
 }
 
 // Asks whether to load mods on a game build this CoE5SE wasn't made for.
@@ -2339,8 +1296,11 @@ static int askLoadOnUnknownGame(void) {
 #endif
 }
 
-// The loader calls this right after loading CoE5SE's DLL.
+static void startCoe5se(const char *via);
+
+// The loader calls this right after loading CoE5SE's DLL, after coe5seStart.
 __declspec(dllexport) int coe5seLoadsPlugins(void) {
+    startCoe5se("older_loader");
     return !pluginsDeclined && !notStartedByLoader;
 }
 
@@ -2363,8 +1323,8 @@ static void installMenuHook(void) {
     menuBgAlpha = (float *)&coe5seStubData[SITE_MAIN_MENU_WAIT].d8;
     menuFadeTimer = (float *)&coe5seStubData[SITE_MAIN_MENU_WAIT].d9;
 #else
-    menuBgAlpha = (float *)(siteStub(SITE_MAIN_MENU_WAIT) + STUB_XMM12);
-    menuFadeTimer = (float *)(siteStub(SITE_MAIN_MENU_WAIT) + STUB_XMM13);
+    menuBgAlpha = &siteStubData(SITE_MAIN_MENU_WAIT)->xmm12;
+    menuFadeTimer = &siteStubData(SITE_MAIN_MENU_WAIT)->xmm13;
 #endif
     writeLog("menu_hook_installed", "base=%p", gameBase);
 }
@@ -2511,6 +1471,11 @@ static int apiSettingsPluginClick(int id) {
 }
 
 #include "mod_settings.h"
+#include "mod_settings_declare.h"
+#include "mod_settings_ini_sidecar.h"
+#include "mod_settings_reading.h"
+#include "mod_settings_screen.h"
+#include "mod_settings_events.h"
 #include "event_logic.h"
 
 // Reads plugins_found.txt, one plugin per line.
@@ -2634,85 +1599,7 @@ static void coe5sePageScreen(void) {
 }
 
 #ifndef __APPLE__
-// ---- Translating what goes into the game's text --------------------------------------------
-// The game translates only a GUI call's format string, not its %s arguments.
-typedef int (*TextFormatFn)(u64 options, char *buf, size_t size, const char *fmt, void *locale, va_list args);
-static TextFormatFn nextTextFormat;
-
-#define MAX_FORMAT_ARGS    32
-#define MAX_TRANSLATED_ARGS 8
-#define TRANSLATED_ARG_SIZE 2048
-
-// Marks each argument slot of a printf format that is a narrow %s.
-static int scanFormatArgs(const char *fmt, int stringArg[MAX_FORMAT_ARGS]) {
-    int slots = 0;
-    for (const char *p = fmt; *p; p++) {
-        if (*p != '%') continue;
-        if (*++p == '%') continue;
-        while (*p && strchr("-+ #0", *p)) p++;
-        if (*p == '*') { if (slots >= MAX_FORMAT_ARGS) return -1; stringArg[slots++] = 0; p++; }
-        else while (*p >= '0' && *p <= '9') p++;
-        if (*p == '.') {
-            p++;
-            if (*p == '*') { if (slots >= MAX_FORMAT_ARGS) return -1; stringArg[slots++] = 0; p++; }
-            else while (*p >= '0' && *p <= '9') p++;
-        }
-        int wide = 0;
-        if (!strncmp(p, "I64", 3) || !strncmp(p, "I32", 3)) p += 3;
-        else if (*p == 'l' || *p == 'w') { wide = 1; p++; if (*p == 'l') p++; }
-        else if (*p == 'h') { p++; if (*p == 'h') p++; }
-        else if (*p && strchr("LIjzt", *p)) p++;
-        if (!*p || !strchr("cCdiouxXeEfFgGaApsSZ", *p) || slots >= MAX_FORMAT_ARGS) return -1;
-        stringArg[slots++] = *p == 's' && !wide;
-    }
-    return slots;
-}
-
-// Replaces each %s argument that has a translation with the translated string.
-static void translateStringArgs(const int *stringArg, int slots, u64 *args,
-                                char translated[MAX_TRANSLATED_ARGS][TRANSLATED_ARG_SIZE]) {
-    for (int k = 0, used = 0; k < slots && used < MAX_TRANSLATED_ARGS; k++) {
-        const char *s = (const char *)args[k];
-        if (!stringArg[k] || !s || strlen(s) >= TRANSLATED_ARG_SIZE - 1) continue;
-        translateText(s, translated[used], TRANSLATED_ARG_SIZE);
-        if (strcmp(translated[used], s)) args[k] = (u64)translated[used++];
-    }
-}
-
-static char translatedArgs[MAX_TRANSLATED_ARGS][TRANSLATED_ARG_SIZE];
-static int busy;
-
-// Wraps the GUI functions' formatting call, so their %s arguments translate.
-static int textFormatHook(u64 options, char *buf, size_t size, const char *fmt, void *locale, va_list args) {
-    int stringArg[MAX_FORMAT_ARGS];
-    int slots = fmt && !busy ? scanFormatArgs(fmt, stringArg) : -1;
-    if (slots <= 0) return nextTextFormat(options, buf, size, fmt, locale, args);
-    u64 copy[MAX_FORMAT_ARGS];
-    memcpy(copy, args, slots * sizeof copy[0]);
-    busy = 1;
-    translateStringArgs(stringArg, slots, copy, translatedArgs);
-    busy = 0;
-    return nextTextFormat(options, buf, size, fmt, locale, (va_list)copy);
-}
-
-// The display-name builders format their text before drawing it.
-#define MAX_BUILD_ARGS 5
-typedef int (*TextBuildFn)(char *buf, u64 size, const char *fmt, u64, u64, u64, u64, u64);
-static TextBuildFn nextTextBuild;
-
-static int textBuildHook(char *buf, u64 size, const char *fmt, u64 a1, u64 a2, u64 a3, u64 a4, u64 a5) {
-    static char translatedFormat[TRANSLATED_ARG_SIZE];
-    int stringArg[MAX_FORMAT_ARGS];
-    int slots = fmt && !busy ? scanFormatArgs(fmt, stringArg) : -1;
-    if (slots < 0 || slots > MAX_BUILD_ARGS || strlen(fmt) >= TRANSLATED_ARG_SIZE - 1)
-        return nextTextBuild(buf, size, fmt, a1, a2, a3, a4, a5);
-    u64 args[MAX_BUILD_ARGS] = {a1, a2, a3, a4, a5};
-    busy = 1;
-    translateText(fmt, translatedFormat, sizeof translatedFormat);
-    translateStringArgs(stringArg, slots, args, translatedArgs);
-    busy = 0;
-    return nextTextBuild(buf, size, translatedFormat, args[0], args[1], args[2], args[3], args[4]);
-}
+#include "text_translation.h"
 
 #endif
 
@@ -2761,6 +1648,15 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "data_area_max.h"
 #include "map_editor.h"
 #include "lua_scripts.h"
+#include "lua_game_data.h"
+#include "lua_get_set.h"
+#include "lua_sites.h"
+#include "lua_coe5_table.h"
+#include "lua_ai.h"
+#include "lua_units.h"
+#include "lua_data_files.h"
+#include "lua_ui.h"
+#include "lua_loading.h"
 #include "plane_words.h"
 #include "plane_pieces.h"
 #include "terrain_looks.h"
@@ -2779,6 +1675,7 @@ static void logHeaderEnd(void) {
              PLUGIN_API_VERSION);
 }
 
+// Only what must run as the DLL loads: the log, and the check that the loader loaded CoE5SE.
 BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason != DLL_PROCESS_ATTACH) return TRUE;
@@ -2788,8 +1685,23 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved) {
     if (!GetModuleHandleA(LOADER_DLL_NAME)) {
         notStartedByLoader = 1;
         writeLog("coe5se_inactive", "reason=not_started_by_loader loader=%s", LOADER_DLL_NAME);
-        return TRUE;
     }
+#endif
+    return TRUE;
+}
+
+// The loader calls this right after loading CoE5SE's DLL, before anything else: CoE5SE's startup.
+__declspec(dllexport) void coe5seStart(void) {
+    startCoe5se("coe5se_start");
+}
+
+// CoE5SE's startup, once: the game build check, then every patch, site and file read, in order.
+static void startCoe5se(const char *via) {
+    static int started;
+    if (started || notStartedByLoader) return;
+    started = 1;
+    writeLog("coe5se_start", "via=%s", via);
+#ifndef __APPLE__
     installCrashFilter();
 #endif
     identifyGameBuild();
@@ -2803,7 +1715,7 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved) {
                      wrapSite(SITE_MOD_COMMAND, (void *)declinedModCommandHook, (void **)&nextModCommand));
             writeLog("event_line_hook_installed", "ok=%d declined=1",
                      wrapSite(SITE_EVENT_LINE, (void *)declinedEventLineHook, (void **)&nextEventLine));
-            return TRUE;
+            return;
         }
     }
     checkNameBoxCode();
@@ -2859,5 +1771,4 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved) {
 #ifdef COE5SE_EXTRA_START
     COE5SE_EXTRA_START();
 #endif
-    return TRUE;
 }

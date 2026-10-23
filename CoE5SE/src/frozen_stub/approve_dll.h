@@ -19,7 +19,7 @@ static __attribute__((unused)) void unlockDllFile(HANDLE file) {
     if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
 }
 
-// Writes the open file's SHA-256 to `hex` as lowercase hex. Returns 0 if it can't be read or hashed.
+// Writes the open file's SHA-256 to `hex` as lowercase hex.
 static __attribute__((unused)) int hashFileSha256(HANDLE file, char *hex) {
     static unsigned char buf[65536];
     unsigned char digest[32];
@@ -48,7 +48,7 @@ static __attribute__((unused)) void unlockDllFile(HANDLE file) {
     if (file != INVALID_HANDLE_VALUE) close((int)(intptr_t)file);
 }
 
-// Writes the open file's SHA-256 to `hex` as lowercase hex. Returns 0 if it can't be read.
+// Writes the open file's SHA-256 to `hex` as lowercase hex.
 static __attribute__((unused)) int hashFileSha256(HANDLE file, char *hex) {
     static unsigned char buf[65536];
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];
@@ -68,7 +68,6 @@ static __attribute__((unused)) int hashFileSha256(HANDLE file, char *hex) {
 // Asks the player whether to load `path`, a DLL whose hash isn't approved.
 static __attribute__((unused)) int askApproval(const char *mod, const char *path, const char *hash, int isCoe5se) {
     char text[2048];
-    // The file path and hash are in coe5mod.log (loader_plugin_*).
     const char *file = strrchr(path, '/');
     if (!file) file = strrchr(path, '\\');
     (void)hash;
@@ -82,11 +81,11 @@ static __attribute__((unused)) int askApproval(const char *mod, const char *path
                        MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2 | MB_TOPMOST | MB_SETFOREGROUND) == IDYES;
 #else
     CFStringRef message = CFStringCreateWithCString(NULL, text, kCFStringEncodingUTF8);
-    CFOptionFlags response = kCFUserNotificationDefaultResponse;   // "No"
+    CFOptionFlags response = kCFUserNotificationDefaultResponse;
     SInt32 failed = CFUserNotificationDisplayAlert(0, kCFUserNotificationCautionAlertLevel, NULL, NULL, NULL,
                                                    CFSTR(APPROVAL_PROMPT_TITLE), message, CFSTR("No"), CFSTR("Yes"), NULL, &response);
     if (message) CFRelease(message);
-    return !failed && response == kCFUserNotificationAlternateResponse;   // "Yes" is the alternate button
+    return !failed && response == kCFUserNotificationAlternateResponse;
 #endif
 }
 
@@ -101,15 +100,13 @@ static __attribute__((unused)) int approveDll(const char *name, const char *mod,
     }
     if (autoApprove) writeLog("loader_plugin_auto_approved", "name=%s source=%s sha256=%s", name, source, hash);
     else writeLog("loader_plugin_approved", "name=%s source=%s sha256=%s via=prompt", name, source, hash);
-    // It loads this time either way; unsaved, it is asked about or auto-approved again next launch.
     if (!approveHash(hash, name)) writeLog("loader_approval_not_saved", "name=%s reason=write_failed", name);
     return 1;
 }
 
-// Loads the DLL at `path`. Returns its handle, or NULL with the error in `error`.
+// Loads the DLL at `path`.
 static __attribute__((unused)) void *loadDllFile(const char *path, char *error, size_t errorSize) {
 #ifdef _WIN32
-    // With the altered search path, Windows looks for the DLLs it imports in its own folder first.
     DWORD oldMode = 0;
     SetThreadErrorMode(SEM_FAILCRITICALERRORS, &oldMode);
     HMODULE module = LoadLibraryExA(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);

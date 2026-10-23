@@ -24,26 +24,25 @@ static unsigned char *oldSpellTableStart, *oldSpellTableEnd;
 
 #ifndef __APPLE__
 // ---- Windows: the patch ------------------------------------------------------------------------
-// A rewrite whose new value isn't a distance.
+// A rewrite whose new value isn't a distance: the 4-byte field at rva + fieldOffset, and the new value.
 typedef struct {
     unsigned int rva;
-    int size, fieldOffset;
-    unsigned char shipped[8];
+    int fieldOffset;
     int value;
     const char *name;
 } SpellValueSite;
 
 static const SpellValueSite SPELL_VALUE_SITES[] = {
-    {RVA_UNMEMORIZE_SPELL_BOUND,     6, 2, {0x81, 0xfe, 0xdc, 0x05, 0x00, 0x00}, SPELL_SLOT_BOUND_MOVED, "unmemorize_spell"},
-    {RVA_NET_RECV_MEMORIZED_BOUND,   6, 2, {0x81, 0xfa, 0xdc, 0x05, 0x00, 0x00}, SPELL_SLOT_BOUND_MOVED, "net_recv_memorized"},
+    {RVA_UNMEMORIZE_SPELL_BOUND,   2, SPELL_SLOT_BOUND_MOVED, "unmemorize_spell"},
+    {RVA_NET_RECV_MEMORIZED_BOUND, 2, SPELL_SLOT_BOUND_MOVED, "net_recv_memorized"},
 };
 #define SPELL_VALUE_SITE_COUNT ((int)(sizeof SPELL_VALUE_SITES / sizeof SPELL_VALUE_SITES[0]))
 #define SPELL_MOVE_SITE_COUNT  (SPELL_TABLE_SITE_COUNT + SPELL_VALUE_SITE_COUNT)
 
-static struct { unsigned char *at; int value; } spellMoveWrites[SPELL_MOVE_SITE_COUNT];
+static struct { unsigned char *at; int value, old; } spellMoveWrites[SPELL_MOVE_SITE_COUNT];
 static int spellMoveWriteCount;
 
-// Checks every site against the game's shipped bytes and queues its new field.
+// Queues every site's new field, for the table at `table`.
 static int queueSpellTableWrites(unsigned char *table) {
     long long delta = table - (gameBase + RVA_SPELL_TABLE);
     int matched = 0;
@@ -54,8 +53,8 @@ static int queueSpellTableWrites(unsigned char *table) {
         int field;
         memcpy(&field, at + s->fieldOffset, 4);
         long long moved = field + delta;
-        if (memcmp(at, s->bytes, (size_t)s->fieldOffset + 4) || moved < INT32_MIN || moved > INT32_MAX) {
-            writeLog("spell_table_site_mismatch", "group=table rva=0x%x out_of_reach=%d", s->rva, moved < INT32_MIN || moved > INT32_MAX);
+        if (moved < INT32_MIN || moved > INT32_MAX) {
+            writeLog("spell_table_site_mismatch", "group=table rva=0x%x out_of_reach=1", s->rva);
             continue;
         }
         spellMoveWrites[spellMoveWriteCount].at = at + s->fieldOffset;
@@ -64,10 +63,6 @@ static int queueSpellTableWrites(unsigned char *table) {
     }
     for (int i = 0; i < SPELL_VALUE_SITE_COUNT; i++) {
         const SpellValueSite *s = &SPELL_VALUE_SITES[i];
-        if (memcmp(gameBase + s->rva, s->shipped, (size_t)s->size)) {
-            writeLog("spell_table_site_mismatch", "group=value name=%s rva=0x%x", s->name, s->rva);
-            continue;
-        }
         spellMoveWrites[spellMoveWriteCount].at = gameBase + s->rva + s->fieldOffset;
         spellMoveWrites[spellMoveWriteCount++].value = s->value;
         matched++;
@@ -103,6 +98,10 @@ static void protectOldSpellTable(void) {
 
 // Moves the table, or changes nothing.
 static int installSpellTableMove(void) {
+    if (!gameCodeMatches) {
+        writeLog("spell_table_not_moved", "reason=game_code_differs sites=0 of %d", SPELL_MOVE_SITE_COUNT);
+        return 0;
+    }
     size_t size = (size_t)SPELL_TABLE_RECORDS_MOVED * SPELL_SIZE;
     unsigned char *table = allocNearImage(size);
     if (!table) {
@@ -110,20 +109,24 @@ static int installSpellTableMove(void) {
         return 0;
     }
     int matched = queueSpellTableWrites(table);
-    DWORD textProtection = 0;
-    unsigned char *text = gameBase + RVA_TEXT_SECTION;
-    size_t textSize = (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION);
     const char *reason = matched != SPELL_MOVE_SITE_COUNT ? "game_build_differs"
-                         : !VirtualProtect(text, textSize, PAGE_EXECUTE_READWRITE, &textProtection) ? "code_unwritable" : NULL;
+                         : !openGameCode(gameBase + RVA_TEXT_SECTION, (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION)) ? "code_unwritable" : NULL;
     if (reason) {
         writeLog("spell_table_not_moved", "reason=%s sites=%d of %d", reason, matched, SPELL_MOVE_SITE_COUNT);
         VirtualFree(table, 0, MEM_RELEASE);
         return 0;
     }
     memcpy(table, gameBase + RVA_SPELL_TABLE, (size_t)(VANILLA_SPELL_COUNT + 1) * SPELL_SIZE);
-    for (int i = 0; i < spellMoveWriteCount; i++) memcpy(spellMoveWrites[i].at, &spellMoveWrites[i].value, 4);
-    VirtualProtect(text, textSize, textProtection, &textProtection);
-    FlushInstructionCache(GetCurrentProcess(), text, textSize);
+    for (int i = 0; i < spellMoveWriteCount; i++) {
+        memcpy(&spellMoveWrites[i].old, spellMoveWrites[i].at, 4);
+        if (writeGameCode(spellMoveWrites[i].at, &spellMoveWrites[i].value, 4)) continue;
+        for (int j = i; j >= 0; j--) writeGameCode(spellMoveWrites[j].at, &spellMoveWrites[j].old, 4);
+        closeGameCode();
+        writeLog("spell_table_not_moved", "reason=code_unwritable sites=%d of %d", matched, SPELL_MOVE_SITE_COUNT);
+        VirtualFree(table, 0, MEM_RELEASE);
+        return 0;
+    }
+    closeGameCode();
     movedSpellTable = table;
     spellTableMoved = 1;
     writeLog("spell_table_moved", "from=%p to=%p rva=0x%llx records=%d bound=%d sites=%d of %d", (void *)(gameBase + RVA_SPELL_TABLE),
@@ -135,15 +138,16 @@ static int installSpellTableMove(void) {
 #else
 // ---- Mac: the patch ----------------------------------------------------------------------------
 // The Mac side: the ADRPs move their page, and every other change is one instruction word.
-typedef struct { unsigned int rva; uint32_t shipped, word; const char *name; } SpellWordSite;
+typedef struct { unsigned int rva; uint32_t mask, value; const char *name; } SpellWordSite;
 
 // The bounds, each a cmp's 12-bit immediate.
+#define SPELL_BOUND_MASK (0x1fffu << 10)
 #define SPELL_WORD_SITE_COUNT 4
 static const SpellWordSite SPELL_WORD_SITES[SPELL_WORD_SITE_COUNT] = {
-    {RVA_UNMEMORIZE_SPELL_BOUND,   0x7117727fu, (0x7117727fu & ~(0x1fffu << 10)) | SPELL_SLOT_BOUND_MOVED << 10, "unmemorize_spell"},
-    {RVA_UNMEMORIZE_SPELL_BOUND_2, 0x7117701fu, (0x7117701fu & ~(0x1fffu << 10)) | SPELL_SLOT_BOUND_MOVED << 10, "unmemorize_spell_2"},
-    {RVA_UNMEMORIZE_SPELL_BOUND_3, 0x711772ffu, (0x711772ffu & ~(0x1fffu << 10)) | SPELL_SLOT_BOUND_MOVED << 10, "unmemorize_spell_3"},
-    {RVA_NET_RECV_MEMORIZED_BOUND, 0x71176d1fu, (0x71176d1fu & ~(0x1fffu << 10)) | (SPELL_SLOT_BOUND_MOVED - 1) << 10, "net_recv_memorized"},
+    {RVA_UNMEMORIZE_SPELL_BOUND,   SPELL_BOUND_MASK, SPELL_SLOT_BOUND_MOVED << 10, "unmemorize_spell"},
+    {RVA_UNMEMORIZE_SPELL_BOUND_2, SPELL_BOUND_MASK, SPELL_SLOT_BOUND_MOVED << 10, "unmemorize_spell_2"},
+    {RVA_UNMEMORIZE_SPELL_BOUND_3, SPELL_BOUND_MASK, SPELL_SLOT_BOUND_MOVED << 10, "unmemorize_spell_3"},
+    {RVA_NET_RECV_MEMORIZED_BOUND, SPELL_BOUND_MASK, (SPELL_SLOT_BOUND_MOVED - 1) << 10, "net_recv_memorized"},
 };
 
 #define SPELL_MOVE_SITE_COUNT (SPELL_MAC_TABLE_SITE_COUNT + SPELL_WORD_SITE_COUNT)
@@ -162,7 +166,7 @@ static uint32_t spellGameWord(unsigned int rva) {
     return word;
 }
 
-// Checks every site against the game's shipped words and queues its new word.
+// Queues every site's new word, for the table at `table`.
 static int queueSpellTableWrites(unsigned char *table) {
     long long pages = ((long long)(uintptr_t)table >> ADRP_PAGE_SHIFT) - ((long long)(uintptr_t)(gameBase + RVA_SPELL_TABLE) >> ADRP_PAGE_SHIFT);
     int matched = 0;
@@ -170,7 +174,7 @@ static int queueSpellTableWrites(unsigned char *table) {
     for (int i = 0; i < SPELL_MAC_TABLE_SITE_COUNT; i++) {
         const SpellMacSite *s = &SPELL_MAC_TABLE_SITES[i];
         uint32_t moved = 0;
-        if (spellGameWord(s->rva) != s->word || !adrpMovedBy(s->word, pages, &moved)) {
+        if (!adrpMovedBy(spellGameWord(s->rva), pages, &moved)) {
             writeLog("spell_table_site_mismatch", "group=table va=0x%llx", s->rva + 0x100000000ULL);
             continue;
         }
@@ -179,11 +183,7 @@ static int queueSpellTableWrites(unsigned char *table) {
     }
     for (int i = 0; i < SPELL_WORD_SITE_COUNT; i++) {
         const SpellWordSite *s = &SPELL_WORD_SITES[i];
-        if (spellGameWord(s->rva) != s->shipped) {
-            writeLog("spell_table_site_mismatch", "group=value name=%s va=0x%llx", s->name, s->rva + 0x100000000ULL);
-            continue;
-        }
-        queueSpellWord(s->rva, s->word);
+        queueSpellWord(s->rva, patchedWord(spellGameWord(s->rva), s->mask, s->value));
         matched++;
     }
     return matched;
@@ -224,6 +224,10 @@ static void protectOldSpellTable(void) {
 
 // Moves the table, or changes nothing.
 static int installSpellTableMove(void) {
+    if (!gameCodeMatches) {
+        writeLog("spell_table_not_moved", "reason=game_code_differs sites=0 of %d", SPELL_MOVE_SITE_COUNT);
+        return 0;
+    }
     unsigned char *old = gameBase + RVA_SPELL_TABLE;
     size_t at = (uintptr_t)old & ADRP_PAGE_MASK;
     size_t total = (at + (size_t)SPELL_TABLE_RECORDS_MOVED * SPELL_SIZE + MAC_PAGE_MASK) & ~(size_t)MAC_PAGE_MASK;

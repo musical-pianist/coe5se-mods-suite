@@ -1,6 +1,5 @@
-// The stubs' versions, each logged as loader_version on every launch's first line.
-
+// The stubs' versions.
 #pragma once
 
-#define GLU32_VERSION 8   // glu32.dll, the Windows stub
-#define STUB_VERSION 9    // coe5se.dylib, the Mac stub
+#define GLU32_VERSION 8
+#define STUB_VERSION 10

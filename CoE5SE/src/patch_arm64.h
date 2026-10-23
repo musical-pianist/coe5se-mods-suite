@@ -45,6 +45,9 @@ static int writeGameCode(void *address, const void *bytes, size_t size) {
     return 1;
 }
 
+// The game's instruction word `live` with the bits of `mask` set to `value`: a new immediate.
+static uint32_t patchedWord(uint32_t live, uint32_t mask, uint32_t value) { return (live & ~mask) | (value & mask); }
+
 // Makes game data in __DATA_CONST writable.
 static int makeGameDataWritable(void *address, size_t size) {
     mach_vm_address_t page = (mach_vm_address_t)address & ~(mach_vm_address_t)MAC_PAGE_MASK;
@@ -77,7 +80,8 @@ static unsigned char *takePadding(size_t size) {
         unsigned char *text = getsectiondata(mh, "__TEXT", "__text", &textSize);
         end = text ? text : next;
     }
-    if (size % 16 || next + size > end) return NULL;
+    size = (size + 15) & ~(size_t)15;
+    if (next + size > end) return NULL;
     for (size_t i = 0; i < size; i++)
         if (next[i]) return NULL;
     unsigned char *spot = next;

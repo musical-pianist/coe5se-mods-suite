@@ -1,5 +1,4 @@
 // The game's user folder, and in it the approved plugin DLLs (coe5se/approved.txt).
-
 #pragma once
 #ifdef _WIN32
 #include <windows.h>
@@ -28,7 +27,7 @@
 #endif
 #define USER_DIR_SAVE_ENV "COE5_SAVE"
 #define USER_DIR_FALLBACK "coe5fallback"
-#define GAME_PATH_SIZE    2500   // the game's path buffers (0x9c4)
+#define GAME_PATH_SIZE    2500
 
 // CoE5SE's folder inside the game's user folder.
 #define COE5SE_USER_DIR "coe5se"
@@ -82,7 +81,7 @@ static __attribute__((unused)) int makeGameDir(const char *path) {
         if (dir[i] == '/' || dir[i] == '\\') {
             char c = dir[i];
             dir[i] = '\0';
-            CreateDirectoryA(dir, NULL);   // No log: the folder's own make below says whether it worked
+            CreateDirectoryA(dir, NULL);
             dir[i] = c;
         }
     return CreateDirectoryA(dir, NULL) ? 1 : -1;
@@ -152,7 +151,7 @@ static __attribute__((unused)) int coe5seUserFile(const char *file, char *out, s
 // Writes the old folder's path of `file` to `out`, when the old folder has the file.
 static __attribute__((unused)) int oldUserFile(const char *folder, const char *file, char *out, size_t size) {
     char old[MAX_PATH];
-    if (!legacyUserDir(old, sizeof old) || !strcmp(old, userDir())) return 0;   // Logged by buildPath, or the same folder
+    if (!legacyUserDir(old, sizeof old) || !strcmp(old, userDir())) return 0;
     return buildPath(out, size, __func__, "%s" USER_DIR_SEP "%s" USER_DIR_SEP "%s", old, folder, file) &&
            GetFileAttributesA(out) != INVALID_FILE_ATTRIBUTES;
 }
@@ -162,11 +161,11 @@ static __attribute__((unused)) int userFileToRead(const char *folder, const char
     char old[MAX_PATH];
     if (!buildPath(out, size, __func__, "%s" USER_DIR_SEP "%s" USER_DIR_SEP "%s", userDir(), folder, file)) return 0;
     if (GetFileAttributesA(out) == INVALID_FILE_ATTRIBUTES && oldUserFile(folder, file, old, sizeof old))
-        snprintf(out, size, "%s", old);   // No log: as long as `out`, which held a longer path
+        snprintf(out, size, "%s", old);
     return 1;
 }
 
-// Copies the file at `from` to `to`, through `to`.new and a rename. Returns 0 if it didn't.
+// Copies the file at `from` to `to`, through `to`.new and a rename.
 static __attribute__((unused)) int copyUserFile(const char *from, const char *to) {
     char fresh[MAX_PATH], buf[4096];
     if (!buildPath(fresh, sizeof fresh, __func__, "%s.new", to)) return 0;
@@ -190,7 +189,7 @@ static __attribute__((unused)) int copyUserFile(const char *from, const char *to
 static __attribute__((unused)) int userFileToWrite(const char *folder, const char *file, char *out, size_t size) {
     char old[MAX_PATH];
     if (!buildPath(out, size, __func__, "%s" USER_DIR_SEP "%s", userDir(), folder)) return 0;
-    CreateDirectoryA(out, NULL);   // No log: a missing folder fails the caller's write, which logs
+    CreateDirectoryA(out, NULL);
     if (!buildPath(out, size, __func__, "%s" USER_DIR_SEP "%s" USER_DIR_SEP "%s", userDir(), folder, file)) return 0;
     if (GetFileAttributesA(out) == INVALID_FILE_ATTRIBUTES && oldUserFile(folder, file, old, sizeof old)) {
         if (copyUserFile(old, out)) writeLog("user_file_copied", "file=%s" USER_DIR_SEP "%s", folder, file);
@@ -204,7 +203,7 @@ static __attribute__((unused)) int isHashApproved(const char *hash) {
     if (!userFileToRead(COE5SE_USER_DIR, "approved.txt", path, sizeof path)) return 0;
     FILE *f = fopen(path, "r");
     if (!f) {
-        if (errno != ENOENT) writeLog("approvals_unreadable", "path=%s errno=%d", path, errno);   // No log for a missing file: nothing approved yet
+        if (errno != ENOENT) writeLog("approvals_unreadable", "path=%s errno=%d", path, errno);
         return 0;
     }
     int approved = 0;

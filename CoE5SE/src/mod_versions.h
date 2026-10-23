@@ -92,31 +92,32 @@ static void modDiffersWarningHook(const char *format, const char *name) {
 #define MOD_VERSIONS_STUB_SIZE 0x20
 #define WARNED_SET_REGISTER    2
 #define WARNED_SET_FROM_R12D   0x25
+#define WARNED_SET_SIZE        7
 static int installModVersionHooks(int *wanted) {
-    static const unsigned char WARNED_SET[] = {0x44, 0x89, 0x3d, 0x33, 0xa5, 0x69, 0x05};
     *wanted = 3;
     unsigned char *stubs = allocNear(gameBase + RVA_TEXT_SECTION);
     if (!stubs) {
         writeLog("mod_version_hooks_skipped", "reason=no_near_page");
         return 0;
     }
+    makePagesReadExecute(stubs, 0x1000);
     if (!redirectCall(RVA_LOAD_GAME_RESET_MODS_CALL, RVA_RESET_MODS, stubs, (void *)finishLoadedModList, "load_game_reset_mods", NULL))
         return 0;
     modListEndHooked = 1;
     unsigned char *flag = gameBase + RVA_LOAD_GAME_MOD_WARNED_SET;
-    if (memcmp(flag, WARNED_SET, sizeof WARNED_SET)) {
-        writeLog("hook_skipped", "site=load_game_mod_warned reason=not_the_expected_bytes");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=load_game_mod_warned reason=game_code_differs");
         return 1;
     }
     modVersionsChecked = 1;
     if (!redirectCall(RVA_LOAD_GAME_MOD_DIFFERS_CALL, RVA_WARN_FORMAT, stubs + MOD_VERSIONS_STUB_SIZE, (void *)modDiffersWarningHook,
                       "load_game_mod_differs", NULL))
         return 1;
-    DWORD old;
-    VirtualProtect(flag + WARNED_SET_REGISTER, 1, PAGE_EXECUTE_READWRITE, &old);
-    flag[WARNED_SET_REGISTER] = WARNED_SET_FROM_R12D;
-    VirtualProtect(flag + WARNED_SET_REGISTER, 1, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), flag, sizeof WARNED_SET);
+    static const unsigned char FROM_R12D = WARNED_SET_FROM_R12D;
+    if (!writeGameCode(flag + WARNED_SET_REGISTER, &FROM_R12D, 1)) {
+        writeLog("hook_skipped", "site=load_game_mod_warned reason=code_unwritable");
+        return 2;
+    }
     return 3;
 }
 #else
@@ -128,22 +129,23 @@ static void modDiffersWarningHook(const char *format, ...) {
     va_end(ap);
 }
 
+#define MOVZ_IMM16_MASK (0xffffu << 5)
 static int installModVersionHooks(int *wanted) {
-    const uint32_t WARNED_ONE = 0x52800029, WARNED_ZERO = 0x52800009;
     *wanted = 3;
     uint32_t word;
     if (!pointMissingModsCall(RVA_LOAD_GAME_RESET_MODS_CALL, RVA_RESET_MODS, (void *)finishLoadedModList, "load_game_reset_mods"))
         return 0;
     modListEndHooked = 1;
-    memcpy(&word, gameBase + RVA_LOAD_GAME_MOD_WARNED_SET, 4);
-    if (word != WARNED_ONE) {
-        writeLog("hook_skipped", "site=load_game_mod_warned reason=not_the_expected_bytes");
+    if (!gameCodeMatches) {
+        writeLog("hook_skipped", "site=load_game_mod_warned reason=game_code_differs");
         return 1;
     }
+    memcpy(&word, gameBase + RVA_LOAD_GAME_MOD_WARNED_SET, 4);
+    word &= ~MOVZ_IMM16_MASK;
     modVersionsChecked = 1;
     if (!pointMissingModsCall(RVA_LOAD_GAME_MOD_DIFFERS_CALL, RVA_WARN_FORMAT, (void *)modDiffersWarningHook, "load_game_mod_differs"))
         return 1;
-    if (!writeGameCode(gameBase + RVA_LOAD_GAME_MOD_WARNED_SET, &WARNED_ZERO, 4)) {
+    if (!writeGameCode(gameBase + RVA_LOAD_GAME_MOD_WARNED_SET, &word, 4)) {
         writeLog("hook_skipped", "site=load_game_mod_warned reason=code_unwritable");
         return 2;
     }

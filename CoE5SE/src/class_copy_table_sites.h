@@ -1,12 +1,11 @@
-// Every instruction in CoE5.exe that builds an address in the game's class_copy table, as shipped.
+// Every instruction in CoE5.exe that builds an address in the game's class_copy table.
 #pragma once
 
-#define CLASS_COPY_SITES_EXE_SHA256 "c894c3d0d208fb3cfa6a5a87964b6c1cf14837ae8caffa1cb4d8a81226aa0bb2"
 #define CLASS_COPY_TABLE_SITE_COUNT 5
 static const TableMoveSite CLASS_COPY_TABLE_SITES[CLASS_COPY_TABLE_SITE_COUNT] = {
-    {0x093e29, 3, TABLE_FIELD_REL32, {0x48, 0x8d, 0x15, 0x80, 0x05, 0x19, 0x06}},
-    {0x09414a, 3, TABLE_FIELD_REL32, {0x48, 0x8d, 0x15, 0x5f, 0x02, 0x19, 0x06}},
-    {0x0b057a, 3, TABLE_FIELD_REL32, {0x48, 0x8d, 0x15, 0x2f, 0x3e, 0x17, 0x06}},
-    {0x0b05ed, 3, TABLE_FIELD_REL32, {0x48, 0x8d, 0x0d, 0xbc, 0x3d, 0x17, 0x06}},
-    {0x190d7d, 3, TABLE_FIELD_REL32, {0x48, 0x8d, 0x0d, 0x2c, 0x36, 0x09, 0x06}},
+    {0x094049, 3, TABLE_FIELD_REL32},
+    {0x09436a, 3, TABLE_FIELD_REL32},
+    {0x0b079a, 3, TABLE_FIELD_REL32},
+    {0x0b0814, 3, TABLE_FIELD_REL32},
+    {0x190f56, 3, TABLE_FIELD_REL32},
 };

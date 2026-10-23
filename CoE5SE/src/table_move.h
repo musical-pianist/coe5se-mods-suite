@@ -1,29 +1,32 @@
 // The table moves: bigger weapon, item, class and monster tables for mods.
 #include <stdint.h>
 
-enum { TABLE_FIELD_REL32, TABLE_FIELD_DISP32 };
+enum { TABLE_FIELD_REL32, TABLE_FIELD_DISP32, TABLE_FIELD_REL32_END, TABLE_FIELD_DISP32_END };
 
-// One rewrite of an instruction that builds a table address.
+// One rewrite of an instruction that builds a table address: the 4-byte field at rva + fieldOffset.
 typedef struct {
     unsigned int rva;
     unsigned char fieldOffset, kind;
-    unsigned char bytes[15];
 } TableMoveSite;
 
-// A rewrite whose new value isn't a distance: a bound or a size.
+// A table site's field once the table moves: the distance to the new table, and for an end pointer past the
+static __attribute__((unused)) long long tableMovedField(int field, long long delta, unsigned char kind, long long growth) {
+    return field + delta + (kind == TABLE_FIELD_REL32_END || kind == TABLE_FIELD_DISP32_END ? growth : 0);
+}
+
+// A rewrite whose new value isn't a distance: a bound or a size, the 4-byte field at rva + fieldOffset.
 typedef struct {
     unsigned int rva;
-    int size, fieldOffset;
-    unsigned char shipped[8];
+    int fieldOffset;
     int value;
     const char *name;
 } TableValueSite;
 
-// A rewrite of bytes that hold no table address.
+// A rewrite of a field that holds no table address: `fieldSize` bytes at rva + fieldOffset set to `value`.
 typedef struct {
     unsigned int rva;
-    int size;
-    unsigned char shipped[15], patched[15];
+    unsigned char fieldOffset, fieldSize;
+    int value;
 } TablePatchSite;
 
 // Weapons: mods' weapons take slots from 1200.
@@ -70,14 +73,14 @@ _Static_assert(CLASS_PICKER_PICK_BASE + LAST_MOD_CLASS_SLOT < CLASS_PICKER_INFO_
 #include "battle_summons_table_sites.h"
 #include "monster_frame_sites.h"
 #else
-// A Mac site: an ADRP that builds a table address, as shipped.
-typedef struct { unsigned int rva; uint32_t word; } TableMacSite;
-// A Mac bound: a movz or cmp immediate sized by the table, as shipped and new.
-typedef struct { unsigned int rva; uint32_t word; int value; } TableMacBound;
-// The table's size in bytes, built by a movz and the movk after it, as shipped.
-typedef struct { unsigned int rva; uint32_t word, next; } TableMacSize;
-// A Mac word the move changes that holds no table address.
-typedef struct { unsigned int rva; uint32_t shipped, word; } TableMacPatch;
+// A Mac site: an ADRP that builds a table address.
+typedef struct { unsigned int rva; } TableMacSite;
+// A Mac bound: a movz or cmp immediate sized by the table, and its new value.
+typedef struct { unsigned int rva; int value; } TableMacBound;
+// The table's size in bytes, built by a movz and the movk after it.
+typedef struct { unsigned int rva; } TableMacSize;
+// A Mac word the move changes that holds no table address: its immediate's bits (`mask`) set to `value`.
+typedef struct { unsigned int rva; uint32_t mask, value; } TableMacPatch;
 #include "weapon_table_sites_mac.h"
 #include "item_table_sites_mac.h"
 #include "class_heroes_table_sites_mac.h"
@@ -132,42 +135,46 @@ typedef struct TableMove {
 static void weaponOutOfSlotsHook(const char *fmt, const char *name);
 
 static const TableValueSite WEAPON_VALUE_SITES[] = {
-    {RVA_WEAPON_FREE_SLOT_CAP,    5, 1, {0x3d, 0x88, 0x13, 0x00, 0x00},             WEAPON_RECORDS_MOVED,     "free_slot_cap"},
-    {RVA_SELECTWEAPON_BOUND,      5, 1, {0x3d, 0x88, 0x13, 0x00, 0x00},             WEAPON_RECORDS_MOVED,     "selectweapon"},
-    {RVA_NEXTWEP_BOUND,           5, 1, {0x3d, 0x87, 0x13, 0x00, 0x00},             WEAPON_RECORDS_MOVED - 1, "nextwep"},
-    {RVA_NEXTALWAYSWEP_BOUND,     5, 1, {0x3d, 0x87, 0x13, 0x00, 0x00},             WEAPON_RECORDS_MOVED - 1, "nextalwayswep"},
-    {RVA_ITEMWEP_BOUND,           5, 1, {0x3d, 0x87, 0x13, 0x00, 0x00},             WEAPON_RECORDS_MOVED - 1, "itemwep"},
-    {RVA_WEAPON_NAME_LINE_BOUND,  7, 3, {0x41, 0x81, 0xf8, 0x87, 0x13, 0x00, 0x00}, WEAPON_RECORDS_MOVED - 1, "name_line"},
-    {RVA_WEAPON_CLEAR_SIZE,       6, 2, {0x41, 0xb8, 0x00, 0x35, 0x0c, 0x00},       WEAPON_RECORDS_MOVED * WEAPON_SIZE, "clear_size"},
-    {RVA_WEAPON_BACKUP_SIZE,      5, 1, {0xb9, 0x00, 0x35, 0x0c, 0x00},             WEAPON_RECORDS_MOVED * WEAPON_SIZE, "backup_size"},
-    {RVA_WEAPON_BACKUP_COPY_SIZE, 6, 2, {0x41, 0xb8, 0x00, 0x35, 0x0c, 0x00},       WEAPON_RECORDS_MOVED * WEAPON_SIZE, "backup_copy_size"},
-    {RVA_WEAPON_RESTORE_SIZE,     6, 2, {0x41, 0xb8, 0x00, 0x35, 0x0c, 0x00},       WEAPON_RECORDS_MOVED * WEAPON_SIZE, "restore_size"},
+    {RVA_WEAPON_FREE_SLOT_CAP,    1, WEAPON_RECORDS_MOVED,     "free_slot_cap"},
+    {RVA_SELECTWEAPON_BOUND,      1, WEAPON_RECORDS_MOVED,     "selectweapon"},
+    {RVA_NEXTWEP_BOUND,           1, WEAPON_RECORDS_MOVED - 1, "nextwep"},
+    {RVA_NEXTALWAYSWEP_BOUND,     1, WEAPON_RECORDS_MOVED - 1, "nextalwayswep"},
+    {RVA_ITEMWEP_BOUND,           1, WEAPON_RECORDS_MOVED - 1, "itemwep"},
+    {RVA_WEAPON_NAME_LINE_BOUND,  3, WEAPON_RECORDS_MOVED - 1, "name_line"},
+    {RVA_WEAPON_CLEAR_SIZE,       2, WEAPON_RECORDS_MOVED * WEAPON_SIZE, "clear_size"},
+    {RVA_WEAPON_BACKUP_SIZE,      1, WEAPON_RECORDS_MOVED * WEAPON_SIZE, "backup_size"},
+    {RVA_WEAPON_BACKUP_COPY_SIZE, 2, WEAPON_RECORDS_MOVED * WEAPON_SIZE, "backup_copy_size"},
+    {RVA_WEAPON_RESTORE_SIZE,     2, WEAPON_RECORDS_MOVED * WEAPON_SIZE, "restore_size"},
 };
 #define WEAPON_VALUE_SITE_COUNT ((int)(sizeof WEAPON_VALUE_SITES / sizeof WEAPON_VALUE_SITES[0]))
 
 static const TableValueSite ITEM_VALUE_SITES[] = {
-    {RVA_GROUND_ITEMS_LOAD_CHECK,    5, 1, {0x3d, 0xe8, 0x03, 0x00, 0x00},       ITEM_RECORDS_MOVED, "ground_items_load"},
-    {RVA_GROUND_ITEMS_LOAD_CHECK_2,   6, 2, {0x81, 0xf9, 0xe8, 0x03, 0x00, 0x00}, ITEM_RECORDS_MOVED, "ground_items_load_2"},
+    {RVA_GROUND_ITEMS_LOAD_CHECK,   1, ITEM_RECORDS_MOVED, "ground_items_load"},
+    {RVA_GROUND_ITEMS_LOAD_CHECK_2, 2, ITEM_RECORDS_MOVED, "ground_items_load_2"},
+    {RVA_ITEM_BACKUP_SIZE,      1, ITEM_RECORDS_MOVED * ITEM_SIZE, "backup_size"},
+    {RVA_ITEM_BACKUP_COPY_SIZE, 2, ITEM_RECORDS_MOVED * ITEM_SIZE, "backup_copy_size"},
+    {RVA_ITEM_RESTORE_SIZE,     2, ITEM_RECORDS_MOVED * ITEM_SIZE, "restore_size"},
 };
 #define ITEM_VALUE_SITE_COUNT ((int)(sizeof ITEM_VALUE_SITES / sizeof ITEM_VALUE_SITES[0]))
 
-#define CLASS_TABLE_BYTES_GAME   0x1892a0
-#define CLASS_RECRUITS_BYTES_GAME 0x1443800
-_Static_assert(CLASS_TABLE_BYTES_GAME == CLASS_TABLE_MAX * CLASS_SIZE && CLASS_RECRUITS_BYTES_GAME == CLASS_TABLE_MAX * CLASS_RECRUITS_SIZE,
-               "the class sizes the game's code holds");
-#define CLASS_SIZE_SITE_R8(rva, name) {rva, 6, 2, {0x41, 0xb8, 0xa0, 0x92, 0x18, 0x00}, CLASS_RECORDS_MOVED * CLASS_SIZE, name}
+#define CLASS_SIZE_SITE_R8(rva, name) {rva, 2, CLASS_RECORDS_MOVED * CLASS_SIZE, name}
 static const TableValueSite CLASS_VALUE_SITES[] = {
     CLASS_SIZE_SITE_R8(RVA_CLASS_COPY_SIZE_1, "copy_size_1"), CLASS_SIZE_SITE_R8(RVA_CLASS_COPY_SIZE_2, "copy_size_2"),
     CLASS_SIZE_SITE_R8(RVA_CLASS_COPY_SIZE_3, "copy_size_3"), CLASS_SIZE_SITE_R8(RVA_CLASS_COPY_SIZE_4, "copy_size_4"),
     CLASS_SIZE_SITE_R8(RVA_CLASS_COPY_SIZE_5, "copy_size_5"),
-    {RVA_CLASS_BACKUP_SIZE, 5, 1, {0xb9, 0xa0, 0x92, 0x18, 0x00}, CLASS_RECORDS_MOVED * CLASS_SIZE, "backup_size"},
+    {RVA_CLASS_BACKUP_SIZE, 1, CLASS_RECORDS_MOVED * CLASS_SIZE, "backup_size"},
     CLASS_SIZE_SITE_R8(RVA_CLASS_BACKUP_SIZE + 10, "backup_copy_size"), CLASS_SIZE_SITE_R8(RVA_CLASS_RESTORE_SIZE, "restore_size"),
-    {RVA_CLASS_RECRUITS_BACKUP_SIZE, 5, 1, {0xb9, 0x00, 0x38, 0x44, 0x01}, CLASS_RECORDS_MOVED * CLASS_RECRUITS_SIZE, "recruits_backup_size"},
-    {RVA_CLASS_RECRUITS_BACKUP_SIZE + 10, 6, 2, {0x41, 0xb8, 0x00, 0x38, 0x44, 0x01}, CLASS_RECORDS_MOVED * CLASS_RECRUITS_SIZE, "recruits_backup_copy_size"},
-    {RVA_CLASS_RECRUITS_RESTORE_SIZE, 6, 2, {0x41, 0xb8, 0x00, 0x38, 0x44, 0x01}, CLASS_RECORDS_MOVED * CLASS_RECRUITS_SIZE, "recruits_restore_size"},
-    {RVA_CLASS_PICKER_INFO_ID, 6, 2, {0x8d, 0x8e, 0xc8, 0x00, 0x00, 0x00}, CLASS_PICKER_INFO_BASE, "picker_info_id"},
+    {RVA_CLASS_RECRUITS_BACKUP_SIZE, 1, CLASS_RECORDS_MOVED * CLASS_RECRUITS_SIZE, "recruits_backup_size"},
+    {RVA_CLASS_RECRUITS_BACKUP_SIZE + 10, 2, CLASS_RECORDS_MOVED * CLASS_RECRUITS_SIZE, "recruits_backup_copy_size"},
+    {RVA_CLASS_RECRUITS_RESTORE_SIZE, 2, CLASS_RECORDS_MOVED * CLASS_RECRUITS_SIZE, "recruits_restore_size"},
+    {RVA_CLASS_PICKER_INFO_ID, 2, CLASS_PICKER_INFO_BASE, "picker_info_id"},
 };
 #define CLASS_VALUE_SITE_COUNT ((int)(sizeof CLASS_VALUE_SITES / sizeof CLASS_VALUE_SITES[0]))
+
+static const TableValueSite MONSTER_VALUE_SITES[] = {
+    {RVA_MONSTER_SPRITE_LABELS_FILL_BOUND, 2, MONSTER_RECORDS_MOVED, "sprite_labels_fill"},
+};
+#define MONSTER_VALUE_SITE_COUNT ((int)(sizeof MONSTER_VALUE_SITES / sizeof MONSTER_VALUE_SITES[0]))
 #endif
 static int queueClassPickerDecode(const struct TableMove *t);
 
@@ -208,6 +215,7 @@ static TableMove tableMoves[] = {
      .movedRecords = MONSTER_RECORDS_MOVED, .firstModSlot = FIRST_MOD_MONSTER_SLOT, .lastModSlot = LAST_MOD_MONSTER_SLOT, .blockWithNext = 1,
      .sites = MONSTER_TABLE_SITES, .siteCount = MONSTER_TABLE_SITE_COUNT, .bounds = MONSTER_BOUND_SITES, .boundCount = MONSTER_BOUND_SITE_COUNT,
      .patches = MONSTER_FRAME_SITES, .patchCount = MONSTER_FRAME_SITE_COUNT, .countRva = RVA_MONSTER_COUNT, .countSlack = 2,
+     .values = MONSTER_VALUE_SITES, .valueCount = MONSTER_VALUE_SITE_COUNT,
      .word = "newmonster", .reason = "out_of_monster_slots", .title = "CoE5SE: Monsters left out", .opening = "Monsters left out (no room):",
      .header = "Monsters left out"},
     {.name = "army_list_counts", .rva = RVA_ARMY_LIST_COUNTS, .recordSize = ARMY_LIST_COUNT_SIZE, .gameRecords = MONSTER_TABLE_MAX,
@@ -239,6 +247,7 @@ static TableMove tableMoves[] = {
     {.name = "item", .rva = RVA_ITEM_TABLE, .recordSize = ITEM_SIZE, .gameRecords = ITEM_TABLE_MAX,
      .movedRecords = ITEM_RECORDS_MOVED, .firstModSlot = FIRST_MOD_ITEM_SLOT, .lastModSlot = LAST_MOD_ITEM_SLOT,
      .macSites = ITEM_MAC_SITES, .macSiteCount = ITEM_MAC_SITE_COUNT, .macBounds = ITEM_MAC_BOUNDS, .macBoundCount = ITEM_MAC_BOUND_COUNT,
+     .macSizes = ITEM_MAC_SIZES, .macSizeCount = ITEM_MAC_SIZE_COUNT,
      .countRva = RVA_ITEM_COUNT, .countSlack = 2,
      .word = "newitem", .reason = "out_of_item_slots", .title = "CoE5SE: Items left out", .opening = "Items left out (no room):",
      .header = "Items left out"},
@@ -476,21 +485,35 @@ static LONG WINAPI logOldTableAccess(EXCEPTION_POINTERS *e) {
 
 // The changes to the game's code for one block of tables.
 #define TABLE_MOVE_MAX_WRITES 8192
-static struct { unsigned char *at; int size; unsigned char bytes[15]; } tableMoveWrites[TABLE_MOVE_MAX_WRITES];
+static struct { unsigned char *at; int size; unsigned char bytes[15], old[15]; } tableMoveWrites[TABLE_MOVE_MAX_WRITES];
 static int tableMoveWriteCount;
 
 static int queueTableBytes(unsigned char *at, const void *bytes, int size) {
     if (tableMoveWriteCount >= TABLE_MOVE_MAX_WRITES || size > (int)sizeof tableMoveWrites[0].bytes) return 0;
     tableMoveWrites[tableMoveWriteCount].at = at;
     tableMoveWrites[tableMoveWriteCount].size = size;
+    memcpy(tableMoveWrites[tableMoveWriteCount].old, at, (size_t)size);
     memcpy(tableMoveWrites[tableMoveWriteCount++].bytes, bytes, (size_t)size);
     return 1;
 }
 static int queueTableWrite(unsigned char *at, int value) { return queueTableBytes(at, &value, 4); }
 
+// Writes one queued change; 0 when the game's code there can't be written (writeGameCode logged it).
+static int writeTableMoveBytes(unsigned char *to, const unsigned char *bytes, size_t n) {
+    unsigned char *text = gameBase + RVA_TEXT_SECTION, *textEnd = gameBase + RVA_RDATA_SECTION;
+    if (to >= text && to + n <= textEnd) return writeGameCode(to, bytes, n);
+    DWORD previous;
+    if (!VirtualProtect(to, n, PAGE_READWRITE, &previous)) {
+        writeLog("table_patch_unwritable", "rva=0x%llx error=%lu", (unsigned long long)(to - gameBase), GetLastError());
+        return 1;
+    }
+    memcpy(to, bytes, n);
+    VirtualProtect(to, n, previous, &previous);
+    return 1;
+}
+
 // The class picker's click decode, so classes past 99 can be picked.
 static unsigned char *classPickerStub;
-static const unsigned char CLASS_PICKER_DECODE_SHIPPED[8] = {0x8d, 0x43, 0x9c, 0x83, 0xf8, 0x63, 0x76, 0x4a};
 #define CLASS_PICKER_STUB_BYTES 0x60
 
 // Appends a rel32 jump (`opcode`, one or two bytes) from `*at` to game RVA `target`; 0 when out of reach.
@@ -506,8 +529,9 @@ static int stubJump(unsigned char **at, const unsigned char *opcode, int opcodeS
 
 static int queueClassPickerDecode(const struct TableMove *t) {
     unsigned char *decode = gameBase + RVA_CLASS_PICKER_DECODE, *p = classPickerStub;
-    if (!p || memcmp(decode, CLASS_PICKER_DECODE_SHIPPED, sizeof CLASS_PICKER_DECODE_SHIPPED)) {
-        writeLog("table_site_mismatch", "table=%s group=extra name=picker_decode rva=0x%x stub=%d", t->name, RVA_CLASS_PICKER_DECODE, p != NULL);
+    if (!p || !gameCodeMatches) {
+        writeLog("table_site_mismatch", "table=%s group=extra name=picker_decode rva=0x%x stub=%d%s", t->name, RVA_CLASS_PICKER_DECODE,
+                 p != NULL, gameCodeMatches ? "" : " reason=game_code_differs");
         return 0;
     }
     static const unsigned char JBE[] = {0x0f, 0x86}, JNS[] = {0x0f, 0x89}, JMP[] = {0xe9};
@@ -540,7 +564,7 @@ static int queueClassPickerDecode(const struct TableMove *t) {
     return queueTableBytes(decode, jump, 5);
 }
 
-// Checks every site of table `t` against the game's bytes and queues its new field.
+// Queues every site of table `t`'s new field, for the table at `table`.
 static int queueTableMoveWrites(const TableMove *t, unsigned char *table) {
     long long delta = table - (gameBase + t->rva);
     int matched = 0;
@@ -549,8 +573,8 @@ static int queueTableMoveWrites(const TableMove *t, unsigned char *table) {
         unsigned char *at = gameBase + s->rva;
         int field;
         memcpy(&field, at + s->fieldOffset, 4);
-        long long moved = field + delta;
-        if (memcmp(at, s->bytes, (size_t)s->fieldOffset + 4) || moved < INT32_MIN || moved > INT32_MAX || !queueTableWrite(at + s->fieldOffset, (int)moved)) {
+        long long moved = tableMovedField(field, delta, s->kind, (long long)(t->movedRecords - t->gameRecords) * t->recordSize);
+        if (moved < INT32_MIN || moved > INT32_MAX || !queueTableWrite(at + s->fieldOffset, (int)moved)) {
             writeLog("table_site_mismatch", "table=%s group=table rva=0x%x out_of_reach=%d", t->name, s->rva, moved < INT32_MIN || moved > INT32_MAX);
             continue;
         }
@@ -560,7 +584,7 @@ static int queueTableMoveWrites(const TableMove *t, unsigned char *table) {
         const TableValueSite *list = pass ? t->values : t->bounds;
         for (int i = 0, n = pass ? t->valueCount : t->boundCount; i < n; i++) {
             const TableValueSite *s = &list[i];
-            if (memcmp(gameBase + s->rva, s->shipped, (size_t)s->size) || !queueTableWrite(gameBase + s->rva + s->fieldOffset, s->value)) {
+            if (!queueTableWrite(gameBase + s->rva + s->fieldOffset, s->value)) {
                 writeLog("table_site_mismatch", "table=%s group=%s name=%s rva=0x%x", t->name, pass ? "value" : "bound", s->name, s->rva);
                 continue;
             }
@@ -569,7 +593,7 @@ static int queueTableMoveWrites(const TableMove *t, unsigned char *table) {
     }
     for (int i = 0; i < t->patchCount; i++) {
         const TablePatchSite *s = &t->patches[i];
-        if (memcmp(gameBase + s->rva, s->shipped, (size_t)s->size) || !queueTableBytes(gameBase + s->rva, s->patched, s->size)) {
+        if (!queueTableBytes(gameBase + s->rva + s->fieldOffset, &s->value, s->fieldSize)) {
             writeLog("table_site_mismatch", "table=%s group=patch rva=0x%x", t->name, s->rva);
             continue;
         }
@@ -617,6 +641,10 @@ static int installTableGroup(TableMove *first, int count, unsigned char *stubs) 
         sites[k] = tableMoveSiteCount(&first[k]);
         needStub |= first[k].overflowCall != 0;
     }
+    if (!gameCodeMatches) {
+        for (int k = 0; k < count; k++) writeLog("table_not_moved", "table=%s reason=game_code_differs sites=0 of %d", first[k].name, sites[k]);
+        return 0;
+    }
     total += TABLE_BLOCK_SLACK;
     unsigned char *block = allocNearImage(total);
     if (!block || (needStub && !stubs)) {
@@ -631,11 +659,8 @@ static int installTableGroup(TableMove *first, int count, unsigned char *stubs) 
         matched[k] = queueTableMoveWrites(&first[k], block + at[k]);
         all &= matched[k] == sites[k];
     }
-    DWORD textProtection = 0;
-    unsigned char *text = gameBase + RVA_TEXT_SECTION;
-    size_t textSize = (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION);
     const char *reason = !all ? "game_build_differs"
-                         : !VirtualProtect(text, textSize, PAGE_EXECUTE_READWRITE, &textProtection) ? "code_unwritable" : NULL;
+                         : !openGameCode(gameBase + RVA_TEXT_SECTION, (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION)) ? "code_unwritable" : NULL;
     if (reason) {
         for (int k = 0; k < count; k++)
             writeLog("table_not_moved", "table=%s reason=%s sites=%d of %d", first[k].name, reason, matched[k], sites[k]);
@@ -645,26 +670,19 @@ static int installTableGroup(TableMove *first, int count, unsigned char *stubs) 
     for (int k = 0; k < count; k++)
         memcpy(block + at[k], gameBase + first[k].rva, (size_t)first[k].gameRecords * (size_t)first[k].recordSize);
     for (int i = 0; i < tableMoveWriteCount; i++) {
-        unsigned char *to = tableMoveWrites[i].at;
-        size_t n = (size_t)tableMoveWrites[i].size;
-        if (to >= text && to + n <= text + textSize) {
-            memcpy(to, tableMoveWrites[i].bytes, n);
-            continue;
-        }
-        DWORD previous;
-        if (!VirtualProtect(to, n, PAGE_READWRITE, &previous)) {
-            writeLog("table_patch_unwritable", "rva=0x%llx error=%lu", (unsigned long long)(to - gameBase), GetLastError());
-            continue;
-        }
-        memcpy(to, tableMoveWrites[i].bytes, n);
-        VirtualProtect(to, n, previous, &previous);
+        if (writeTableMoveBytes(tableMoveWrites[i].at, tableMoveWrites[i].bytes, (size_t)tableMoveWrites[i].size)) continue;
+        for (int j = i; j >= 0; j--) writeTableMoveBytes(tableMoveWrites[j].at, tableMoveWrites[j].old, (size_t)tableMoveWrites[j].size);
+        closeGameCode();
+        for (int k = 0; k < count; k++)
+            writeLog("table_not_moved", "table=%s reason=code_unwritable sites=%d of %d", first[k].name, matched[k], sites[k]);
+        VirtualFree(block, 0, MEM_RELEASE);
+        return 0;
     }
-    VirtualProtect(text, textSize, textProtection, &textProtection);
-    FlushInstructionCache(GetCurrentProcess(), text, textSize);
+    closeGameCode();
     for (int k = 0; k < count; k++) {
         TableMove *t = &first[k];
         t->moved = block + at[k];
-        int hooked = !t->overflowCall || redirectCall(t->overflowCall, t->overflowTarget, stubs + 0x20 * (t - tableMoves), t->overflowHook, t->word, NULL);
+        int hooked = !t->overflowCall || (stubs && redirectCall(t->overflowCall, t->overflowTarget, stubs + 0x20 * (t - tableMoves), t->overflowHook, t->word, NULL));
         writeLog("table_moved", "table=%s from=%p to=%p rva=0x%llx records=%d mod_slots=%d-%d refusal=%d sites=%d of %d", t->name,
                  (void *)(gameBase + t->rva), (void *)t->moved, (unsigned long long)(t->moved - gameBase), t->movedRecords, t->firstModSlot,
                  t->lastModSlot, hooked, matched[k], sites[k]);
@@ -719,16 +737,12 @@ static uint32_t tableGameWord(unsigned int rva) {
 static uint32_t tableBoundWord(uint32_t word, int value) {
     if ((word & 0x7f800000u) == 0x52800000u && value >= 0 && value <= 0xffff) return (word & ~(0xffffu << 5)) | (uint32_t)value << 5;
     if ((word & 0x7fc0001fu) == 0x7100001fu && value >= 0 && value <= 0xfff) return (word & ~(0xfffu << 10)) | (uint32_t)value << 10;
+    if ((word & 0x7fc0001fu) == 0x3100001fu && value >= 0 && value <= 0xfff) return (word & ~(0xfffu << 10)) | (uint32_t)value << 10;
     return 0;
 }
 
 // The class picker's click decode, so classes past 99 can be picked.
 #define CLASS_PICKER_INFO_PATH (RVA_CLASS_PICKER_INFO_CALL - 32)
-static const uint32_t CLASS_PICKER_DECODE_SHIPPED[4] = {0x51019320u, 0x7101901fu, 0x54000123u, 0x1104af28u};
-static const uint32_t CLASS_PICKER_INFO_PATH_SHIPPED[8] = {0x7100033fu, 0x5a995728u, 0x53023d09u, 0x52828f6au,
-                                                           0x1b0a7d29u, 0x53117d29u, 0x52800c8au, 0x1b0aa128u};
-#define CLASS_PICKER_INFO_ID_SHIPPED 0x11032320u
-#define CLASS_PICKER_INFO_CALL_SHIPPED 0x12003d00u
 static uint32_t a64SubImm(unsigned rd, unsigned rn, unsigned imm) { return 0x51000000u | imm << 10 | rn << 5 | rd; }
 static uint32_t a64CmpImm(unsigned rn, unsigned imm) { return 0x7100001fu | imm << 10 | rn << 5; }
 static uint32_t a64Branch(uint32_t op, unsigned int from, unsigned int to) {
@@ -737,12 +751,9 @@ static uint32_t a64Branch(uint32_t op, unsigned int from, unsigned int to) {
 }
 
 static int queueClassPickerDecode(const struct TableMove *t) {
-    int shipped = tableGameWord(RVA_CLASS_PICKER_INFO_ID) == CLASS_PICKER_INFO_ID_SHIPPED &&
-                  tableGameWord(RVA_CLASS_PICKER_INFO_CALL) == CLASS_PICKER_INFO_CALL_SHIPPED;
-    for (int i = 0; i < 4; i++) shipped &= tableGameWord(RVA_CLASS_PICKER_DECODE + 4 * (unsigned)i) == CLASS_PICKER_DECODE_SHIPPED[i];
-    for (int i = 0; i < 8; i++) shipped &= tableGameWord(CLASS_PICKER_INFO_PATH + 4 * (unsigned)i) == CLASS_PICKER_INFO_PATH_SHIPPED[i];
-    if (!shipped) {
-        writeLog("table_site_mismatch", "table=%s group=extra name=picker_decode va=0x%llx", t->name, RVA_CLASS_PICKER_DECODE + 0x100000000ULL);
+    if (!gameCodeMatches) {
+        writeLog("table_site_mismatch", "table=%s group=extra name=picker_decode va=0x%llx reason=game_code_differs", t->name,
+                 RVA_CLASS_PICKER_DECODE + 0x100000000ULL);
         return 0;
     }
     const unsigned last = LAST_MOD_CLASS_SLOT, path = CLASS_PICKER_INFO_PATH;
@@ -763,18 +774,18 @@ static int queueClassPickerDecode(const struct TableMove *t) {
     for (int i = 0; i < 8; i++) ok &= queueTableWord(path + 4 * (unsigned)i, info[i]);
     ok &= queueTableWord(RVA_CLASS_PICKER_DECODE + 4, a64CmpImm(0, last + 1));
     ok &= queueTableWord(RVA_CLASS_PICKER_DECODE + 12, a64Branch(0x14000000u, RVA_CLASS_PICKER_DECODE + 12, path));
-    ok &= queueTableWord(RVA_CLASS_PICKER_INFO_ID, (CLASS_PICKER_INFO_ID_SHIPPED & ~(0xfffu << 10)) | (uint32_t)CLASS_PICKER_INFO_BASE << 10);
+    ok &= queueTableWord(RVA_CLASS_PICKER_INFO_ID, (tableGameWord(RVA_CLASS_PICKER_INFO_ID) & ~(0xfffu << 10)) | (uint32_t)CLASS_PICKER_INFO_BASE << 10);
     return ok;
 }
 
-// Checks every site of table `t` against the game's words and queues its new word.
+// Queues every site of table `t`'s new word, for the table at `table`.
 static int queueTableMoveWrites(const TableMove *t, unsigned char *table) {
     long long pages = ((long long)(uintptr_t)table >> ADRP_PAGE_SHIFT) - ((long long)(uintptr_t)(gameBase + t->rva) >> ADRP_PAGE_SHIFT);
     int matched = 0;
     for (int i = 0; i < t->macSiteCount; i++) {
         const TableMacSite *s = &t->macSites[i];
         uint32_t moved = 0;
-        if (tableGameWord(s->rva) != s->word || !adrpMovedBy(s->word, pages, &moved) || !queueTableWord(s->rva, moved)) {
+        if (!adrpMovedBy(tableGameWord(s->rva), pages, &moved) || !queueTableWord(s->rva, moved)) {
             writeLog("table_site_mismatch", "table=%s group=table va=0x%llx", t->name, s->rva + 0x100000000ULL);
             continue;
         }
@@ -782,8 +793,8 @@ static int queueTableMoveWrites(const TableMove *t, unsigned char *table) {
     }
     for (int i = 0; i < t->macBoundCount; i++) {
         const TableMacBound *s = &t->macBounds[i];
-        uint32_t word = tableBoundWord(s->word, s->value);
-        if (tableGameWord(s->rva) != s->word || !word || !queueTableWord(s->rva, word)) {
+        uint32_t word = tableBoundWord(tableGameWord(s->rva), s->value);
+        if (!word || !queueTableWord(s->rva, word)) {
             writeLog("table_site_mismatch", "table=%s group=bound va=0x%llx", t->name, s->rva + 0x100000000ULL);
             continue;
         }
@@ -792,9 +803,8 @@ static int queueTableMoveWrites(const TableMove *t, unsigned char *table) {
     unsigned int bytes = (unsigned int)t->movedRecords * (unsigned int)t->recordSize;
     for (int i = 0; i < t->macSizeCount; i++) {
         const TableMacSize *s = &t->macSizes[i];
-        if (tableGameWord(s->rva) != s->word || tableGameWord(s->rva + 4) != s->next ||
-            !queueTableWord(s->rva, (s->word & ~(0xffffu << 5)) | (bytes & 0xffff) << 5) ||
-            !queueTableWord(s->rva + 4, (s->next & ~(0xffffu << 5)) | (bytes >> 16) << 5)) {
+        if (!queueTableWord(s->rva, patchedWord(tableGameWord(s->rva), 0xffffu << 5, (bytes & 0xffff) << 5)) ||
+            !queueTableWord(s->rva + 4, patchedWord(tableGameWord(s->rva + 4), 0xffffu << 5, (bytes >> 16) << 5))) {
             writeLog("table_site_mismatch", "table=%s group=size va=0x%llx", t->name, s->rva + 0x100000000ULL);
             continue;
         }
@@ -802,7 +812,7 @@ static int queueTableMoveWrites(const TableMove *t, unsigned char *table) {
     }
     for (int i = 0; i < t->macPatchCount; i++) {
         const TableMacPatch *s = &t->macPatches[i];
-        if (tableGameWord(s->rva) != s->shipped || !queueTableWord(s->rva, s->word)) {
+        if (!queueTableWord(s->rva, patchedWord(tableGameWord(s->rva), s->mask, s->value))) {
             writeLog("table_site_mismatch", "table=%s group=patch va=0x%llx", t->name, s->rva + 0x100000000ULL);
             continue;
         }
@@ -845,6 +855,10 @@ static int installTableGroup(TableMove *first, int count) {
         at[k] = ((total + ADRP_PAGE_MASK) & ~(size_t)ADRP_PAGE_MASK) + ((uintptr_t)(gameBase + first[k].rva) & ADRP_PAGE_MASK);
         total = at[k] + (size_t)first[k].movedRecords * (size_t)first[k].recordSize;
         sites[k] = tableMoveSiteCount(&first[k]);
+    }
+    if (!gameCodeMatches) {
+        for (int k = 0; k < count; k++) writeLog("table_not_moved", "table=%s reason=game_code_differs sites=0 of %d", first[k].name, sites[k]);
+        return 0;
     }
     total = (total + 64 + MAC_PAGE_MASK) & ~(size_t)MAC_PAGE_MASK;
     unsigned char *block = allocAfterImage(total);
@@ -899,6 +913,7 @@ static void tableMovesInit(void) {
         for (n = 1; i + n < TABLE_MOVE_COUNT && tableMoves[i + n - 1].blockWithNext; n++) {}
         moved += installTableGroup(&tableMoves[i], n, stubs);
     }
+    if (stubs) makePagesReadExecute(stubs, 0x1000);
     if (moved) AddVectoredExceptionHandler(1, logOldTableAccess);
 #else
     for (int i = 0, n; i < TABLE_MOVE_COUNT; i += n) {

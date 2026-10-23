@@ -418,7 +418,7 @@ static LONG WINAPI logOldRitualTableAccess(EXCEPTION_POINTERS *e) {
 
 // The changes to the game's code, queued while checking and written once all are checked.
 #define MAX_RITUAL_WRITES (RITUAL_TABLE_SITE_COUNT + RITUAL_CAST_SITE_COUNT + RITUAL_NAMED_SITE_COUNT + 64)
-static struct { unsigned char *at; int size; unsigned char bytes[16]; } ritualWrites[MAX_RITUAL_WRITES];
+static struct { unsigned char *at; int size; unsigned char bytes[16], old[16]; } ritualWrites[MAX_RITUAL_WRITES];
 static int ritualWriteCount, ritualWritesOverflowed;
 
 static void queueWrite(unsigned char *at, const void *bytes, int size) {
@@ -428,16 +428,13 @@ static void queueWrite(unsigned char *at, const void *bytes, int size) {
     }
     ritualWrites[ritualWriteCount].at = at;
     ritualWrites[ritualWriteCount].size = size;
+    memcpy(ritualWrites[ritualWriteCount].old, at, (size_t)size);
     memcpy(ritualWrites[ritualWriteCount++].bytes, bytes, (size_t)size);
 }
 
-// Checks a generated site against the game's bytes and queues its field's new value.
+// Queues a generated site's field's new value.
 static int queueSite(const RitualPatchSite *s, const char *group, long long delta, int value) {
     unsigned char *at = gameBase + s->rva;
-    if (memcmp(at, s->bytes, (size_t)s->fieldOffset + 4)) {
-        writeLog("ritual_expansion_site_mismatch", "group=%s rva=0x%x", group, s->rva);
-        return 0;
-    }
     int field;
     memcpy(&field, at + s->fieldOffset, 4);
     long long moved = s->kind == RITUAL_FIELD_IMM32 ? value : field + delta;
@@ -533,8 +530,8 @@ static int queueRitualWrites(unsigned char *memory, size_t castsAt, int *callCou
     for (int i = 0; i < *callCount; i++)
         ok &= queueCall(i, CALLS[i].callRva, CALLS[i].targetRva, CALLS[i].hook, CALLS[i].name);
     unsigned char *entry = gameBase + RVA_RANDOM_RITUAL;
-    if (memcmp(entry, RITUAL_RANDOM_ENTRY, RITUAL_RANDOM_ENTRY_SIZE)) {
-        writeLog("ritual_expansion_site_mismatch", "group=entry name=random_ritual rva=0x%x", RVA_RANDOM_RITUAL);
+    if (!gameCodeMatches) {
+        writeLog("ritual_expansion_site_mismatch", "group=entry name=random_ritual rva=0x%x reason=game_code_differs", RVA_RANDOM_RITUAL);
         ok = 0;
     } else {
         unsigned char jump[RITUAL_RANDOM_ENTRY_SIZE] = {0xff, 0x25, 0, 0, 0, 0};
@@ -562,6 +559,10 @@ static void protectOldRitualTable(unsigned char *oldTable) {
 
 // Moves the table and turns every part of the expansion on, or changes nothing.
 static int installRitualExpansion(void) {
+    if (!gameCodeMatches) {
+        writeLog("ritual_expansion_off", "reason=game_code_differs queued=0");
+        return 0;
+    }
     size_t tableSize = (size_t)RITUAL_SLOT_CAP * RITUAL_SIZE, castsAt = (tableSize + WIN_PAGE_MASK) & ~(size_t)WIN_PAGE_MASK;
     unsigned char *memory = allocNearImage(castsAt + CAST_COUNTS_BYTES);
     if (!memory || !ritualStubs) {
@@ -575,13 +576,6 @@ static int installRitualExpansion(void) {
     unsigned char *oldTable = gameBase + RVA_RITUAL_TABLE;
     int callCount = 0;
     int ok = queueRitualWrites(memory, castsAt, &callCount);
-    DWORD textProtection = 0;
-    unsigned char *text = gameBase + RVA_TEXT_SECTION;
-    size_t textSize = (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION);
-    if (ok && !VirtualProtect(text, textSize, PAGE_EXECUTE_READWRITE, &textProtection)) {
-        writeLog("ritual_expansion_code_unwritable", "error=%lu", GetLastError());
-        ok = 0;
-    }
     if (!ok) {
         writeLog("ritual_expansion_off", "reason=game_build_differs queued=%d", ritualWriteCount);
         VirtualFree(memory, 0, MEM_RELEASE);
@@ -590,15 +584,30 @@ static int installRitualExpansion(void) {
     writeLog("ritual_expansion_checked", "table_sites=%d cast_sites=%d bounds=%d calls=%d writes=%d", RITUAL_TABLE_SITE_COUNT,
              RITUAL_CAST_SITE_COUNT, RITUAL_NAMED_SITE_COUNT, callCount, ritualWriteCount);
 
+    makePagesReadExecute(ritualStubs, 0x1000);
+    if (!openGameCode(gameBase + RVA_TEXT_SECTION, (size_t)(RVA_RDATA_SECTION - RVA_TEXT_SECTION))) {
+        writeLog("ritual_expansion_code_unwritable", "error=%lu", GetLastError());
+        writeLog("ritual_expansion_off", "reason=code_unwritable queued=%d", ritualWriteCount);
+        VirtualFree(memory, 0, MEM_RELEASE);
+        return 0;
+    }
     ritualTable = memory;
     castCounts = memory + castsAt;
     memcpy(ritualTable, oldTable, (size_t)VANILLA_RITUAL_SLOTS * RITUAL_SIZE);
     for (int p = 0; p < PLAYER_SLOTS; p++)
         memcpy(castCounts + (size_t)p * PLAYER_BLOCK_SIZE, gameBase + RVA_CAST_COUNTS + (size_t)p * PLAYER_BLOCK_SIZE,
                VANILLA_RITUAL_SLOTS * sizeof(short));
-    for (int i = 0; i < ritualWriteCount; i++) memcpy(ritualWrites[i].at, ritualWrites[i].bytes, (size_t)ritualWrites[i].size);
-    VirtualProtect(text, textSize, textProtection, &textProtection);
-    FlushInstructionCache(GetCurrentProcess(), text, textSize);
+    for (int i = 0; i < ritualWriteCount; i++) {
+        if (writeGameCode(ritualWrites[i].at, ritualWrites[i].bytes, (size_t)ritualWrites[i].size)) continue;
+        writeLog("ritual_expansion_code_unwritable", "error=%lu", GetLastError());
+        for (int j = i; j >= 0; j--) writeGameCode(ritualWrites[j].at, ritualWrites[j].old, (size_t)ritualWrites[j].size);
+        closeGameCode();
+        writeLog("ritual_expansion_off", "reason=code_unwritable queued=%d", ritualWriteCount);
+        ritualTable = castCounts = NULL;
+        VirtualFree(memory, 0, MEM_RELEASE);
+        return 0;
+    }
+    closeGameCode();
     ritualExpansionActive = 1;
     writeLog("ritual_table_moved", "from=%p to=%p slots=%d mod_slots=%d-%d cast_counts=%p", (void *)oldTable,
              (void *)ritualTable, RITUAL_SLOT_CAP, FIRST_MOD_RITUAL_SLOT, LAST_MOD_RITUAL_SLOT, (void *)castCounts);
@@ -701,13 +710,9 @@ static uint32_t gameWord(unsigned int rva) {
     return word;
 }
 
-// Checks an ADRP against the shipped word and queues it moved by `pages` 4 KB pages.
+// Queues the game's ADRP at a site moved by `pages` 4 KB pages.
 static int queueAdrp(const RitualMacSite *s, long long pages, const char *group) {
     uint32_t word = gameWord(s->rva);
-    if (word != s->word) {
-        writeLog("ritual_expansion_site_mismatch", "group=%s va=0x%llx", group, s->rva + 0x100000000ULL);
-        return 0;
-    }
     long long imm = (long long)((word >> 5) & 0x7ffff) << 2 | (word >> 29 & 3);
     if (imm & 0x100000) imm -= 0x200000;
     imm += pages;
@@ -719,30 +724,24 @@ static int queueAdrp(const RitualMacSite *s, long long pages, const char *group)
     return 1;
 }
 
-// The named site at `rva`, checked against its shipped word (and its movk for a size pair), or NULL.
+// The named site at `rva`, or NULL when ritual_expansion_sites_mac.h doesn't list it.
 static const RitualMacNamedSite *namedSite(unsigned int rva) {
-    for (int i = 0; i < RITUAL_MAC_NAMED_SITE_COUNT; i++) {
-        const RitualMacNamedSite *s = &RITUAL_MAC_NAMED_SITES[i];
-        if (s->rva != rva) continue;
-        if (gameWord(rva) == s->word && (!s->next || gameWord(rva + 4) == s->next)) return s;
-        writeLog("ritual_expansion_site_mismatch", "group=named va=0x%llx", rva + 0x100000000ULL);
-        return NULL;
-    }
+    for (int i = 0; i < RITUAL_MAC_NAMED_SITE_COUNT; i++)
+        if (RITUAL_MAC_NAMED_SITES[i].rva == rva) return &RITUAL_MAC_NAMED_SITES[i];
     writeLog("ritual_expansion_site_missing", "va=0x%llx", rva + 0x100000000ULL);
     return NULL;
 }
 
 // A compare's 12-bit immediate set to `value`.
 static int queueImm12(unsigned int rva, unsigned int value) {
-    const RitualMacNamedSite *s = namedSite(rva);
-    if (!s) return 0;
+    if (!namedSite(rva)) return 0;
     uint32_t shift = 0;
     if (value > 0xfff && !(value & 0xfff)) value >>= 12, shift = 1u << 22;
     if (value > 0xfff) {
         writeLog("ritual_expansion_bad_value", "va=0x%llx value=%u", rva + 0x100000000ULL, value);
         return 0;
     }
-    queueWord(gameBase + rva, (s->word & ~(0x1fffu << 10)) | value << 10 | shift);
+    queueWord(gameBase + rva, patchedWord(gameWord(rva), 0x1fffu << 10, value << 10 | shift));
     return 1;
 }
 
@@ -750,8 +749,8 @@ static int queueImm12(unsigned int rva, unsigned int value) {
 static int queueMovWide(unsigned int rva, unsigned int value, unsigned int high) {
     const RitualMacNamedSite *s = namedSite(rva);
     if (!s) return 0;
-    queueWord(gameBase + rva, (s->word & ~(0xffffu << 5)) | (value & 0xffff) << 5);
-    if (s->next) queueWord(gameBase + rva + 4, (s->next & ~(0xffffu << 5)) | (high & 0xffff) << 5);
+    queueWord(gameBase + rva, patchedWord(gameWord(rva), 0xffffu << 5, (value & 0xffff) << 5));
+    if (s->pair) queueWord(gameBase + rva + 4, patchedWord(gameWord(rva + 4), 0xffffu << 5, (high & 0xffff) << 5));
     return 1;
 }
 
@@ -779,9 +778,9 @@ static int queueBranchToCode(unsigned int rva, uint32_t *words, int count, int b
 }
 
 // The code a compare branches to when its value doesn't fit the 12-bit field.
-static void ritualCompareStubWords(uint32_t shipped, unsigned int value, unsigned int reg, uint32_t words[4]) {
-    words[0] = (shipped & 0x80000000u) | 0x52800000u | (value & 0xffffu) << 5 | reg;
-    words[1] = (shipped & 0xe00003ffu) | 0x0b000000u | reg << 16;
+static void ritualCompareStubWords(uint32_t compare, unsigned int value, unsigned int reg, uint32_t words[4]) {
+    words[0] = (compare & 0x80000000u) | 0x52800000u | (value & 0xffffu) << 5 | reg;
+    words[1] = (compare & 0xe00003ffu) | 0x0b000000u | reg << 16;
     words[2] = 0;
     words[3] = 0xd503201fu;
 }
@@ -812,14 +811,13 @@ static int fitsCompareImmediate(unsigned int value) { return value <= 0xfff || (
 // Queues one bound: in place, or a branch to its stub.
 static int queueRitualMacBound(const RitualMacBound *b) {
     if (fitsCompareImmediate(b->value)) return queueImm12(b->rva, b->value);
-    const RitualMacNamedSite *s = namedSite(b->rva);
-    if (!s) return 0;
+    if (!namedSite(b->rva)) return 0;
     if (b->reg < 0 || b->value > 0xffff) {
         writeLog("ritual_expansion_bad_value", "va=0x%llx value=%u name=%s", b->rva + 0x100000000ULL, b->value, b->name);
         return 0;
     }
     uint32_t words[4];
-    ritualCompareStubWords(s->word, b->value, (unsigned int)b->reg, words);
+    ritualCompareStubWords(gameWord(b->rva), b->value, (unsigned int)b->reg, words);
     return queueBranchToCode(b->rva, words, 4, 2, b->name);
 }
 
@@ -948,6 +946,10 @@ static void protectOldRitualTable(unsigned char *oldTable) {
 
 // Moves the table and turns every part of the expansion on, or changes nothing.
 static int installRitualExpansion(void) {
+    if (!gameCodeMatches) {
+        writeLog("ritual_expansion_off", "reason=game_code_differs queued=0");
+        return 0;
+    }
     unsigned char *oldTable = gameBase + RVA_RITUAL_TABLE, *oldBlocks = gameBase + PLAYER_BLOCKS_RVA;
     size_t tableSize = (size_t)RITUAL_SLOT_CAP * RITUAL_SIZE;
     size_t tableAt = (uintptr_t)oldTable & ADRP_PAGE_MASK;

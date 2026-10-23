@@ -1,5 +1,4 @@
 // Turning the CoE5SE mod on once, for a player who copied the stub and never ticked CoE5SE.
-
 #pragma once
 #include <stdio.h>
 
@@ -18,7 +17,7 @@ static __attribute__((unused)) int autoEnableFileExists(const char *path) {
     return 1;
 }
 
-// Creates `path` with one line saying what it is. Returns 0 if the line didn't reach the file.
+// Creates `path` with one line saying what it is.
 static __attribute__((unused)) int writeAutoEnableFile(const char *path, const char *line) {
     FILE *f = fopen(path, "w");
     if (!f) return 0;
