@@ -1,5 +1,7 @@
 # CoE5SE and Jazzy mods
 
+Modding with CoE5SE? The docs are at [musical-pianist.github.io/coe5se-docs](https://musical-pianist.github.io/coe5se-docs/).
+
 This repo is temporary: it will be deleted once Nexus Mods approves the mods' pages, which will be their home.
 
 ## Install with one command
