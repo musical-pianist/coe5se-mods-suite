@@ -38,11 +38,11 @@ Terms of use: [LICENSE.txt](LICENSE.txt).
 <!-- mods start -->
 ## Mods
 
-Each mod's folder has its full description, the same text as its Nexus Mods page.
+Click a mod for a Readme. It's the same text as its Nexus page. All these mods need CoE5SE to run.
 
 - [CoE5SE](CoE5SE/README.md): CoE5SE extends mod tools with higher limits and Lua scripting (v5.40, Windows and Mac) and adds Mod Settings to the main menu. Mods built on it can add buttons, screens, Game Menu lines, and key bindings, and go past the game's limits. Up
-- [Jazzy Game Presets](JazzyGamePresets/README.md): Save your whole new-game setup (map, society, every player slot, every AI's difficulty) as a preset, load it next time, and change the AI and game rules in a game you're already playing. Needs CoE5SE.
-- [Jazzy Hotkeys](JazzyHotkeys/README.md): Change any key of the game's Keyboard Shortcuts list: 196 actions on 10 screens, picked in Mod Settings. Needs CoE5SE.
-- [Jazzy Restart](JazzyRestart/README.md): Restart in the Game Menu. It ends the game and starts a new world with the same settings, no relaunch. Needs CoE5SE.
-- [Jazzy UI Tweaks](JazzyUITweaks/README.md): Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. You can turn each one back to vanilla in Mod Settings, Jazzy UI Tweaks. Needs CoE5SE.
+- [Jazzy Game Presets](JazzyGamePresets/README.md): Save your whole new-game setup (map, society, every player slot, every AI's difficulty) as a preset, load it next time, and change the AI and game rules in a game you're already playing.
+- [Jazzy Hotkeys](JazzyHotkeys/README.md): Change any key of the game's Keyboard Shortcuts list: 196 actions on 10 screens, picked in Mod Settings.
+- [Jazzy Restart](JazzyRestart/README.md): Restart in the Game Menu. It ends the game and starts a new world with the same settings, no relaunch.
+- [Jazzy UI Tweaks](JazzyUITweaks/README.md): Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. You can turn each one back to vanilla in Mod Settings, Jazzy UI Tweaks.
 <!-- mods end -->
