@@ -1,4 +1,4 @@
-// or, elseif and else in events.
+// if, or, elseif and else in events.
 #pragma once
 
 #define EVENT_FAILED     -1
@@ -14,6 +14,9 @@ static struct {
     int dropTriggers;
     int branchTaken;
     int afterElse;
+    int afterIf;
+    int branched;
+    int sharedFailed;
     int targetX, targetY, player;
 } eventLogic;
 static unsigned char eventStartMarks[SQUARE_EVENT_A_SIZE];
@@ -29,7 +32,7 @@ static int eventWordIs(const char *line, const char *word) {
 }
 
 static int isEventLogicWord(const char *line) {
-    return eventWordIs(line, "or") || eventWordIs(line, "elseif") || eventWordIs(line, "else");
+    return eventWordIs(line, "if") || eventWordIs(line, "or") || eventWordIs(line, "elseif") || eventWordIs(line, "else");
 }
 
 // Puts the event back as it was at its start, for the next group or branch.
@@ -54,10 +57,8 @@ static void endTriggerGroup(void) {
         for (size_t i = 0; i < SQUARE_EVENT_A_SIZE; i++) eventHeldMarks[i] |= eventMarks()[i];
 }
 
-// Ends a branch's triggers; the branch holds when any of its groups held.
-static void endBranchTriggers(void) {
-    if (eventLogic.inActions) return;
-    eventLogic.inActions = 1;
+// Ends the triggers read so far; they hold when any of their groups held.
+static void endTriggers(void) {
     if (eventLogic.hadOr && !eventLogic.dropTriggers) {
         endTriggerGroup();
         if (eventLogic.kind == SQUARE_EVENT) {
@@ -67,6 +68,13 @@ static void endBranchTriggers(void) {
             G32(RVA_EVENT_STATE) = EVENT_FAILED;
         }
     }
+}
+
+// Ends a branch's triggers, at its first action or at its elseif or else.
+static void endBranchTriggers(void) {
+    if (eventLogic.inActions) return;
+    eventLogic.inActions = 1;
+    endTriggers();
     if (G32(RVA_EVENT_STATE) >= 1) {
         if (eventLogic.kind == PLAYER_EVENT) eventLogic.branchTaken = 1;
         else
@@ -79,7 +87,15 @@ static void startBranchTriggers(void) {
     memset(eventHeldMarks, 0, sizeof eventHeldMarks);
 }
 
-// Refuses an or, elseif or else line where it can't stand.
+// Keeps the event as it is now as its start, which each group and branch starts from.
+static void keepEventStart(void) {
+    eventLogic.targetX = G32(RVA_EVENT_TARGET_X);
+    eventLogic.targetY = G32(RVA_EVENT_TARGET_Y);
+    eventLogic.player = G32(RVA_EVENT_PLAYER);
+    if (eventLogic.kind == SQUARE_EVENT) memcpy(eventStartMarks, eventMarks(), SQUARE_EVENT_A_SIZE);
+}
+
+// Refuses an if, or, elseif or else line where it can't stand.
 static void refuseEventLogicLine(const char *line, const char *reason) {
     char word[8];
     snprintf(word, sizeof word, "%.*s", (int)strcspn(line, " \t\r\n"), line);
@@ -104,6 +120,21 @@ static int eventLogicLine(const char *line, int level) {
         if (!trigger) endBranchTriggers();
         return 0;
     }
+    if (eventWordIs(line, "if")) {
+        if (eventLogic.afterIf || eventLogic.inActions || eventLogic.branched) {
+            refuseEventLogicLine(line, eventLogic.afterIf ? "second_if" : "if_after_branch");
+            return 1;
+        }
+        eventLogic.afterIf = 1;
+        endTriggers();
+        if (G32(RVA_EVENT_STATE) >= 1) keepEventStart();
+        else {
+            eventLogic.sharedFailed = 1;
+            memset(eventStartMarks, 0, sizeof eventStartMarks);
+        }
+        startBranchTriggers();
+        return 1;
+    }
     if (eventWordIs(line, "or")) {
         if (eventLogic.inActions) {
             refuseEventLogicLine(line, "or_after_actions");
@@ -122,10 +153,11 @@ static int eventLogicLine(const char *line, int level) {
         return 1;
     }
     endBranchTriggers();
+    eventLogic.branched = 1;
     eventLogic.afterElse = eventWordIs(line, "else");
     startBranchTriggers();
     if (eventLogic.kind == PLAYER_EVENT) {
-        if (eventLogic.branchTaken) G32(RVA_EVENT_STATE) = EVENT_FAILED;
+        if (eventLogic.branchTaken || eventLogic.sharedFailed) G32(RVA_EVENT_STATE) = EVENT_FAILED;
         else restartEvent(NULL);
     } else {
         static unsigned char left[SQUARE_EVENT_A_SIZE];
@@ -144,10 +176,7 @@ static void eventLogicAfterLine(const char *line, int level) {
     if (state != PLAYER_EVENT && state != SQUARE_EVENT) return;
     eventLogic.active = 1;
     eventLogic.kind = state;
-    eventLogic.targetX = G32(RVA_EVENT_TARGET_X);
-    eventLogic.targetY = G32(RVA_EVENT_TARGET_Y);
-    eventLogic.player = G32(RVA_EVENT_PLAYER);
+    keepEventStart();
     memset(eventHeldMarks, 0, sizeof eventHeldMarks);
     memset(eventTakenMarks, 0, sizeof eventTakenMarks);
-    if (state == SQUARE_EVENT) memcpy(eventStartMarks, eventMarks(), SQUARE_EVENT_A_SIZE);
 }

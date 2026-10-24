@@ -48,9 +48,9 @@ local AI_LEVEL_LAST = 10           -- Note 10: the AI level names are 0-10
 local AI_LEVEL_DEFAULT = 2         -- Note 11: Jester, the game's default
 local CLASS_NAME_MAX = 63          -- Note 12: a class name is stored up to 63 characters
 
--- Note 13: The "Load a preset?" screen's ids: the "No preset" line is PRESET_CHOICE_BASE, preset i's
--- line PRESET_CHOICE_BASE + i. Every clickable line on a screen has an id, a number the script picks
--- when it draws the line. coe5.ui.wait hands back the id of the line clicked, which is how the
+-- Note 13: The "Load a preset?" screen's ids: the "Previous Game Settings" line is
+-- PRESET_CHOICE_BASE, preset i's line PRESET_CHOICE_BASE + i. Every clickable line on a screen has
+-- an id, a number the script picks when it draws the line. coe5.ui.wait hands back the id of the line clicked, which is how the
 -- script knows what the player did.
 local PRESET_CHOICE_BASE = 100
 -- Note 14: One `local` line can make several names at once: the values after = go to the names
@@ -415,7 +415,7 @@ local function promptPreset()
     -- Note 68: coe5.ui.choice draws a radio line; its second input says whether it shows as picked.
     -- `choice == i` gives true for the picked line only. The screen remembers nothing itself: the
     -- script redraws the pick from `choice` on every pass.
-    coe5.ui.choice(PRESET_CHOICE_BASE, choice == 0, "No preset")
+    coe5.ui.choice(PRESET_CHOICE_BASE, choice == 0, "Previous Game Settings")
     for i, name in ipairs(names) do coe5.ui.choice(PRESET_CHOICE_BASE + i, choice == i, presetDisplayName(name)) end
     coe5.ui.sectionEnd()
     coe5.ui.buttonRow()
@@ -429,7 +429,8 @@ local function promptPreset()
     -- Note 71: Any click but Delete takes back a first Delete click.
     if id ~= 0 and id ~= PROMPT_DELETE then confirmDelete = false end
     if id == PROMPT_DELETE and deletable then
-      -- Note 72: The second click deletes the file, picks "No preset", and reads the list again.
+      -- Note 72: The second click deletes the file, picks "Previous Game Settings", and reads the list
+      -- again.
       if confirmDelete then
         local deleted = coe5.deleteIni(names[choice])
         log("%s name=%s", deleted and "preset_deleted" or "preset_delete_failed", names[choice])
