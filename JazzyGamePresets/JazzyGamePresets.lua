@@ -1,6 +1,6 @@
 -- Note 1: Jazzy Game Presets saves new game setups and fills them back in. Before Random Map Settings
 -- it asks "Load a preset?", and a chosen preset fills in both setup screens. Setup Participants gets
--- a "Save as preset" button above Ok (Note 93), and every Ok there saves the setup as "Last game".
+-- a "Save as preset" button above Ok (Note 93), and every Ok there saves the setup as "Previous Game Settings".
 -- Under "unique random players" it adds a "random classes" line: a checklist of the classes an AI
 -- player's Random can roll, kept with the preset (Note 139). The script also logs setup clicks and
 -- setting changes while CoE5SE's "Enable copious logs" setting is on (off by default).
@@ -28,7 +28,7 @@
 --      preset?" screen (Notes 61 to 75) and reads the chosen preset's file (Note 41).
 --   2. Random Map Settings opens with the preset's values already in place (Notes 76 to 91).
 --   3. Setup Participants opens with the preset's players (Notes 52 and 92). Its "Save as preset"
---      button saves a named preset (Note 96), and its Ok saves "Last game" (Note 119). Its "random
+--      button saves a named preset (Note 96), and its Ok saves "Previous Game Settings" (Note 119). Its "random
 --      classes" line opens the checklist (Notes 139 to 152).
 --   4. At "Creating World", each AI player left on Random gets a class from the checked ones, by
 --      the game's own rules where one fits, never an unchecked one (Notes 147, 148, and 152).
@@ -48,7 +48,7 @@ local AI_LEVEL_LAST = 10           -- Note 10: the AI level names are 0-10
 local AI_LEVEL_DEFAULT = 2         -- Note 11: Jester, the game's default
 local CLASS_NAME_MAX = 63          -- Note 12: a class name is stored up to 63 characters
 
--- Note 13: The "Load a preset?" screen's ids: the "Previous Game Settings" line is
+-- Note 13: The "Load a preset?" screen's ids: the "No preset" line is
 -- PRESET_CHOICE_BASE, preset i's line PRESET_CHOICE_BASE + i. Every clickable line on a screen has
 -- an id, a number the script picks when it draws the line. coe5.ui.wait hands back the id of the line clicked, which is how the
 -- script knows what the player did.
@@ -386,11 +386,11 @@ local function listPresets()
   return names
 end
 
--- Note 60: The name the prompt shows for a preset file: "Last game" for last_game, and underscores
+-- Note 60: The name the prompt shows for a preset file: "Previous Game Settings" for last_game, and underscores
 -- shown as spaces for the rest. gsub gives back two values, the new text and how many replacements
 -- it made. The extra round brackets keep only the first, so the function returns just the text.
 local function presetDisplayName(name)
-  if name == LAST_GAME then return "Last game" end
+  if name == LAST_GAME then return "Previous Game Settings" end
   return (name:gsub("_", " "))
 end
 
@@ -408,14 +408,14 @@ local function promptPreset()
   -- and returns the id clicked (0 when nothing was). `while true do` repeats forever, so the loop only
   -- ends at a `return`, here on Ok or Cancel.
   while true do
-    -- Note 67: "Last game" is rewritten every game, so only named presets can be deleted.
+    -- Note 67: "Previous Game Settings" is rewritten every game, so only named presets can be deleted.
     local deletable = choice > 0 and names[choice] ~= LAST_GAME
     coe5.ui.screenBegin("New Game Preset")
     coe5.ui.sectionBegin("Load a preset?")
     -- Note 68: coe5.ui.choice draws a radio line; its second input says whether it shows as picked.
     -- `choice == i` gives true for the picked line only. The screen remembers nothing itself: the
     -- script redraws the pick from `choice` on every pass.
-    coe5.ui.choice(PRESET_CHOICE_BASE, choice == 0, "Previous Game Settings")
+    coe5.ui.choice(PRESET_CHOICE_BASE, choice == 0, "No preset")
     for i, name in ipairs(names) do coe5.ui.choice(PRESET_CHOICE_BASE + i, choice == i, presetDisplayName(name)) end
     coe5.ui.sectionEnd()
     coe5.ui.buttonRow()
@@ -429,7 +429,7 @@ local function promptPreset()
     -- Note 71: Any click but Delete takes back a first Delete click.
     if id ~= 0 and id ~= PROMPT_DELETE then confirmDelete = false end
     if id == PROMPT_DELETE and deletable then
-      -- Note 72: The second click deletes the file, picks "Previous Game Settings", and reads the list
+      -- Note 72: The second click deletes the file, picks "No preset", and reads the list
       -- again.
       if confirmDelete then
         local deleted = coe5.deleteIni(names[choice])
@@ -710,7 +710,7 @@ local function setupWait(screen, next, block, mode)
       return 0   -- Note 118: nothing for the game to do; the screen redraws
     end
     if clicked == coe5.newGame.participantsOk then
-      -- Note 119: Ok saves "Last game" before the game rolls the random classes.
+      -- Note 119: Ok saves "Previous Game Settings" before the game rolls the random classes.
       local p = capturePreset()
       local saved = savePreset(p, LAST_GAME)
       log("%s name=%s slots=%d", saved and "preset_saved" or "preset_save_failed", LAST_GAME, #p.slots)
@@ -900,7 +900,7 @@ log("setup_hooks_installed waits=%d of 3 map_screen=%d init_participants=%d save
 -- off simply isn't listed until the mod comes back.
 --
 -- Note 140: The set travels with the setup. Every preset saves it as a [RandomClasses] section,
--- Off1 = "Troll King", Off2 = ..., and "Last game" saves it on every Ok (Note 119). Loading a
+-- Off1 = "Troll King", Off2 = ..., and "Previous Game Settings" saves it on every Ok (Note 119). Loading a
 -- preset brings its set back with its players (Note 52), and a new setup with no preset starts
 -- with every class on (Note 78's wrap).
 
