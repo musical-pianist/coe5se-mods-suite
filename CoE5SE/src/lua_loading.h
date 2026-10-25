@@ -9,14 +9,14 @@
 
 static const luaL_Reg LUA_COE5[] = {
     {"log", lLog}, {"addMainMenuButton", lAddMainMenuButton}, {"addGameMenuLine", lAddGameMenuLine},
-    {"turn", lTurn}, {"sendMessage", lSendMessage}, {"get", lGet}, {"set", lSet}, {"wrap", lWrap},
+    {"turn", lTurn}, {"sendMessage", lSendMessage}, {"showMessageBox", lShowMessageBox}, {"get", lGet}, {"set", lSet}, {"wrap", lWrap},
     {"observe", lObserve}, {"setSetupAutomated", lSetSetupAutomated}, {"setupAutomated", lSetupAutomated},
     {"setting", lSetting}, {"restartGame", lRestartGame}, {"loadGame", lLoadGame}, {"restartPhase", lRestartPhase},
     {"hideMainMenuButton", lHideMainMenuButton}, {"addScreen", lAddScreen}, {"rebindKey", lRebindKey},
     {"addActionKey", lAddActionKey}, {"actionKey", lActionKey}, {"findMonster", lFindMonster},
     {"dataFolder", lDataFolder}, {"readIni", lReadIni}, {"writeIni", lWriteIni}, {"listIni", lListIni},
     {"deleteIni", lDeleteIni}, {"spawnUnit", lSpawnUnit}, {"spawnCommander", lSpawnCommander},
-    {"monsterVariant", lMonsterVariant}, {"portalExits", lPortalExits}, {"squareUnits", lSquareUnits}, {"revealMap", lRevealMap}, {"armies", lArmies}, {"route", lRoute},
+    {"monsterVariant", lMonsterVariant}, {"portalExits", lPortalExits}, {"onPortalCrossing", lOnPortalCrossing}, {"squareUnits", lSquareUnits}, {"revealMap", lRevealMap}, {"armies", lArmies}, {"route", lRoute},
     {"scrapRitualPlan", lScrapRitualPlan}, {"planRitual", lPlanRitual}, {"terrainMatch", lTerrainMatch},
     {"releaseFollower", lReleaseFollower}, {"transferFollower", lTransferFollower},
     {"shopOffers", lShopOffers}, {"classRecruits", lClassRecruits}, {"recruitSquares", lRecruitSquares},

@@ -55,6 +55,7 @@ static void modCommandHook(const char *line, int mod, int level) {
     if (settingLineHook(line, len, mod, level)) return;
     if (flagOffLineHook(line, len, mod, level)) return;
     weaponTraitLineHook(line, len, level);
+    noExplodeLineHook(line, len, mod, level);
     for (int i = 0; i < modCommandCount; i++) {
         if (strlen(modCommands[i].name) != len || strncmp(modCommands[i].name, line, len)) continue;
         const char *args = line + len;

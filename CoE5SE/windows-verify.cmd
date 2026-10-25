@@ -47,6 +47,7 @@ call :fetch zig "%ZIG_URL_1%" "%WORK%\zig.zip" %ZIG_SHA256% || call :fetch zig "
 tar.exe -xf "%WORK%\tc.zip" -C "%WORK%" || goto :error
 tar.exe -xf "%WORK%\zig.zip" -C "%WORK%" || goto :error
 set "CC=%WORK%\%TC_DIR%\bin\x86_64-w64-mingw32-clang.exe"
+set "WINDRES=%WORK%\%TC_DIR%\bin\x86_64-w64-mingw32-windres.exe"
 set "ZIG=%WORK%\%ZIG_DIR%\zig.exe"
 rem zig keeps its cache in the temporary folder too, so nothing stays behind.
 set "ZIG_GLOBAL_CACHE_DIR=%WORK%\zig-cache"
@@ -67,12 +68,18 @@ echo     ^> "%CC%" %FLAGS% -o "%OUT%\glu32.dll" frozen_stub/glu32_stub.c frozen_
 "%CC%" %FLAGS% -o "%OUT%\glu32.dll" frozen_stub/glu32_stub.c frozen_stub/glu32.def -lbcrypt -luser32
 if errorlevel 1 set "BUILD_FAILED=1"
 echo   coe5se_loader.dll
-echo     ^> "%CC%" %FLAGS% -o "%OUT%\coe5se_loader.dll" coe5se_loader.c -lbcrypt -luser32
-"%CC%" %FLAGS% -o "%OUT%\coe5se_loader.dll" coe5se_loader.c -lbcrypt -luser32
+echo     ^> "%WINDRES%" -O coff -o "%WORK%\coe5se_loader.rc.o" coe5se_loader.rc
+"%WINDRES%" -O coff -o "%WORK%\coe5se_loader.rc.o" coe5se_loader.rc
+if errorlevel 1 set "BUILD_FAILED=1"
+echo     ^> "%CC%" %FLAGS% -o "%OUT%\coe5se_loader.dll" coe5se_loader.c -lbcrypt -luser32 "%WORK%\coe5se_loader.rc.o"
+"%CC%" %FLAGS% -o "%OUT%\coe5se_loader.dll" coe5se_loader.c -lbcrypt -luser32 "%WORK%\coe5se_loader.rc.o"
 if errorlevel 1 set "BUILD_FAILED=1"
 echo   coe5se.c5plugin.dll
-echo     ^> "%CC%" %FLAGS% -o "%OUT%\coe5se.c5plugin.dll" coe5se_plugin.c fanpatch/fix_feeblemind.c fanpatch/fix_item_reset.c fanpatch/fix_token_sprites.c lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/lobject.c lua/lopcodes.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c -I. -Ilua -lbcrypt
-"%CC%" %FLAGS% -o "%OUT%\coe5se.c5plugin.dll" coe5se_plugin.c fanpatch/fix_feeblemind.c fanpatch/fix_item_reset.c fanpatch/fix_token_sprites.c lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/lobject.c lua/lopcodes.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c -I. -Ilua -lbcrypt
+echo     ^> "%WINDRES%" -O coff -o "%WORK%\coe5se.c5plugin.rc.o" coe5se.c5plugin.rc
+"%WINDRES%" -O coff -o "%WORK%\coe5se.c5plugin.rc.o" coe5se.c5plugin.rc
+if errorlevel 1 set "BUILD_FAILED=1"
+echo     ^> "%CC%" %FLAGS% -o "%OUT%\coe5se.c5plugin.dll" coe5se_plugin.c fanpatch/fix_feeblemind.c fanpatch/fix_item_reset.c fanpatch/fix_token_sprites.c lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/lobject.c lua/lopcodes.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c -I. -Ilua -lbcrypt "%WORK%\coe5se.c5plugin.rc.o"
+"%CC%" %FLAGS% -o "%OUT%\coe5se.c5plugin.dll" coe5se_plugin.c fanpatch/fix_feeblemind.c fanpatch/fix_item_reset.c fanpatch/fix_token_sprites.c lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/lobject.c lua/lopcodes.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c -I. -Ilua -lbcrypt "%WORK%\coe5se.c5plugin.rc.o"
 if errorlevel 1 set "BUILD_FAILED=1"
 echo   coe5se.dylib
 echo     ^> "%ZIG%" cc %MAC_FLAGS% -install_name coe5se.dylib -o "%OUT%\coe5se.dylib" frozen_stub/mac_stub.c -isystem frozen_stub/mac_sdk frozen_stub/mac_sdk/CoreFoundation.tbd

@@ -248,6 +248,7 @@
 #define NAME_BOX_LENGTH_MAX                    42
 #define NAME_BOX_PROMPT_SIZE                   0x1f4
 #define RVA_MESSAGE_BOX                        ADDR(        0x041f50,          0x100349628)
+#define RVA_ENGLISH_TEXT_PASS                  ADDR(        0x05c8a0,          0x10033490c)
 #define RVA_FILE_BROWSER                       ADDR(        0x03f430,          0x10034a3d4)
 #define RVA_FILE_BROWSER_LAST                  ADDR(        0x43922c,          0x100862700)
 #define RVA_FILE_BROWSER_NAMES                 ADDR(        0x593afd0,         0x106124539)
@@ -292,15 +293,28 @@
 #define RVA_AI_MOVE                            ADDR_DIFFERS(0x06f9d0,          0x1004e05a8)
 #define RVA_AI_COMMANDER_RITUALS               ADDR(        0x06ae20,          0x1004dcd14)
 #define RVA_AI_PLAN_TRACE_CALL                 ADDR(        0x06be3f,          0x1004de1e4)
-#define RVA_AI_RITUAL_CANDIDATE_CALL           ADDR(        0x06bb37,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_RITUAL_CANDIDATE_CALL           ADDR(        0x06bb37,          0x1004de000)
 #define RVA_AI_MOVE_ALL_COMMANDERS             ADDR(        0x070400,          0x1004d4648)
 #define RVA_AI_COMMANDER_ROUTINE               ADDR(        0x07a9b0,          0x1004d17e4)
 #define RVA_AI_RECRUIT                         ADDR(        0x0773f0,          MAC_INLINED)
 #define RVA_AI_RECRUIT_CALL                    ADDR(        0x06fb2b,          MAC_INLINED)
+#define RVA_AI_RECRUIT_COPY_START              ADDR(        WIN_NO_EQUIVALENT,0x1004e0cd8)
+#define RVA_AI_RECRUIT_COPY_END                ADDR(        WIN_NO_EQUIVALENT,0x1004e38bc)
 #define RVA_AI_CONQUER_STEP                    ADDR(        0x075400,          MAC_INLINED)
 #define RVA_AI_EXPLORE_STEP                    ADDR(        0x074350,          MAC_INLINED)
+#define RVA_AI_RALLY_COPY_START                ADDR(        WIN_NO_EQUIVALENT,0x1004d62cc)
+#define RVA_AI_RALLY_COPY_END                  ADDR(        WIN_NO_EQUIVALENT,0x1004dbb38)
+#define RVA_AI_RALLY_COPY_NONE                 ADDR(        WIN_NO_EQUIVALENT,0x1004d64b0)
+#define RVA_AI_FRIENDLY_COPY_START             ADDR(        WIN_NO_EQUIVALENT,0x1004d64b8)
+#define RVA_AI_FRIENDLY_COPY_END               ADDR(        WIN_NO_EQUIVALENT,0x1004d86e8)
+#define RVA_AI_CONQUER_COPY_START              ADDR(        WIN_NO_EQUIVALENT,0x1004d8730)
+#define RVA_AI_CONQUER_COPY_END                ADDR(        WIN_NO_EQUIVALENT,0x1004d9b4c)
+#define RVA_AI_EXPLORE_COPY_START              ADDR(        WIN_NO_EQUIVALENT,0x1004d9b90)
+#define RVA_AI_EXPLORE_COPY_END                ADDR(        WIN_NO_EQUIVALENT,0x1004da510)
+#define AI_MOVE_MAC_COMMANDER_AT               0xe8
+#define AI_MOVE_MAC_COMSTR_AT                  0x78
 #define RVA_AI_EXPLORE_STEP_CALL               ADDR(        0x070d8a,          MAC_INLINED)
-#define RVA_AI_FAR_EXPLORE_STEP                ADDR(        0x073e40,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_FAR_EXPLORE_STEP                ADDR(        0x073e40,          0x1004d3888)
 #define RVA_AI_RALLY_STEP                      ADDR(        0x076730,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_RALLY_STEP_CALL                 ADDR(        0x070caa,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_FRIENDLY_MOVE_STEP              ADDR(        0x076320,          MAC_NOT_LOOKED_UP)
@@ -310,8 +324,8 @@
 #define RVA_AI_THREAT_NEAR                     ADDR(        0x077050,          MAC_NOT_LOOKED_UP)
 #define RVA_COMMANDER_STRENGTH                 ADDR_DIFFERS(0x129320,          0x10047f724)
 #define RVA_AI_COMMANDER_CAN_MOVE              ADDR(        WIN_INLINED,       MAC_NOT_LOOKED_UP)
-#define RVA_MOVE_ORDER_ROUTE                   ADDR(        0x09e5c0,          MAC_NOT_LOOKED_UP)
-#define RVA_PATH_FOG                           ADDR(        0x58355f8,         MAC_NOT_LOOKED_UP)
+#define RVA_MOVE_ORDER_ROUTE                   ADDR(        0x09e5c0,          0x100373d38)
+#define RVA_PATH_FOG                           ADDR_DIFFERS(0x58355f8,         0x1121124dc)
 #define RVA_PATH_NO_TIE_RANDOM                 ADDR(        0x58355fc,         MAC_NOT_LOOKED_UP)
 #define RVA_PATH_SPREAD                        ADDR(        0xe6c05c0,         0x1121124f0)
 #define RVA_PATH_X                             ADDR(        0xe75c9c0,         MAC_NOT_LOOKED_UP)
@@ -337,7 +351,7 @@
 #define RVA_AI_FAR_EXPLORE_GATE_CMP            ADDR(        0x070dbd,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_MOVE_ROUTE_CALL                 ADDR(        0x070f74,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_DANGEROUS_STEP_CALL             ADDR(        0x071091,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_MOVE_STEP_CALL                  ADDR(        0x07115f,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_MOVE_STEP_CALL                  ADDR(        0x07115f,          0x1004db724)
 #define RVA_AI_GOLDRALLY_STOP_CALL             ADDR(        0x071627,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_RALLY_ALLY_COUNT_CALL           ADDR(        0x076f1e,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_FRIENDLY_PLAN_BONUS_CALL        ADDR(        0x076564,          MAC_NOT_LOOKED_UP)
@@ -357,21 +371,55 @@
 #define RVA_ROUTE_EXEMPT_Y                     ADDR(        0x1aa7ce4,         MAC_NOT_LOOKED_UP)
 #define RVA_PATH_NO_SEA                        ADDR(        0x583560c,         MAC_NOT_LOOKED_UP)
 #define RVA_PATH_NO_SKY                        ADDR(        0x5835610,         MAC_NOT_LOOKED_UP)
-#define RVA_PATH_SPREAD_SQUARE                 ADDR(        0x1dbf70,          MAC_NOT_LOOKED_UP)
+#define RVA_PATH_SPREAD_SQUARE                 ADDR(        0x1dbf70,          MAC_INLINED)
 #define RVA_SQUARE_MOVE_COST                   ADDR(        0x1dc730,          MAC_NOT_LOOKED_UP)
 #define RVA_SQUARE_IS_SKY                      ADDR(        0x2abbd0,          MAC_NOT_LOOKED_UP)
 #define RVA_PLANE_SAME_SPOT                    ADDR(        0x2544f0,          0x1005707f0)
-#define RVA_MOVE_STEP_BEFORE                   ADDR(        0x1df520,          MAC_NOT_LOOKED_UP)
-#define RVA_MOVE_STEP_AFTER                    ADDR(        0x1df6c0,          MAC_NOT_LOOKED_UP)
+#define RVA_MOVE_STEP_BEFORE                   ADDR_DIFFERS(0x1df520,          0x10059da7c)
+#define RVA_MOVE_STEP_AFTER                    ADDR(        0x1df6c0,          0x10059db74)
 #define RVA_OVERRUN_CHECK                      ADDR(        0x1dd0a0,          MAC_NOT_LOOKED_UP)
 #define RVA_SPEND_ALL_AP_AT                    ADDR(        0x105560,          MAC_NOT_LOOKED_UP)
 #define RVA_SHIPMOVE_SPEND_AP                  ADDR(        0x1057d0,          MAC_NOT_LOOKED_UP)
-#define RVA_STEP_TARGET_X                      ADDR(        0x1aa910c,         MAC_NOT_LOOKED_UP)
-#define RVA_STEP_TARGET_Y                      ADDR(        0x1aa7e34,         MAC_NOT_LOOKED_UP)
-#define RVA_STEP_TARGET_WATCHED                ADDR(        0x5835604,         MAC_NOT_LOOKED_UP)
+#define RVA_STEP_TARGET_X                      ADDR(        0x1aa910c,         0x105a0aeb8)
+#define RVA_STEP_TARGET_Y                      ADDR(        0x1aa7e34,         0x105a0aebc)
+#define RVA_STEP_TARGET_WATCHED                ADDR_DIFFERS(0x5835604,         0x1121af108)
+#define RVA_GROUP_MOVE                         ADDR(        0x1deb20,          0x10059b730)
+#define RVA_HUMAN_MULTI_MOVE                   ADDR(        0x09e000,          0x100376df4)
+#define RVA_CONTINUE_MOVE_ORDERS               ADDR(        0x09df00,          0x10037731c)
+#define RVA_MAP_SCREEN_MULTI_MOVE_CALL         ADDR(        0x098c96,          0x10038804c)
+#define RVA_GATEWAY_BUTTON_CALL                ADDR(        0x099c8d,          0x10037de80)
+#define RVA_GATEWAY_PORTAL_READ                ADDR(        0x098fb1,          0x100388330)
+#define RVA_GATEWAY_EXIT_CALL                  ADDR(        0x098fd0,          0x100388350)
+#define RVA_GATEWAY_REVEAL_CALL                ADDR_DIFFERS(0x099005,          0x1003883b0)
+#define RVA_GATEWAY_GROUP_MOVE_CALL            ADDR(        0x099077,          0x1003884fc)
+#define RVA_MOVE_REFUSED_TEXT_CALL             ADDR_DIFFERS(0x099157,          0x1003885e4)
+#define RVA_STEP_PORTAL_TO_READ                ADDR(        0x1dfd2b,          0x10059a700)
+#define RVA_STEP_PORTAL_FROM_READ              ADDR(        0x1dfd69,          0x10059a6e4)
+#define RVA_STEP_REFUSED_RETURN                ADDR_DIFFERS(0x1e0302,          0x10059a80c)
+#define RVA_SPREAD_PORTAL_READ                 ADDR(        0x1dc25f,          0x10059cc8c)
+#define RVA_WAYTOGO_BACK_PORTAL_READ           ADDR(        0x1dba80,          0x10059d3f8)
+#define RVA_MONSTER_PATH                       ADDR(        0x1dedf0,          0x10059de44)
+#define RVA_MONSTER_PATH_SPREAD_SQUARE         ADDR(        0x1daeb0,          MAC_INLINED)
+#define RVA_MONSTER_PATH_PORTAL_READ           ADDR(        0x1db167,          0x10059e780)
+#define RVA_INDEP_PORTAL_READ                  ADDR(        0x16d8c2,          0x1005471e8)
+#define RVA_AI_EXPLORE_PORTAL_READ             ADDR(        0x074a9a,          0x1004dbcb4)
+#define RVA_WANDER_MOVE_STEP_CALL              ADDR(        0x17d571,          0x10038db00)
+#define RVA_WANDER_MOVE_STEP_CALL_2            ADDR(        0x17d7a4,          0x10038debc)
+#define RVA_TUNNEL_DIG                         ADDR(        0x128160,          0x1004848e8)
+#define RVA_METEOR_STRIKE                      ADDR(        0x12de10,          MAC_INLINED)
+#define RVA_NET_RECEIVE_SQUARE                 ADDR(        0x1eb9e0,          0x100505fec)
+#define RVA_GROUP_MOVE_STEP_CALL               ADDR(        0x1decfc,          0x10059ba24)
+#define RVA_INDEP_EXIT_CALL                    ADDR(        0x16d8f4,          0x100547218)
+#define RVA_SPREAD_EXIT_CHECK_CALL             ADDR(        0x1dc366,          0x10059ce94)
+#define RVA_SPREAD_EXIT_CHECK_CALL_2           ADDR(        WIN_NO_EQUIVALENT, 0x10059cf78)
+#define RVA_WAYTOGO_BACK_TRACE_CALL            ADDR(        0x1dbb3d,          0x10059d5a0)
+#define RVA_WAYTOGO_BACK_TRACE_CALL_2          ADDR(        WIN_NO_EQUIVALENT, 0x10059d6b0)
+#define RVA_WAYTOGO_CALL                       ADDR(        0x1df93c,          0x10059d970)
+#define RVA_WAYTOGO_CALL_2                     ADDR(        0x1dfa04,          0x10059da24)
+#define MOVE_STEP_REFUSED                      -9
 #define RVA_ARMY_ABILITY_TOTAL                 ADDR(        0x12c120,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_PROGRESS_DRAW                   ADDR(        0x07df90,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_COUNT_CITADELS                  ADDR(        0x077330,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_COUNT_CITADELS                  ADDR(        0x077330,          0x1004d30a4)
 #define RVA_AI_CITADEL_COUNT                   ADDR(        0x59eac7c,         MAC_NOT_LOOKED_UP)
 #define RVA_AI_ATTACK_DIV_OTHER                ADDR(        0x1aa7c64,         0x105a0aeac)
 #define RVA_AI_ATTACK_DIV_AI                   ADDR(        0x1aa6664,         0x105a0aeb0)
@@ -393,22 +441,31 @@
 #define RVA_AI_UPDATE_STRENGTH_MEMORY          ADDR(        0x06d870,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_REMEMBERED_STRENGTH             ADDR(        0x06d800,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_DANGEROUS_STEP                  ADDR(        0x0797a0,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_GATHER_TROOPS                   ADDR(        0x06edd0,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_GATHER_TROOPS                   ADDR(        0x06edd0,          MAC_INLINED)
 #define RVA_AI_GATHER_TROOPS_CALL              ADDR(        0x070f03,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_GATHER_COPY_START               ADDR(        WIN_NO_EQUIVALENT,0x1004da6f8)
+#define RVA_AI_GATHER_COPY_END                 ADDR(        WIN_NO_EQUIVALENT,0x1004db4e4)
 #define RVA_AI_GATHER_LEAVE_UNLINK             ADDR(        0x06f37a,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_GATHER_DROP_UNLINK              ADDR(        0x06f722,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_MOVE_COMSTR_CALL                ADDR(        0x070f0d,          MAC_NOT_LOOKED_UP)
-#define RVA_COMMANDER_NO_GATHER               ADDR(        0x0b12b0,          MAC_NOT_LOOKED_UP)
-#define RVA_COMMANDER_FLAGGED_STRENGTH         ADDR(        0x129320,          MAC_NOT_FOUND)
+#define RVA_COMMANDER_NO_GATHER                ADDR(        0x0b12b0,          MAC_INLINED)
+#define RVA_COMMANDER_FLAGGED_STRENGTH         ADDR(        0x129320,          0x10047f604)
 #define RVA_UNIT_LEADER_OF                     ADDR(        0x32a870,          MAC_NOT_LOOKED_UP)
 #define RVA_UNIT_SQUARE                        ADDR(        0x329de0,          MAC_NOT_LOOKED_UP)
 #define UNIT_AI_SAILOR                         0x200000000000
+#define UNIT_FLAGS_AI_SKIP                     0x4000000022000000
+#define UNIT_INSANE                            0x2000
+#define ABILITY_WANDER                         0x4b9
+#define UNIT_RESISTANCE_NOLEADER               39
 #define UNIT_AI_GUARD                          0x8000000000
-#define RVA_AI_SPLIT_ARMY                      ADDR(        0x07b700,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_SPLIT_ARMY_CALL                 ADDR(        0x07b55f,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_SPLIT_ARMY                      ADDR(        0x07b700,          MAC_INLINED)
+#define RVA_AI_SPLIT_ARMY_CALL                 ADDR(        0x07b55f,          MAC_INLINED)
 #define RVA_AI_SPLIT_MIN_UNITS                 ADDR(        WIN_IN_CODE,       MAC_NOT_LOOKED_UP)
-#define RVA_AI_SPLIT_MIN_UNITS_TRACE           ADDR(        0x07b82a,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_SPLIT_MIN_UNITS_TEST            ADDR(        0x07b83a,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_SPLIT_MIN_UNITS_TRACE           ADDR(        0x07b82a,          0x1004d2680)
+#define RVA_AI_SPLIT_MIN_UNITS_TEST            ADDR(        0x07b83a,          0x1004d2698)
+#define RVA_AI_SPLIT_COPY_START                ADDR(        WIN_NO_EQUIVALENT,0x1004d2500)
+#define RVA_AI_SPLIT_COPY_END                  ADDR(        WIN_NO_EQUIVALENT,0x1004d2570)
+#define AI_SPLIT_MIN_UNITS_MAC                 240
 #define RVA_AI_MAKE_GUARDS_AT                  ADDR(        0x06ebd0,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_MAKE_DEFENDERS                  ADDR(        0x06fe90,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_RANDOM_ENEMY                    ADDR(        0x07b5e0,          MAC_NOT_LOOKED_UP)
@@ -417,13 +474,13 @@
 #define RVA_AI_PLAN_TEXT                       ADDR(        0x06ad70,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_COUNT_TROOPS                    ADDR(        0x079620,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_UNIT_STAYS                      ADDR(        0x07dc20,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_REFORMS_HERE                    ADDR(        0x07d150,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_UNIT_JOIN_KIND                  ADDR(        0x07ca20,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_PICK_UP_LONERS                  ADDR(        0x07be60,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_PICK_UP_LONER_CALL              ADDR(        0x07c26d,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_UNIT_MAY_GUARD                  ADDR(        0x07a450,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_BUY_COMMANDER                   ADDR(        0x07a110,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_BUY_TROOPS                      ADDR(        0x079c30,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_REFORMS_HERE                    ADDR(        0x07d150,          0x1004d0fec)
+#define RVA_AI_UNIT_JOIN_KIND                  ADDR(        0x07ca20,          0x1004d1158)
+#define RVA_AI_PICK_UP_LONERS                  ADDR(        0x07be60,          0x1004d12fc)
+#define RVA_AI_PICK_UP_LONER_CALL              ADDR(        0x07c26d,          0x1004d16a8)
+#define RVA_AI_UNIT_MAY_GUARD                  ADDR(        0x07a450,          0x1004d2aec)
+#define RVA_AI_BUY_COMMANDER                   ADDR(        0x07a110,          MAC_INLINED)
+#define RVA_AI_BUY_TROOPS                      ADDR(        0x079c30,          MAC_INLINED)
 #define RVA_AI_BUY_UPGRADE_UNLINK              ADDR(        0x079e85,          MAC_NOT_LOOKED_UP)
 #define RVA_RESET_INCOME_CACHES                ADDR(        0x3295b0,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_MOVE_ALL_CALL                   ADDR(        0x06fb39,          MAC_NOT_LOOKED_UP)
@@ -463,7 +520,7 @@
 #define RVA_AI_RECRUIT_SITE_DRAWS              ADDR(        0x077f5c,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_RECRUIT_ESCORT_STRENGTH         ADDR(        0x0780cb,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_RECRUIT_TRIES                   ADDR(        0x078301,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_PORT_FREE_BOAT_PLACES           ADDR(        0x07d7d0,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_PORT_FREE_BOAT_PLACES           ADDR(        0x07d7d0,          MAC_INLINED)
 #define RVA_AI_COMMANDER_BOAT_PLACES           ADDR(        0x072cc0,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_SPEC_MESSAGES_OFF               ADDR(        0x07ab42,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_GATEWAY_CALL                    ADDR(        0x07acde,          MAC_NOT_LOOKED_UP)
@@ -473,8 +530,9 @@
 #define MONSTER_ABILITY_AIMAXSHOP              0x90
 #define MONSTER_ABILITY_SHIP                   0x1cf
 #define RVA_AI_COUNT_PLANNERS                  ADDR(        0x079b50,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_FREE_SPAWNBOOSTERS              ADDR(        0x078fb0,          MAC_NOT_LOOKED_UP)
-#define RVA_AI_MAKE_SPAWNBOOSTER               ADDR(        0x078390,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_FREE_SPAWNBOOSTERS              ADDR(        0x078fb0,          MAC_INLINED)
+#define RVA_AI_BEST_BOOSTER_AT                 ADDR(        0x0792c0,          MAC_INLINED)
+#define RVA_AI_MAKE_SPAWNBOOSTER               ADDR(        0x078390,          MAC_INLINED)
 #define RVA_AI_TRADE_CHOICE                    ADDR(        0x0700f0,          MAC_NOT_LOOKED_UP)
 #define RVA_TRADE_INCOME_APPLY                 ADDR(        0x149790,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_PLAN_SQUARE_BONUS               ADDR(        0x0771c0,          MAC_NOT_LOOKED_UP)
@@ -487,7 +545,7 @@
 #define RVA_AI_EXPLORE_TERRAIN_SKIP            ADDR(        0x075290,          MAC_NOT_LOOKED_UP)
 #define RVA_AI_TARGET_IMPOSSIBLE               ADDR(        0x07cf40,          MAC_NOT_LOOKED_UP)
 #define RVA_PLAYER_ARMY_STRENGTH               ADDR(        0x0f9310,          MAC_NOT_LOOKED_UP)
-#define RVA_UNIT_STRENGTH                      ADDR(        0x0f9460,          MAC_NOT_LOOKED_UP)
+#define RVA_UNIT_STRENGTH                      ADDR(        0x0f9460,          MAC_INLINED)
 #define RVA_UNIT_STRENGTH_CORE                 ADDR(        0x0bc3a0,          0x1003f6384)
 #define RVA_UNIT_ARMOR                         ADDR(        0x3217c0,          0x10056ac1c)
 #define RVA_SQUARE_ICEPROT_TEST                ADDR(        0x1b1c60,          0x1004a8d28)
@@ -504,11 +562,11 @@
 #define RVA_COMMANDER_MAY_ACT                  ADDR(        0x1dfa60,          MAC_NOT_LOOKED_UP)
 #define RVA_COMMANDER_RITPOW                   ADDR(        0x2c43d0,          MAC_NOT_FOUND)
 #define RVA_COMMANDER_LED_COUNT                ADDR(        0x128d50,          MAC_NOT_LOOKED_UP)
-#define RVA_UNIT_HAS_RANGED                    ADDR(        0x3229b0,          MAC_NOT_LOOKED_UP)
+#define RVA_UNIT_HAS_RANGED                    ADDR(        0x3229b0,          0x10056cb44)
 #define RVA_MONSTER_HAS_RANGED                 ADDR(        0x327560,          MAC_NOT_LOOKED_UP)
-#define RVA_UNIT_RETURNS                       ADDR(        0x326c30,          MAC_NOT_LOOKED_UP)
-#define RVA_SHOP_OFFER_AVAILABLE               ADDR(        0x128b30,          MAC_NOT_LOOKED_UP)
-#define RVA_FIND_UPGRADE_UNIT                  ADDR(        0x12bf20,          MAC_NOT_LOOKED_UP)
+#define RVA_UNIT_RETURNS                       ADDR(        0x326c30,          0x100569408)
+#define RVA_SHOP_OFFER_AVAILABLE               ADDR(        0x128b30,          0x10047d3d8)
+#define RVA_FIND_UPGRADE_UNIT                  ADDR(        0x12bf20,          0x100479288)
 #define RVA_PLAYER_GOLD_INCOME                 ADDR(        0x335290,          0x1004cee58)
 #define RVA_PLAYER_IRON_INCOME                 ADDR(        0x32da70,          0x1004cf274)
 #define RVA_PLAYER_HERBS_INCOME                ADDR(        0x32dec0,          0x1004cfe3c)
@@ -527,8 +585,8 @@
 #define RVA_SQUARE_LIFEFORCE_AT                ADDR(        0x335090,          MAC_NOT_LOOKED_UP)
 #define RVA_LIFEFORCE_DRAIN_SQUARE             ADDR(        0x32e5b0,          MAC_NOT_LOOKED_UP)
 #define RVA_PLAYER_INCOME_CACHE                ADDR(        0x11c1bb2c,        MAC_NOT_LOOKED_UP)
-#define RVA_FREE_TROOPS_STRENGTH               ADDR(        0x1291b0,          MAC_NOT_LOOKED_UP)
-#define RVA_FREE_TROOPS_COUNT                  ADDR(        0x5822f54,         MAC_NOT_LOOKED_UP)
+#define RVA_FREE_TROOPS_STRENGTH               ADDR(        0x1291b0,          0x100474f08)
+#define RVA_FREE_TROOPS_COUNT                  ADDR(        0x5822f54,         0x10857c554)
 #define RVA_SQUARE_FORT_LEVEL                  ADDR(        0x1295c0,          MAC_INLINED)
 #define RVA_SQUARE_HAS_FORT                    ADDR(        0x129bd0,          MAC_INLINED)
 #define RVA_PLAYER_ABILITY                     ADDR(        0x0b0c80,          0x100362218)
@@ -536,14 +594,14 @@
 #define RVA_AI_LEVEL_SHIFT_ALL                 ADDR(        0x2ea170,          MAC_NOT_LOOKED_UP)
 #define RVA_SHARE_TEAM_SIGHT                   ADDR(        0x1afa30,          MAC_NOT_LOOKED_UP)
 #define RVA_ILLUSION_TERRAIN                   ADDR(        0x1b3460,          MAC_NOT_LOOKED_UP)
-#define RVA_JOIN_COMMANDER                     ADDR(        0x129ad0,          MAC_NOT_LOOKED_UP)
+#define RVA_JOIN_COMMANDER                     ADDR(        0x129ad0,          0x1004840fc)
 #define RVA_RESOURCE_STOCK                     ADDR(        WIN_INLINED,       MAC_NOT_LOOKED_UP)
 #define RVA_ORDER_BURN_FOREST                  ADDR(        0x2e1a70,          MAC_NOT_LOOKED_UP)
 #define RVA_ORDER_CHOP_FOREST                  ADDR(        0x2e1bf0,          MAC_NOT_LOOKED_UP)
 #define RVA_ORDER_SLAVE_HUNT                   ADDR(        0x2e3770,          MAC_NOT_LOOKED_UP)
 #define RVA_ORDER_EAT_VILLAGE                  ADDR(        0x2e1de0,          MAC_NOT_LOOKED_UP)
-#define RVA_ORDER_PRIEST                       ADDR(        0x2e2290,          MAC_NOT_LOOKED_UP)
-#define RVA_PRIEST_COSTS                       ADDR(        0x2e3310,          MAC_NOT_LOOKED_UP)
+#define RVA_ORDER_PRIEST                       ADDR(        0x2e2290,          0x1003522f0)
+#define RVA_PRIEST_COSTS                       ADDR(        0x2e3310,          0x100351bcc)
 #define RVA_PRIEST_COSTS_CALL_AI               ADDR(        0x07b3cb,          MAC_NOT_LOOKED_UP)
 #define RVA_PRIEST_COSTS_CALL_MAP              ADDR(        0x09eac6,          MAC_NOT_LOOKED_UP)
 #define RVA_PRIEST_COSTS_CALL_NO_CALLER        ADDR(        0x09eac6,          MAC_NOT_LOOKED_UP)
@@ -553,7 +611,7 @@
 #define RVA_ORDER_PRIEST_CALL_MAP              ADDR(        WIN_NO_CALL,       MAC_NOT_LOOKED_UP)
 #define RVA_ORDER_PRIEST_CALL_NO_CALLER        ADDR(        0x09ead9,          MAC_NOT_LOOKED_UP)
 #define RVA_ORDER_PRIEST_CALLS_AI              ADDR(        0x07b3ed,          MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_SWITCH_BOUND              ADDR(        0x2e265e,          MAC_NOT_LOOKED_UP)
+#define RVA_CEREMONY_SWITCH_BOUND              ADDR_DIFFERS(0x2e265e,          0x100352424)
 #define CEREMONY_LAST                          10
 #define CEREMONY_CONVERT                       1
 #define CEREMONY_BREAK_SEAL                    2
@@ -565,17 +623,42 @@
 #define CEREMONY_MASTERY_PONTIFF               9
 #define CEREMONY_INCREASE_FAVOR                10
 #define RVA_CEREMONY_COSTS                     ADDR(        WIN_STORED_DIFFERENTLY,MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_BOLSTER_STEP         ADDR(        0x11f97a4c,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_SEAL_STEP            ADDR(        0x11f48f78,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_FAVOR_STEP           ADDR(        0x11f493c0,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_PONTIFF              ADDR(        0x11f97a48,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_CARDINAL             ADDR(        0x11f48ee0,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_ARCH_BISHOP          ADDR(        0x11f48ea4,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_INQUISITION          ADDR(        0x11f493bc,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_CRUSADE              ADDR(        0x11f4981c,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_BOLSTER_BASE         ADDR(        0x11d37a2c,        MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_SEAL_BASE            ADDR(        0xfb31b00,         MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_COST_CONVERT              ADDR(        0x11f493b8,        MAC_NOT_LOOKED_UP)
+#define RVA_CEREMONY_COST_BOLSTER_STEP         ADDR(        0x11f97a4c,        0x106cee4ec)
+#define RVA_CEREMONY_COST_SEAL_STEP            ADDR(        0x11f48f78,        0x106cee4e8)
+#define RVA_CEREMONY_COST_FAVOR_STEP           ADDR(        0x11f493c0,        0x106cee4e4)
+#define RVA_CEREMONY_COST_PONTIFF              ADDR(        0x11f97a48,        MAC_STORED_DIFFERENTLY)
+#define RVA_CEREMONY_COST_CARDINAL             ADDR(        0x11f48ee0,        MAC_STORED_DIFFERENTLY)
+#define RVA_CEREMONY_COST_ARCH_BISHOP          ADDR(        0x11f48ea4,        MAC_STORED_DIFFERENTLY)
+#define RVA_CEREMONY_COST_ARCH_BISHOP_SET      ADDR(        WIN_STORED_DIFFERENTLY,0x106cee4d8)
+#define RVA_CEREMONY_COST_CARDINAL_SET         ADDR(        WIN_STORED_DIFFERENTLY,0x106cee4dc)
+#define RVA_CEREMONY_COST_PONTIFF_SET          ADDR(        WIN_STORED_DIFFERENTLY,0x106cee4e0)
+#define RVA_MASTERY_COST_FILL_1                ADDR(        WIN_NO_EQUIVALENT,0x100351d10)
+#define RVA_MASTERY_COST_FILL_2                ADDR(        WIN_NO_EQUIVALENT,0x100351d18)
+#define RVA_MASTERY_COST_FILL_3                ADDR(        WIN_NO_EQUIVALENT,0x100351d20)
+#define RVA_MASTERY_COST_FILL_4                ADDR(        WIN_NO_EQUIVALENT,0x10035e718)
+#define RVA_MASTERY_COST_FILL_5                ADDR(        WIN_NO_EQUIVALENT,0x10035e720)
+#define RVA_MASTERY_COST_FILL_6                ADDR(        WIN_NO_EQUIVALENT,0x10035e728)
+#define RVA_MASTERY_COST_READ_1                ADDR(        WIN_NO_EQUIVALENT,0x1003527f0)
+#define RVA_MASTERY_COST_READ_2                ADDR(        WIN_NO_EQUIVALENT,0x10035289c)
+#define RVA_MASTERY_COST_READ_3                ADDR(        WIN_NO_EQUIVALENT,0x100352968)
+#define RVA_MASTERY_COST_READ_4                ADDR(        WIN_NO_EQUIVALENT,0x10035ef58)
+#define RVA_MASTERY_COST_READ_5                ADDR(        WIN_NO_EQUIVALENT,0x10035f024)
+#define RVA_MASTERY_COST_READ_6                ADDR(        WIN_NO_EQUIVALENT,0x10035f058)
+#define RVA_MASTERY_COST_READ_7                ADDR(        WIN_NO_EQUIVALENT,0x10035f0f4)
+#define RVA_MASTERY_COST_READ_8                ADDR(        WIN_NO_EQUIVALENT,0x10035f19c)
+#define RVA_MASTERY_COST_READ_9                ADDR(        WIN_NO_EQUIVALENT,0x10035283c)
+#define RVA_MASTERY_COST_READ_10               ADDR(        WIN_NO_EQUIVALENT,0x100352904)
+#define RVA_MASTERY_COST_READ_11               ADDR(        WIN_NO_EQUIVALENT,0x1003529d0)
+#define MASTERY_COST_FILLS                     6
+#define MASTERY_COST_READS                     11
+#define CEREMONY_COST_ARCH_BISHOP_GOLD         100
+#define CEREMONY_COST_CARDINAL_GOLD            250
+#define CEREMONY_COST_PONTIFF_GOLD             600
+#define RVA_CEREMONY_COST_INQUISITION          ADDR(        0x11f493bc,        0x106cee4d4)
+#define RVA_CEREMONY_COST_CRUSADE              ADDR(        0x11f4981c,        0x106cee4d0)
+#define RVA_CEREMONY_COST_BOLSTER_BASE         ADDR(        0x11d37a2c,        0x10857c550)
+#define RVA_CEREMONY_COST_SEAL_BASE            ADDR(        0xfb31b00,         0x10857c54c)
+#define RVA_CEREMONY_COST_CONVERT              ADDR(        0x11f493b8,        0x106cee4cc)
 #define CEREMONY_COSTS_COUNT                   11
 #define CEREMONY_COST_BOLSTER_STEP_AT          0x00
 #define CEREMONY_COST_SEAL_STEP_AT             0x04
@@ -588,34 +671,34 @@
 #define CEREMONY_COST_BOLSTER_BASE_AT          0x20
 #define CEREMONY_COST_SEAL_BASE_AT             0x24
 #define CEREMONY_COST_CONVERT_AT               0x28
-#define RVA_STR_CEREMONY_CONVERT               ADDR(        0x5698590,         MAC_NOT_LOOKED_UP)
-#define RVA_STR_CEREMONY_BREAK_SEAL            ADDR(        0x5698630,         MAC_NOT_LOOKED_UP)
-#define RVA_STR_CEREMONY_BOLSTER               ADDR(        0x56986a0,         MAC_NOT_LOOKED_UP)
-#define RVA_STR_CEREMONY_CRUSADE               ADDR(        0x5698708,         MAC_NOT_LOOKED_UP)
-#define RVA_STR_CEREMONY_INQUISITION           ADDR(        0x5698778,         MAC_NOT_LOOKED_UP)
-#define RVA_STR_CEREMONY_MASTERY               ADDR(        0x5698798,         MAC_NOT_LOOKED_UP)
-#define RVA_STR_CEREMONY_FAVOR                 ADDR(        0x5698640,         MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_SCREEN                    ADDR(        0x2d3a30,          MAC_NOT_LOOKED_UP)
+#define RVA_STR_CEREMONY_CONVERT               ADDR(        0x5698590,         0x10060949c)
+#define RVA_STR_CEREMONY_BREAK_SEAL            ADDR(        0x5698630,         0x10060955b)
+#define RVA_STR_CEREMONY_BOLSTER               ADDR(        0x56986a0,         0x1006095c2)
+#define RVA_STR_CEREMONY_CRUSADE               ADDR(        0x5698708,         0x1006095e0)
+#define RVA_STR_CEREMONY_INQUISITION           ADDR(        0x5698778,         0x10060962d)
+#define RVA_STR_CEREMONY_MASTERY               ADDR(        0x5698798,         0x100609674)
+#define RVA_STR_CEREMONY_FAVOR                 ADDR(        0x5698640,         0x100609583)
+#define RVA_CEREMONY_SCREEN                    ADDR(        0x2d3a30,          MAC_INLINED)
 #define RVA_RITUALS_OR_CEREMONIES              ADDR(        0x2e10e0,          MAC_NOT_LOOKED_UP)
-#define RVA_CEREMONY_SCREEN_COSTS              ADDR(        0x2d3ea1,          MAC_NOT_LOOKED_UP)
+#define RVA_CEREMONY_SCREEN_COSTS              ADDR_DIFFERS(0x2d3ea1,          0x10035e74c)
 #define RVA_CEREMONY_SCREEN_COSTS_END          ADDR(        0x2d3ea6,          MAC_NOT_LOOKED_UP)
 #define CEREMONY_SCREEN_COSTS_SIZE             0x5
 #define RVA_FAIL_IF_FLAG                       ADDR(        0x1995a0,          MAC_NOT_LOOKED_UP)
-#define RVA_SEALS_BROKEN                       ADDR(        0xf07b028,         MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_EVENTS_DONE                   ADDR(        0xf07b02c,         MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_EVENT_STEP                    ADDR(        0x165184,          MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_EVENT_SWITCH                  ADDR(        0x1651a3,          MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_EVENT_THIRD                   ADDR(        0x1651ac,          MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_EVENT_NOT_THIRD               ADDR(        0x16525d,          MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_EVENT_NONE                    ADDR(        0x165948,          MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_EVENT_END                     ADDR(        0x16594f,          MAC_NOT_LOOKED_UP)
-#define RVA_APOCALYPSE_MONTHS                  ADDR(        0xf07b034,         MAC_NOT_LOOKED_UP)
+#define RVA_SEALS_BROKEN                       ADDR(        0xf07b028,         0x11307d7fc)
+#define RVA_SEAL_EVENTS_DONE                   ADDR(        0xf07b02c,         0x11307d800)
+#define RVA_SEAL_EVENT_STEP                    ADDR(        0x165184,          0x1003aae30)
+#define RVA_SEAL_EVENT_SWITCH                  ADDR_DIFFERS(0x1651a3,          0x1003aae48)
+#define RVA_SEAL_EVENT_THIRD                   ADDR(        0x1651ac,          0x1003aae6c)
+#define RVA_SEAL_EVENT_NOT_THIRD               ADDR(        0x16525d,          MAC_NOT_FOUND)
+#define RVA_SEAL_EVENT_NONE                    ADDR_DIFFERS(0x165948,          0x1003ac520)
+#define RVA_SEAL_EVENT_END                     ADDR(        0x16594f,          0x1003ac520)
+#define RVA_APOCALYPSE_MONTHS                  ADDR(        0xf07b034,         0x11307d808)
 #define RVA_PRIEST_FREESPAWN                   ADDR(        0x2dbb80,          MAC_NOT_LOOKED_UP)
 #define RVA_BOLSTER_BLESSING                   ADDR(        0x2d5b10,          MAC_NOT_LOOKED_UP)
-#define RVA_NET_SEND_ORDER                     ADDR(        0x1f23f0,          MAC_NOT_LOOKED_UP)
+#define RVA_NET_SEND_ORDER                     ADDR(        0x1f23f0,          0x10050ed2c)
 #define RVA_NET_SEND_BLESSINGS                 ADDR(        0x1e7440,          MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_BREAK_CEREMONY_CALL           ADDR(        0x2e27f2,          MAC_NOT_LOOKED_UP)
-#define RVA_SEAL_BREAK_ITEM_CALL               ADDR(        0x1851a2,          MAC_NOT_LOOKED_UP)
+#define RVA_SEAL_BREAK_CEREMONY_CALL           ADDR(        0x2e27f2,          0x1003525c0)
+#define RVA_SEAL_BREAK_ITEM_CALL               ADDR(        0x1851a2,          0x1004e829c)
 #define RVA_USE_SPECIAL_SITE                   ADDR(        0x0b1b00,          MAC_NOT_LOOKED_UP)
 #define RVA_DESTROY_GATEWAY                    ADDR(        0x255420,          MAC_NOT_LOOKED_UP)
 #define RVA_ALTER_TERRAIN                      ADDR(        0x1f7a10,          MAC_NOT_LOOKED_UP)
@@ -638,16 +721,16 @@
 #define RVA_SQUARE_HAS_SEEN_UNIT               ADDR(        0x1290e0,          MAC_NOT_LOOKED_UP)
 #define RVA_COMMANDER_USE_ITEMS                ADDR(        0x185750,          MAC_NOT_LOOKED_UP)
 #define RVA_UNIT_AI_SKIP                       ADDR(        0x1d9e20,          MAC_NOT_LOOKED_UP)
-#define RVA_RITUAL_POINTLESS                   ADDR(        0x2cbe00,          MAC_NOT_LOOKED_UP)
+#define RVA_RITUAL_POINTLESS                   ADDR(        0x2cbe00,          0x10055c75c)
 #define RVA_RITUAL_CASTABLE_ANYWHERE           ADDR(        0x2cbbe0,          MAC_NOT_LOOKED_UP)
-#define RVA_COMMANDER_CASTER_BONUS             ADDR(        0x128b00,          MAC_NOT_LOOKED_UP)
-#define RVA_SEA_AREA_SIZE                      ADDR(        0x2ae1c0,          MAC_NOT_LOOKED_UP)
+#define RVA_COMMANDER_CASTER_BONUS             ADDR(        0x128b00,          0x10047e954)
+#define RVA_SEA_AREA_SIZE                      ADDR(        0x2ae1c0,          0x1004acd3c)
 #define RVA_AI_PROGRESS_MODE                   ADDR(        0x43c8c4,          MAC_NOT_LOOKED_UP)
 #define RVA_ROUTE_REFUSE_PLAYER                ADDR(        0x43c394,          MAC_NOT_LOOKED_UP)
 #define RVA_ROUTE_REFUSE_CLASS                 ADDR(        0x43c2dc,          MAC_NOT_LOOKED_UP)
 #define RVA_ROUTE_MAX_SEAS                     ADDR(        0x58355f4,         MAC_NOT_LOOKED_UP)
 #define RVA_ROUTE_MAX_SKIES                    ADDR(        0x58355f0,         MAC_NOT_LOOKED_UP)
-#define RVA_MOVE_COMMANDER_STEP                ADDR(        0x1dfbb0,          MAC_NOT_LOOKED_UP)
+#define RVA_MOVE_COMMANDER_STEP                ADDR(        0x1dfbb0,          0x10059a4bc)
 #define RVA_CLEAR_SQUARE_MARKS                 ADDR(        0x1b3a60,          MAC_NOT_LOOKED_UP)
 #define RVA_UNIT_RESISTANCE_1D1280             ADDR(        0x32a1e0,          MAC_NOT_LOOKED_UP)
 #define RVA_UNIT_FIRE_RESISTANCE               RVA_UNIT_RESISTANCE_1D1280
@@ -664,8 +747,8 @@
 #define RVA_RITUAL_FX_FIRST                    ADDR(        0x2c5c80,          MAC_NOT_LOOKED_UP)
 #define RVA_RITUAL_FX_FIRST_OR                 ADDR(        0x2cbdf0,          MAC_NOT_LOOKED_UP)
 #define RVA_COUNT_UNITS_NAMED                  ADDR(        0x129c90,          0x10047d120)
-#define RVA_COUNT_MONSTER_AT                   ADDR(        0x12ca20,          MAC_NOT_LOOKED_UP)
-#define RVA_SQUARE_ABILITY_TOTAL               ADDR(        0x1b3ac0,          MAC_NOT_LOOKED_UP)
+#define RVA_COUNT_MONSTER_AT                   ADDR(        0x12ca20,          0x10047ea18)
+#define RVA_SQUARE_ABILITY_TOTAL               ADDR(        0x1b3ac0,          0x1004a94d0)
 #define RVA_RELEASE_FOLLOWERS                  ADDR(        0x1292d0,          MAC_NOT_LOOKED_UP)
 #define RVA_CHECK_FOLLOWER_LINKS               ADDR(        0x111420,          MAC_NOT_LOOKED_UP)
 #define RVA_RITUAL_LINK_CHECK_CALL             ADDR(        0x2c9e9d,          MAC_NOT_LOOKED_UP)
@@ -674,7 +757,7 @@
 #define RVA_AI_SPLIT_LEADER_UNLINK             ADDR(        0x07bd3d,          MAC_NOT_LOOKED_UP)
 #define RVA_TRANSFER_UNIT_TO_COMMANDER         ADDR(        0x111900,          MAC_NOT_LOOKED_UP)
 #define RVA_UNIT_MAY_JOIN_COMMANDER            ADDR(        0x1119e0,          MAC_NOT_LOOKED_UP)
-#define RVA_UNIT_MAY_LEAVE_LEADER              ADDR(        0x111ab0,          MAC_NOT_LOOKED_UP)
+#define RVA_UNIT_MAY_LEAVE_LEADER              ADDR(        0x111ab0,          MAC_INLINED)
 #define RVA_UNIT_SPEED_CLASS                   ADDR(        0x325de0,          MAC_NOT_LOOKED_UP)
 #define RVA_ARMY_COMMANDS_MENU                 ADDR(        0x111e30,          MAC_NOT_LOOKED_UP)
 #define RVA_ARMY_COMMANDS_MENU_CALL            ADDR(        0x121c7e,          MAC_NOT_LOOKED_UP)
@@ -694,7 +777,7 @@
 #define RVA_COMMANDER_PRICE                    ADDR(        0x0b1300,          MAC_NOT_LOOKED_UP)
 #define RVA_COUNT_FREE_COMMANDERS              ADDR(        0x129a30,          MAC_NOT_LOOKED_UP)
 #define RVA_UNIT_HAS_SPELL_ATTACK              ADDR(        0x1d9da0,          MAC_NOT_LOOKED_UP)
-#define RVA_UNIT_HAS_SPELL_WEAPON              ADDR(        0x329cf0,          MAC_NOT_LOOKED_UP)
+#define RVA_UNIT_HAS_SPELL_WEAPON              ADDR(        0x329cf0,          0x10056c5e8)
 #define RVA_UNIT_HAS_WATER_MOVE                ADDR(        0x32a160,          MAC_NOT_LOOKED_UP)
 #define RVA_UNIT_FLIGHT_KIND                   ADDR(        0x32a810,          MAC_NOT_LOOKED_UP)
 #define RVA_UNIT_PLANE                         ADDR(        0x32a1b0,          MAC_NOT_LOOKED_UP)
@@ -728,8 +811,8 @@
 #define RVA_INDEP_LIKED_TERRAIN                ADDR(        0x16e3b0,          MAC_NOT_LOOKED_UP)
 #define RVA_INDEP_NEAR_PREFERRED               ADDR(        0x16e310,          MAC_NOT_LOOKED_UP)
 #define RVA_INDEP_HATED_TERRAIN                ADDR(        0x16e180,          MAC_NOT_LOOKED_UP)
-#define RVA_INDEP_MOVE_TRY                     ADDR(        0x16d4b0,          MAC_NOT_LOOKED_UP)
-#define RVA_INDEP_MOVE_STEP                    ADDR(        0x16db90,          MAC_NOT_LOOKED_UP)
+#define RVA_INDEP_MOVE_TRY                     ADDR(        0x16d4b0,          0x100546c24)
+#define RVA_INDEP_MOVE_STEP                    ADDR(        0x16db90,          0x100546458)
 #define RVA_SET_HOLDIT                         ADDR(        0x173600,          MAC_NOT_LOOKED_UP)
 #define RVA_GOLD_MINE_ATTACK                   ADDR(        0x26cf50,          MAC_NOT_LOOKED_UP)
 #define RVA_NEAREST_UNIT_ABILITY_IS            ADDR(        0x1ae9a0,          MAC_NOT_LOOKED_UP)
@@ -751,7 +834,7 @@
 #define RVA_COUNT_UNITS_FLAGGED_AT             ADDR(        0x1182e0,          MAC_NOT_LOOKED_UP)
 #define RVA_SQUARE_ALL_STRENGTH                ADDR(        0x0bc290,          MAC_NOT_LOOKED_UP)
 #define RVA_REMOVE_COMMANDER_ARMY              ADDR(        WIN_INLINED,       MAC_NOT_LOOKED_UP)
-#define RVA_IMMORTAL_REFORM_PLACE              ADDR(        0x3275f0,          MAC_NOT_LOOKED_UP)
+#define RVA_IMMORTAL_REFORM_PLACE              ADDR(        0x3275f0,          0x10056845c)
 #define RVA_NEW_COMMANDER_ID                   ADDR(        0x1197c0,          MAC_NOT_LOOKED_UP)
 #define RVA_INFERNO_ACTIVE                     ADDR(        0x5822f94,         MAC_NOT_LOOKED_UP)
 #define RVA_CELESTIAL_ACTIVE                   ADDR(        0x5822f98,         MAC_NOT_LOOKED_UP)
@@ -760,12 +843,12 @@
 #define RVA_AFTER_GAME_TURN                    ADDR(        0x161e60,          0x1003a08b8)
 #define RVA_MONTH_SQUARE_RESET                 ADDR(        0x140c60,          MAC_NOT_LOOKED_UP)
 #define RVA_MONTH_SQUARE_RESET_CALL            ADDR(        0x166d5d,          MAC_NOT_LOOKED_UP)
-#define RVA_MAGIC_TAINTED_MONTHS               ADDR(        0x5822f80,         MAC_NOT_LOOKED_UP)
+#define RVA_MAGIC_TAINTED_MONTHS               ADDR(        0x5822f80,         0x10ce02edc)
 #define RVA_DROWN_CHECK                        ADDR(        0x114940,          MAC_INLINED)
 #define RVA_CRASH_LANDING_CHECK                ADDR(        0x114300,          MAC_INLINED)
 #define RVA_TURN_UNIT_UPKEEP                   ADDR(        0x144150,          0x100399c30)
 #define RVA_SQUARE_UPKEEP                      ADDR(        0x1ddb50,          0x1005991a0)
-#define RVA_BATTLE_SETUP                       ADDR(        0x0f7350,          MAC_NOT_LOOKED_UP)
+#define RVA_BATTLE_SETUP                       ADDR(        0x0f7350,          0x1003cf664)
 #define RVA_BATTLE_SETUP_CALL                  ADDR(        0x0f5e65,          MAC_NOT_LOOKED_UP)
 #define RVA_BATTLE_DEPLOY                      ADDR(        0x0f8ae0,          MAC_NOT_LOOKED_UP)
 #define RVA_BATTLE_DEPLOY_CALL                 ADDR(        0x0f5e71,          MAC_NOT_LOOKED_UP)
@@ -819,19 +902,19 @@
 #define RVA_BATTLE_AFTER_FIGHT_UPKEEP          ADDR(        0x0cf6b0,          MAC_NOT_LOOKED_UP)
 #define RVA_BATTLE_DELAY_FOR_SPEED             ADDR(        0x0ffe90,          MAC_NOT_LOOKED_UP)
 #define RVA_COUNT_SIDE_UNITS                   ADDR(        0x117570,          MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_ROUND                       ADDR(        0x11f41958,        MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_DELAY                       ADDR(        0xfb2cc84,         MAC_NOT_LOOKED_UP)
+#define RVA_BATTLE_ROUND                       ADDR(        0x11f41958,        0x106cee4c8)
+#define RVA_BATTLE_DELAY                       ADDR(        0xfb2cc84,         0x10cb0e188)
 #define RVA_BATTLE_WIDTH                       ADDR(        0x43e084,          0x1048937f0)
 #define RVA_BATTLE_HEIGHT                      ADDR(        WIN_IN_CODE,       MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_WINNER_PLAYER               ADDR(        0x43e1f4,          MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_STARVE_ROUND                ADDR(        0x43dd84,          MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_CHARGE_ROUND                ADDR(        0x43dd6c,          MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_IS_AMBUSH                   ADDR(        0x5804c08,         MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_AT_SEA                      ADDR(        0x5804c14,         MAC_NOT_LOOKED_UP)
+#define RVA_BATTLE_WINNER_PLAYER               ADDR(        0x43e1f4,          0x100872b5c)
+#define RVA_BATTLE_STARVE_ROUND                ADDR(        0x43dd84,          0x100872b08)
+#define RVA_BATTLE_CHARGE_ROUND                ADDR(        0x43dd6c,          0x100872b0c)
+#define RVA_BATTLE_IS_AMBUSH                   ADDR_DIFFERS(0x5804c08,         0x106cd5de4)
+#define RVA_BATTLE_AT_SEA                      ADDR_DIFFERS(0x5804c14,         0x107ee6490)
 #define RVA_BATTLE_PLANE_3_OR_4                ADDR(        0x5804c24,         MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_IS_SIEGE                    ADDR(        0x5804c54,         MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_OVER                        ADDR(        0x5804c1c,         MAC_NOT_LOOKED_UP)
-#define RVA_BATTLE_NOT_A_SIEGE                 ADDR(        0x5804c4c,         MAC_NOT_LOOKED_UP)
+#define RVA_BATTLE_IS_SIEGE                    ADDR_DIFFERS(0x5804c54,         0x10c921d10)
+#define RVA_BATTLE_OVER                        ADDR_DIFFERS(0x5804c1c,         0x10c96df3c)
+#define RVA_BATTLE_NOT_A_SIEGE                 ADDR_DIFFERS(0x5804c4c,         0x1069b16b4)
 #define RVA_BATTLE_ATT_RANK_COUNTS             ADDR(        0x64ab8c0,         MAC_NOT_LOOKED_UP)
 #define RVA_BATTLE_DEF_RANK_COUNTS             ADDR(        0x64ab8d0,         MAC_NOT_LOOKED_UP)
 #define RVA_BATTLE_ENEMY_EXTENTS               ADDR(        0x123358e0,        MAC_NOT_LOOKED_UP)
@@ -901,6 +984,9 @@
 #define RVA_TOP_BAR                            ADDR(        0x09c4a0,          0x100377564)
 #define RVA_DATE                               ADDR(        0x119050,          MAC_INLINED)
 #define RVA_UNIT_SHOWN_NAME                    ADDR(        0x0f8d10,          0x1003bb990)
+#define RVA_COMMANDER_THE_NAME                 ADDR(        0x0f93b0,          MAC_INLINED)
+#define RVA_COMMANDER_THE_NAME_INDEX           ADDR(       0x5804c40,          0x1069b1eb0)
+#define RVA_COMMANDER_THE_NAME_RING            ADDR(       0x64ebae0,          0x1069b1eb4)
 #define RVA_RECRUIT_SCREEN                     ADDR(        0x125530,          0x100479c04)
 #define RVA_RECRUIT_LOCATION_LAST              ADDR(        0x441914,          MAC_NOT_LOOKED_UP)
 #define RVA_RECRUIT_LOCATION_X                 ADDR(        0x11f48f80,        MAC_NOT_LOOKED_UP)
@@ -930,6 +1016,10 @@
 #define RVA_PARTICIPANTS_COLOUR_BUTTON         ADDR(        0x305024,          0x1005892bc)
 #define RVA_NEW_WORLD_NET_INIT_CALL            ADDR(        0x303532,          MAC_NO_CALL)
 #define RVA_NEW_WORLD_INIT_CALL                ADDR(        0x30383d,          MAC_NO_CALL)
+#define RVA_TWO_PLAYER_TEAMS                   ADDR_DIFFERS(0x5826bb4,       0x10ce0cb4c)
+#define RVA_INIT_PARTICIPANTS_COPY             ADDR(        WIN_NO_EQUIVALENT,0x100587684)
+#define RVA_INIT_PARTICIPANTS_JOIN             ADDR(        WIN_NO_EQUIVALENT,0x100587a44)
+#define RVA_INIT_PARTICIPANTS_CONTROLLERS      ADDR(        WIN_IN_CODE,0x100758250)
 #define RVA_PARTICIPANTS_ROW_START             ADDR_DIFFERS(0x3042a4,          0x1005889e8)
 #define RVA_PARTICIPANTS_ROW_START_NET         ADDR_DIFFERS(0x3042a4,          0x10058848c)
 #define RVA_PARTICIPANTS_DIFFICULTY_CALL       ADDR(        0x304e60,          0x1005891bc)
@@ -1445,6 +1535,7 @@
 #define RVA_PLAYER_SHORT                       ADDR(        0x11c14488,        0x10cce477c)
 #define RVA_PLAYER_LEADER                      ADDR(        0x11c1448c,        0x10cce4780)
 #define RVA_PLAYER_BLESSINGS                   ADDR(        0x11c144c8,        0x10cce47bc)
+#define PLAYER_BLESSINGS_MAX                   24
 #define RVA_PLAYER_BOLSTERS                    ADDR(        0x11c1bb0c,        0x10ccebe00)
 #define RVA_PLAYER_DIVINE_FAVOR                ADDR(        0x11c1bb10,        0x10ccebe04)
 #define RVA_PLAYER_INT_A                       RVA_PLAYER_BOLSTERS
@@ -1765,6 +1856,7 @@
 #define RVA_WEAPON_HIT_NO_DAMAGE               ADDR(        0x0ddbf9,          MAC_IN_CODE)
 #define RVA_WEAPON_HIT_MULTIPLY_END            ADDR(        0x0dda79,          0x1003c2f20)
 #define RVA_WEAPON_HIT_PROLOGUE_END            ADDR(        0x0dd1bc,          0x1003c220c)
+#define RVA_WEAPON_HIT_DAMAGE_DIE_CALL         ADDR(        0x0dd44f,          0x1003c2790)
 #define RVA_BATTLE_LOG                         ADDR(        0x100dc0,          0x1005818dc)
 #define RVA_WEAPON_TEXT                        ADDR(        0x1ccff0,          0x1005275d0)
 #define RVA_WEAPON_TEXT_CALL                   ADDR(        0x1d18e2,          0x100527480)
@@ -1993,6 +2085,12 @@
 #define RVA_COMPACT_PLAYERS_MOVE_2             ADDR_DIFFERS(0x1f0bf3,          0x1004f8da8)
 #define RVA_ENCHANTS                           ADDR(        0xd49c9a0,         0x10c9180c4)
 #define ENCHANT_SIZE                           0x28
+#define ENCHANT_KIND                           0x0
+#define ENCHANT_CASTER                         0x4
+#define ENCHANT_OWNER                          0x8
+#define ENCHANT_RITUAL                         0xc
+#define ENCHANT_X                              0x10
+#define ENCHANT_Y                              0x14
 #define RVA_LAST_ENCHANT                       ADDR(        0x1afe49c,         0x101cce590)
 #define ENCHANTS_MAX                           1000
 #define RVA_LOAD_ENCHANTS                      ADDR(        0x18d560,          0x1004efc1c)
@@ -2243,6 +2341,7 @@
 #define UNIT_ITEM_SLOTS                        8
 #define RVA_UNIT_TEMP_ABILITY_IDS              ADDR(        0xfb8e8ce,         0x11004996e)
 #define RVA_UNIT_TEMP_ABILITY_VALUES           ADDR(        0xfb8e8e0,         0x110049980)
+#define UNIT_TEMP_ABILITIES                    4
 #define RVA_SET_TEMP_ABILITY                   ADDR_DIFFERS(0x118c60,          0x1004683d0)
 #define RVA_GET_TEMP_ABILITY                   ADDR(        0x117510,          0x1004684cc)
 #define RVA_COMMANDER_KNOWN_RITUALS            ADDR(        0x11d3c8ac,        0x10ce0cbcc)
@@ -2407,13 +2506,13 @@
 #define RVA_SELECT_NEXT_COMMANDER              ADDR(        0x0a0d90,          MAC_NOT_LOOKED_UP)
 #define RVA_DROP_DEAD_FROM_GROUP               ADDR(        0x1df330,          MAC_NOT_LOOKED_UP)
 #define RVA_COUNT_COMMANDERS_WITH_AP           ADDR(        0x09ddc0,          MAC_NOT_LOOKED_UP)
-#define RVA_SELECTED_COMMANDER                 ADDR(        0xfb2cc28,         MAC_NOT_LOOKED_UP)
-#define RVA_SELECTED_COMMANDER_GROUP           ADDR(        0xfb2cc24,         MAC_NOT_LOOKED_UP)
+#define RVA_SELECTED_COMMANDER                 ADDR(        0xfb2cc28,         0x10cb0e18c)
+#define RVA_SELECTED_COMMANDER_GROUP           ADDR(        0xfb2cc24,         0x10cb0e190)
 #define COMMANDER_ORDER_GROUP                  0x4
 #define RVA_COMMANDER_UNIT                     ADDR(        0x12c8c0,          MAC_INLINED)
 #define RVA_UNIT_X                             ADDR(        0xfb8e7f4,         0x110049894)
 #define UNIT_SIZE                              0x158
-#define RVA_UNIT_LEADER                        ADDR(        0xfb8e7f0,         MAC_NOT_LOOKED_UP)
+#define RVA_UNIT_LEADER                        ADDR(        0xfb8e7f0,         0x110049890)
 #define RVA_UNITS                              ADDR(        0xfb8e7e0,         0x110049880)
 #define RVA_UNIT_MONSTER                       ADDR(        0xfb8e8c8,         0x110049968)
 #define RVA_UNIT_COUNT                         ADDR(        0xfb8e7c0,         0x110049878)
@@ -2439,7 +2538,7 @@
 #define RVA_RESET_SQUARE_CACHE                 ADDR(        0x1b3900,          0x100498d44)
 #define RVA_SIGHT_RAYS                         ADDR(        0x19c330,          MAC_NOT_LOOKED_UP)
 #define RVA_SIGHT_BOX                          ADDR(        0x1ae190,          MAC_NOT_LOOKED_UP)
-#define RVA_MARK_SQUARE_IN_VIEW                ADDR(        0x1b11c0,          MAC_NOT_LOOKED_UP)
+#define RVA_MARK_SQUARE_IN_VIEW                ADDR(        0x1b11c0,          MAC_INLINED)
 #define RVA_UPDATE_TRUE_TERRAIN_SEEN           ADDR(        WIN_NOT_FOUND,     MAC_NOT_LOOKED_UP)
 #define RVA_COPY_TEAM_SIGHT                    ADDR(        WIN_NOT_FOUND,     MAC_NOT_LOOKED_UP)
 #define RVA_REVEAL_MAP_CALL                    ADDR(        0x10d88d,          0x100474354)
@@ -2522,15 +2621,19 @@
 #define RVA_DICE_OPEN_ENDED                    ADDR(        0x058dc0,          0x100336a64)
 #define RVA_DICE                               ADDR(        0x058b30,          MAC_INLINED)
 #define RVA_EXECUTE_RITUAL_STRING_PICK         ADDR(        0x2c61c2,          MAC_NOT_LOOKED_UP)
-#define RVA_EXECUTE_RITUAL_SUMMON_CALL         ADDR(        0x2c6941,          MAC_NOT_LOOKED_UP)
-#define RVA_EXECUTE_RITUAL_FARSUMMON_CALL      ADDR(        0x2c69f2,          MAC_NOT_LOOKED_UP)
-#define RVA_RITUAL_SUMMON_STRING               ADDR(        0x2b3700,          MAC_NOT_LOOKED_UP)
+#define RVA_EXECUTE_RITUAL_SUMMON_CALL         ADDR(        0x2c6941,          0x100560d74)
+#define RVA_EXECUTE_RITUAL_FARSUMMON_CALL      ADDR(        0x2c69f2,          0x10055f9b0)
+#define RVA_RITUAL_SUMMON_STRING               ADDR(        0x2b3700,          0x10055cd1c)
 #define RVA_RITUAL_SUMMON_PERCENT_CURVE        ADDR(        0x2b3857,          MAC_NOT_LOOKED_UP)
 #define RVA_RITUAL_SUMMON_CONTROL_ROLL         ADDR(        WIN_INLINED,       MAC_NOT_LOOKED_UP)
 #define RVA_RITUAL_SUMMON_UNITS                ADDR(        0x2d6330,          MAC_NOT_LOOKED_UP)
 #define RVA_RITUAL_SUMMON_CONTROL_CHECK        ADDR(        0x2d6945,          MAC_NOT_LOOKED_UP)
 #define RVA_RITUAL_FAR_SUMMON_UNITS            ADDR(        0x2d7790,          MAC_NOT_LOOKED_UP)
-#define RVA_RANDOM_OPEN_DICE                   ADDR(        0x058b90,          MAC_NOT_LOOKED_UP)
+#define RVA_RANDOM_OPEN_DICE                   ADDR(        0x058b90,          0x100336d68)
+#define RVA_RITUAL_SUMMON_PART_TRACE_CALL      ADDR(        0x2b3975,          0x10055cfc8)
+#define RVA_RITUAL_SUMMON_DICE_CALL            ADDR(        0x2b3edc,          0x10055d184)
+#define RVA_RITUAL_STRING_COPY_CALL            ADDR(        0x2c635a,          0x10055ed98)
+#define RVA_STRING_COPY                        ADDR_DIFFERS(0x05e7d0,          0x1005ae314)
 #define RVA_GET_START_RITUALS                  ADDR(        0x2c0420,          MAC_NOT_LOOKED_UP)
 #define RVA_GET_START_RITUALS_CONTROLLER       ADDR(        0x2c0500,          MAC_NOT_LOOKED_UP)
 #define RVA_START_RITUAL_SLOTS                 ADDR(        0x406dc0,          MAC_NOT_LOOKED_UP)
@@ -2578,10 +2681,10 @@
 #define RVA_CAST_RITUAL_BY_NAME                ADDR(        0x2be420,          MAC_NOT_LOOKED_UP)
 #define RVA_RITUAL_SCREEN_EXECUTE_CALL         ADDR(        0x2b0801,          MAC_NOT_LOOKED_UP)
 #define RVA_REPEAT_RITUAL_EXECUTE_CALL         ADDR(        0x2c2506,          MAC_NOT_LOOKED_UP)
-#define RVA_STARS_RELIABILITY                  ADDR(        0xf07b00c,         MAC_NOT_LOOKED_UP)
-#define RVA_STARS_POWER                        ADDR(        0xf07b00e,         MAC_NOT_LOOKED_UP)
-#define RVA_STARS_MONTHS                       ADDR(        0xf07b010,         MAC_NOT_LOOKED_UP)
-#define RVA_STARS_FLAGS                        ADDR(        0xf07b014,         MAC_NOT_LOOKED_UP)
+#define RVA_STARS_RELIABILITY                  ADDR(        0xf07b00c,         0x11307d7e0)
+#define RVA_STARS_POWER                        ADDR(        0xf07b00e,         0x11307d7e2)
+#define RVA_STARS_MONTHS                       ADDR(        0xf07b010,         0x11307d7e4)
+#define RVA_STARS_FLAGS                        ADDR(        0xf07b014,         0x11307d7e8)
 #define RVA_STARS_READING_TEXT                 ADDR(        0x2dcdb0,          MAC_NOT_LOOKED_UP)
 #define RITUAL_FX_DEFCTRL                      901
 #define RITUAL_FX_VARCOST                      902
@@ -2596,9 +2699,9 @@
 #define RITUAL_FX_FARSUMMON                    968
 #define MONSTER_ABILITY_CTRLCHANCE             0x321
 #define RVA_UNIT_NO_COMMANDER_FLAG             ADDR(        0x1d9d50,          MAC_INLINED)
-#define RVA_RITUAL_SUMMON_STRING               ADDR(        0x2b3700,          MAC_NOT_LOOKED_UP)
-#define RVA_RITUAL_SUMMON_CALL                 ADDR(        0x2c6941,          MAC_NOT_LOOKED_UP)
-#define RVA_RITUAL_FARSUMMON_CALL              ADDR(        0x2c69f2,          MAC_NOT_LOOKED_UP)
+#define RVA_RITUAL_SUMMON_STRING               ADDR(        0x2b3700,          0x10055cd1c)
+#define RVA_RITUAL_SUMMON_CALL                 ADDR(        0x2c6941,          0x100560d74)
+#define RVA_RITUAL_FARSUMMON_CALL              ADDR(        0x2c69f2,          0x10055f9b0)
 #define RVA_SUMMON_TO_UNIT                     ADDR(        0x2d6330,          MAC_NOT_LOOKED_UP)
 #define RVA_SUMMON_TO_UNIT_LINK                ADDR(        0x2d69b2,          MAC_NOT_LOOKED_UP)
 #define RVA_SUMMON_TO_UNIT_FAIL_24             ADDR(        0x2dcd00,          MAC_NOT_LOOKED_UP)
@@ -2636,7 +2739,7 @@
 #define RVA_COUNT_PLAYER_PORTALS               ADDR(        0x2519b0,          0x100571298)
 #define RVA_SQUARE_PORTAL_AT                   ADDR(        0x241640,          MAC_INLINED)
 #define SQUARE_PORTAL                          0x3e
-#define RVA_AI_REVEAL_PORTAL_EXITS             ADDR(        0x251b00,          MAC_NOT_LOOKED_UP)
+#define RVA_AI_REVEAL_PORTAL_EXITS             ADDR(        0x251b00,          0x100571908)
 #define RVA_REVEAL_PORTAL_EXITS                ADDR(        0x242620,          MAC_NOT_LOOKED_UP)
 #define RVA_RITUAL_LISTED                      ADDR(        0x2b4930,          MAC_INLINED)
 #define RVA_GET_UNIT_HP                        ADDR(        0x329580,          MAC_INLINED)
@@ -3278,7 +3381,6 @@ static const SiteInfo SITES[SITE_COUNT] = {
     [SITE_NEW_WORLD_MAP_SCREEN] = SITE("new_world_map_screen", 0,
         /* windows */ (0x3034fa),       0x2aa590,
         /* mac     */ (M(0x100587428)), M(0x1004b2454)),
-    // @platform-split new_world_init_participants: no Mac call
     [SITE_NEW_WORLD_INIT_PARTICIPANTS] = SITE("new_world_init_participants", 0,
         /* windows */ (0x30383d), 0x2ea3a0,
         /* mac     */ (0),        0),
@@ -3474,11 +3576,11 @@ static const SiteInfo SITES[SITE_COUNT] = {
     [SITE_MESSAGES_WAIT] = SITE("messages_wait", 0,
         /* windows */ (0x1e29e9),       0x23f240,
         /* mac     */ (M(0x1004c2be8)), M(0x100484ef8)),
-    // @platform-split ai_explore: no Mac call
+    // @platform-split ai_steps_mac: no Mac call; hooks at each end of the copied step
     [SITE_AI_EXPLORE] = SITE("ai_explore", 0,
         /* windows */ (0x070d8a), 0x074350,
         /* mac     */ (0),        0),
-    // @platform-split ai_steps: no Mac call
+    // @platform-split ai_steps_mac: rally, friendly move and conquest have no Mac call
     [SITE_AI_RALLY] = SITE("ai_rally", 0,
         /* windows */ (0x070caa), 0x076730,
         /* mac     */ (0),        0),
@@ -3490,40 +3592,38 @@ static const SiteInfo SITES[SITE_COUNT] = {
         /* mac     */ (0),        0),
     [SITE_AI_FAR_EXPLORE] = SITE("ai_far_explore", 0,
         /* windows */ (0x070dd8), 0x073e40,
-        /* mac     */ (0),        0),
-    // @platform-split ai_ritual_candidate: no Mac call
+        /* mac     */ (M(0x1004da568)), M(0x1004d3888)),
     [SITE_AI_RITUAL_CANDIDATE] = SITE("ai_ritual_candidate", 0,
         /* windows */ (0x06bb37), 0x2cbe00,
-        /* mac     */ (0),        0),
-    // @platform-split ai_recruit: no Mac call
+        /* mac     */ (M(0x1004de000)), M(0x10055c75c)),
+    // @platform-split ai_steps_mac: no Mac call; hooks at each end of the copied step
     [SITE_AI_RECRUIT] = SITE("ai_recruit", 0,
         /* windows */ (0x06fb2b), 0x0773f0,
         /* mac     */ (0),        0),
-    // @platform-split ai_army: no Mac call
+    // @platform-split ai_steps_mac: the troop pick-up and the split have no Mac call
     [SITE_AI_GATHER_TROOPS] = SITE("ai_gather_troops", 0,
         /* windows */ (0x070f03), 0x06edd0,
         /* mac     */ (0),        0),
     [SITE_AI_PICK_UP_LONER] = SITE("ai_pick_up_loner", 0,
         /* windows */ (0x07c26d), 0x129ad0,
-        /* mac     */ (0),        0),
+        /* mac     */ (M(0x1004d16a8)), M(0x1004840fc)),
     [SITE_AI_SPLIT_ARMY] = SITE("ai_split_army", 0,
         /* windows */ (0x07b55f), 0x07b700,
         /* mac     */ (0),        0),
-    // @platform-split ai_army: no Mac call
     [SITE_AI_MOVE_COMSTR] = SITE("ai_move_comstr", 0,
         /* windows */ (0x070f0d), 0x129320,
-        /* mac     */ (0),        0),
-    // @platform-split ceremony_sites: no Mac call
+        /* mac     */ (M(0x1004db4ec)), M(0x10047f724)),
     [SITE_CEREMONY_PERFORM] = SITE("ceremony_perform", 0,
         /* windows */ (0x2d56c9, 0x2d56b9, 0x09ead9, 0x07b3ed, 0x07b40f, 0x07b431, 0x07b450, 0x07b47b, 0x07b4a6,
                        0x07b4c2, 0x07b53f, 0x07b54f), 0x2e2290,
-        /* mac     */ (0),                            0),
+        /* mac     */ (M(0x10035f5d4), M(0x100386f08), M(0x1004d20c0), M(0x1004d20e4), M(0x1004d2108), M(0x1004d21a8),
+                       M(0x1004d2330), M(0x1004d23d4), M(0x1004d23f0), M(0x1004d24e0), M(0x1004d24f0)), M(0x1003522f0)),
     [SITE_CEREMONY_COSTS] = SITE("ceremony_costs", 0,
         /* windows */ (0x2d3ea1, 0x07b3cb, 0x09eac6), 0x2e3310,
-        /* mac     */ (0),                            0),
+        /* mac     */ (M(0x100386ef8), M(0x1004d209c)), M(0x100351bcc)),
     [SITE_SEAL_BREAK] = SITE("seal_break", 0,
         /* windows */ (0x2e27f2, 0x1851a2), 0x1f23f0,
-        /* mac     */ (0),                  0),
+        /* mac     */ (M(0x1003525c0), M(0x1004e829c)), M(0x10050ed2c)),
     [SITE_SEAL_EVENT] = SITE("seal_event", 0,
         /* windows */ (0), 0,
         /* mac     */ (0), 0),

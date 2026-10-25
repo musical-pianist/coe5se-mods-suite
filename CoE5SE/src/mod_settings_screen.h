@@ -625,12 +625,14 @@ static void modsRunHook(int level) {
     planeWordsBeforePass(level);
     terrainLooksBeforePass(level);
     weaponTraitsBeforePass(level);
+    noExplodeBeforePass(level);
     nextModsRun(level);
     finishReading();
     spellsAfterPass(level, spellPasses);
     applyLoadedSavePlanes(level);
     planeWordsAfterPass(level);
     ritualWordsAfterPass(level);
+    noExplodeAfterPass(level);
     terrainLooksAfterPass(level);
     if (level != 3) popupSettingErrors();
 }

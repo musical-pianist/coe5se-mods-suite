@@ -1,4 +1,4 @@
-// The trace filter: which of the game's trace lines reach log.txt.
+// The trace filter: which of the game's trace lines are written (Windows: log.txt; Mac: standard output).
 #pragma once
 
 #define TRACE_CACHE_SLOTS 4096
@@ -80,6 +80,8 @@ __attribute__((used)) int coe5seTraceLineKept(const char *format) {
     return kept;
 }
 
+static int traceFilterState;
+
 #ifndef __APPLE__
 // coe5seTraceHook: entered by jumps from the game's trace functions.
 void coe5seTraceHook(void);
@@ -114,9 +116,6 @@ __asm__(".text\n"
 #define TRACE_RESUME_AT   0x20
 #define TRACE_MOVED_BYTES 5
 
-static int traceFilterState;
-
-// @platform-split trace_filter: Windows only; the Mac trace functions weren't read for it
 // Points the four trace functions at coe5seTraceHook, once.
 static int installTraceFilter(void) {
     if (traceFilterState) return traceFilterState > 0;
@@ -169,6 +168,88 @@ static int installTraceFilter(void) {
         unsigned int rel = (unsigned int)(int)(entry - (fn + 5));
         word = (word & 0xffffff0000000000ULL) | (unsigned long long)rel << 8 | 0xe9;
         ok += writeGameCode(fn, &word, 8);
+    }
+    traceFilterState = ok ? 1 : -1;
+    writeLog("trace_filter_installed", "ok=%d of %d", ok, COUNT);
+    return ok > 0;
+}
+#else
+// Asks coe5seTraceLineKept about the format in x0, with every argument register kept; the answer in x16.
+__asm__(
+    ".text\n.p2align 2\n.globl _coe5seTraceKeptCall\n_coe5seTraceKeptCall:\n"
+    "  sub sp, sp, #0xe0\n"
+    "  stp x29, x30, [sp, #0x00]\n"
+    "  mov x29, sp\n"
+    "  stp x0, x1, [sp, #0x10]\n  stp x2, x3, [sp, #0x20]\n  stp x4, x5, [sp, #0x30]\n  stp x6, x7, [sp, #0x40]\n"
+    "  str x8, [sp, #0x50]\n"
+    "  stp q0, q1, [sp, #0x60]\n  stp q2, q3, [sp, #0x80]\n  stp q4, q5, [sp, #0xa0]\n  stp q6, q7, [sp, #0xc0]\n"
+    "  bl _coe5seTraceLineKept\n"
+    "  mov w16, w0\n"
+    "  ldp q0, q1, [sp, #0x60]\n  ldp q2, q3, [sp, #0x80]\n  ldp q4, q5, [sp, #0xa0]\n  ldp q6, q7, [sp, #0xc0]\n"
+    "  ldr x8, [sp, #0x50]\n"
+    "  ldp x6, x7, [sp, #0x40]\n  ldp x4, x5, [sp, #0x30]\n  ldp x2, x3, [sp, #0x20]\n  ldp x0, x1, [sp, #0x10]\n"
+    "  ldp x29, x30, [sp, #0x00]\n"
+    "  add sp, sp, #0xe0\n"
+    "  ret\n");
+extern const unsigned char coe5seTraceKeptCall[];
+
+#define TRACE_STUB_WORDS 10
+
+// Fills the Mac entry stub of the trace function at `fn`, placed at `stub`, whose first instruction is `moved`.
+static void writeTraceStubMac(uint32_t code[TRACE_STUB_WORDS], const unsigned char *stub, const unsigned char *fn, uint32_t moved,
+                              uint64_t routine) {
+    code[0] = 0xf81f0ffeu;
+    code[1] = 0x580000f0u;
+    code[2] = 0xd63f0200u;
+    code[3] = 0xf84107feu;
+    code[4] = 0xb4000070u;
+    code[5] = moved;
+    code[6] = 0x14000000u | ((uint32_t)(((fn + 4) - (stub + 24)) >> 2) & 0x3ffffffu);
+    code[7] = 0xd65f03c0u;
+    memcpy(&code[8], &routine, 8);
+}
+
+// Points the four trace functions at their entry stubs, once.
+static int installTraceFilter(void) {
+    if (traceFilterState) return traceFilterState > 0;
+    traceFilterState = -1;
+    static const struct { unsigned int rva; const char *head; } FUNCTIONS[] = {
+        {RVA_TRACE, "function=trace "},
+        {RVA_TRACE_C, "function=trace_c "},
+        {RVA_TRACE_B, "function=trace_b "},
+        {RVA_TRACE_ERROR, "function=trace_error "},
+    };
+    enum { COUNT = sizeof FUNCTIONS / sizeof FUNCTIONS[0] };
+    if (!gameBuild) {
+        writeLog("trace_filter_installed", "ok=0 of %d reason=unknown_game_build", COUNT);
+        return 0;
+    }
+    int matched = 0;
+    for (int i = 0; i < COUNT; i++)
+        matched += checkGameFunction("trace_filter_check", FUNCTIONS[i].head);
+    if (matched != COUNT) {
+        writeLog("trace_filter_installed", "ok=0 of %d reason=game_code_changed", COUNT);
+        return 0;
+    }
+    unsigned long cstringSize = 0;
+    const unsigned char *cstrings = getsectiondata((const struct mach_header_64 *)gameBase, "__TEXT", "__cstring", &cstringSize);
+    traceImageStart = cstrings, traceImageEnd = cstrings ? cstrings + cstringSize : NULL;
+    int ok = 0;
+    for (int i = 0; i < COUNT; i++) {
+        unsigned char *fn = gameBase + FUNCTIONS[i].rva, *stub = takePadding(sizeof(uint32_t) * TRACE_STUB_WORDS);
+        if (!stub) {
+            writeLog("hook_skipped", "site=trace_filter %sreason=no_padding", FUNCTIONS[i].head);
+            continue;
+        }
+        uint32_t moved, code[TRACE_STUB_WORDS];
+        memcpy(&moved, fn, 4);
+        writeTraceStubMac(code, stub, fn, moved, (uint64_t)(uintptr_t)coe5seTraceKeptCall);
+        uint32_t branch = 0x14000000u | ((uint32_t)((stub - fn) >> 2) & 0x3ffffffu);
+        if (!writeGameCode(stub, code, sizeof code) || !writeGameCode(fn, &branch, 4)) {
+            writeLog("hook_skipped", "site=trace_filter %sreason=code_unwritable", FUNCTIONS[i].head);
+            continue;
+        }
+        ok++;
     }
     traceFilterState = ok ? 1 : -1;
     writeLog("trace_filter_installed", "ok=%d of %d", ok, COUNT);

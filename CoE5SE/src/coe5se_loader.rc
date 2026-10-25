@@ -1,0 +1,4 @@
+// coe5se_loader.dll's file details, linked into the DLL of the same name.
+#define DETAILS_NAME "coe5se_loader"
+#define DETAILS_DESCRIPTION "CoE5SE loader: loads Conquest of Elysium 5 mods"
+#include "coe5se_details.rc"

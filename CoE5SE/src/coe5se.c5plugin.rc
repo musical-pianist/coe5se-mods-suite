@@ -1,0 +1,4 @@
+// coe5se.c5plugin.dll's file details, linked into the DLL of the same name.
+#define DETAILS_NAME "coe5se.c5plugin"
+#define DETAILS_DESCRIPTION "CoE5SE plugin: Lua scripts, .c5se commands, and Mod Settings for Conquest of Elysium 5"
+#include "coe5se_details.rc"

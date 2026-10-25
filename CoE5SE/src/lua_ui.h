@@ -1,4 +1,4 @@
-// The coe5.ui table: the game's screen widgets for scripts.
+// The coe5.ui table: the game's screen widgets for scripts; and coe5.showMessageBox, the game's message box.
 
 // coe5.ui: the game's widgets, the same calls as the API's ui table.
 static int monsterRowIndex;
@@ -261,4 +261,34 @@ static int lMonsterRow(lua_State *L) {
     setTextScale(scale);
     monsterRowEnd();
     return 0;
+}
+
+// ---- coe5.showMessageBox -----------------------------------------------------------------------
+// Why coe5.showMessageBox refuses its call, or NULL when a human is at the screen to close the box.
+static const char *messageBoxRefusal(int network, int planning, int inAiSite, int activePlayer, int activeController) {
+    if (network) return "network_game";
+    if (planning) return "planning_route";
+    if (inAiSite || (activePlayer >= 0 && activeController != CONTROLLER_HUMAN)) return "ai_turn";
+    return NULL;
+}
+
+// coe5.showMessageBox(title, text): the game's message box with one Ok button, shown at once.
+static int lShowMessageBox(lua_State *L) {
+    const char *title = luaL_checkstring(L, 1), *text = luaL_checkstring(L, 2);
+    int active = G32(RVA_ACTIVE_PLAYER);
+    int controller = active >= 0 && active < PLAYER_SLOTS ? G16(RVA_SLOT_CONTROLLER + (size_t)active * 2) : CONTROLLER_HUMAN;
+    const char *reason =
+        messageBoxRefusal(isNetworkGame(), portalHandlerRunning && portalHandlerPlanning, aiSiteRunning(), active, controller);
+    if (reason) {
+        refuseLuaCall(runningLuaMod(), "coe5.showMessageBox", reason, "title=%.80s active=%d controller=%d", title, active, controller);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    char titleCut[SCREEN_TITLE_TEXT_SIZE], textCut[TEXT_BUTTON_TEXT_SIZE];
+    title = fitGameText((void *)lShowMessageBox, "coe5.showMessageBox", title, titleCut, sizeof titleCut);
+    text = fitGameText((void *)lShowMessageBox, "coe5.showMessageBox", text, textCut, sizeof textCut);
+    writeLog("lua_message_box_shown", "mod=%s title=%.80s", runningLuaMod(), title);
+    messageBox(title, text, "Ok", "", 0, UI_KEY_ENTER, 0);
+    lua_pushboolean(L, 1);
+    return 1;
 }

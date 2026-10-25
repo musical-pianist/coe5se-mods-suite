@@ -1,4 +1,3 @@
-// @platform-split ceremony_sites: no Mac call
 // A seal's event at the month's end (SITE_SEAL_EVENT).
 
 #ifndef __aarch64__

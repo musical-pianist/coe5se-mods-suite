@@ -51,6 +51,7 @@
 --   ... outside other scripts' wraps  coe5.wrap("PLAY_GAME_NEW_WORLD", function(next, mode) return next(mode) end, 100)
 --   Watch a call you may not change  coe5.observe("MONTH_START", nil, function(result, kind, text) coe5.log(coe5.turn()) end)
 --   Send players a message         coe5.sendMessage(coe5.message.everyHuman, "Hello", "Welcome back.")
+--   Show a box the player closes   coe5.showMessageBox("Sealed Gate", "The gate is sealed.")   (at once, a human's turn only)
 --   A game number by name          coe5.controller.human, coe5.gameOverMode.plain, ... (the tables at the end)
 --   Read a setting your .c5se has  coe5.setting("welcome")   (on/off: true or false; a choice: its index from 0; a key: its key value)
 --   Add a screen to your settings page  coe5.addScreen("Open My Mod", openScreen)
@@ -67,8 +68,9 @@
 --   Make a unit on a square        coe5.spawnUnit(p, coe5.monsterVariant(coe5.findMonster("Spearman")), x, y)
 --   The square under the pointer   coe5.get("mapPointerX"), coe5.get("mapPointerY")   (in a MAP_SCREEN_WAIT wrap, after next)
 --   Keep the map from a click      coe5.set("mouseButtons", 0)   (the same wrap)
---   Send an AI explorer elsewhere  coe5.wrap("AI_EXPLORE", function(next, c, comstr) local s, x, y = next(c, comstr) return s, x, y end)   (Windows only)
+--   Send an AI explorer elsewhere  coe5.wrap("AI_EXPLORE", function(next, c, comstr) local s, x, y = next(c, comstr) return s, x, y end)
 --   A square's plane and portal    coe5.get("squarePlane", x, y), coe5.get("squarePortal", x, y), coe5.portalExits(x, y)
+--   Seal a portal                  coe5.onPortalCrossing(function(c) if c.portal == 1234 then return false end end)   (humans, the AI and its routes)
 --   Tint a plane's map             coe5.setPlaneTint("Inferno", 1, 0.5, 0, 0.2), coe5.clearPlaneTint("Inferno"); local r, g, b, s = coe5.get("planeTint", 4)
 --   Draw a mod terrain like a game one  coe5.setTerrainLooks{terrain = "Dungeon Wall", ground = "Cave Wall", picture = "./wall.tga"}   (at load)
 --   Add a mod command              coe5.addModCommand("mymod_gold", function(args, mod, level) ... end)   (in <ModName>_commands.lua only)
@@ -78,23 +80,23 @@
 --   Reveal the map for a turn      coe5.revealMap(coe5.get("activePlayer"))   (one plane: coe5.revealMap(p, coe5.planeIndex("Inferno")))
 --   A square's army, unit by unit  for _, u in ipairs(coe5.squareUnits(x, y)) do local s = coe5.get("unitStrength", coe5.get("unitOwner", u), u) end
 --   Does a player see a unit        coe5.get("unitVisibleTo", u, p)   (stealth, invisibility, spiritsight; squareSeen for the fog)
---   Write the AI's trace lines only  coe5.set("traceLevel", 2); coe5.keepTraceLines({"ailog", "aiship"})   (Windows only)
+--   Write the AI's trace lines only  coe5.set("traceLevel", 2); coe5.keepTraceLines({"ailog", "aiship"})
 --   Keep an AI from an attack      coe5.wrap("AI_CONQUER", function(next, c, comstr) local s, x, y = next(c, comstr) if risky(x, y) then return 0 end return s, x, y end)
 --   Move a resting AI commander    coe5.wrap("AI_RALLY", function(next, c, comstr) local s, x, y = next(c, comstr) if s <= 0 then return 1, hx, hy end return s, x, y end)
 --   Drop an AI caster's ritual plan  coe5.scrapRitualPlan(c)   (only inside an AI site, AI_TURN's observers included)
---   Free one AI unit from its commander  coe5.releaseFollower(u)   (only inside an AI site, a unit of the moving AI; Windows only)
+--   Free one AI unit from its commander  coe5.releaseFollower(u)   (only inside an AI site, a unit of the moving AI)
 --   Move one AI unit to another commander  coe5.transferFollower(u, c)   (same, both of the moving AI on one square)
 --   Plan a ritual an AI caster knows  coe5.planRitual(c, coe5.get("commanderRitual", c, 0))   (same; the commander has no plan)
 --   A player's income next turn    coe5.get("slotIncome", p, 3)   (Fungus)
 --   What a terrain pays            coe5.get("terrainIncome", coe5.get("squareTerrain", x, y), 3)
 --   Does a square count for a terrain  coe5.terrainMatch(coe5.get("ritualTerrain", r), x, y)
---   Keep the AI from planning a ritual  coe5.wrap("AI_RITUAL_CANDIDATE", function(next, c, ritual) if blocked(c, ritual) then return false end return next(c, ritual) end)   (Windows only)
+--   Keep the AI from planning a ritual  coe5.wrap("AI_RITUAL_CANDIDATE", function(next, c, ritual) if blocked(c, ritual) then return false end return next(c, ritual) end)
 --   A player's recruitment offers  for _, o in ipairs(coe5.shopOffers(p)) do coe5.log(o.name .. " " .. o.gold) end
---   Buy for the AI yourself        coe5.wrap("AI_RECRUIT", function(next, p) local sq = coe5.recruitSquares(p, offer)[1] if sq then coe5.aiBuyOffer(p, offer, sq.x, sq.y) end end)   (Windows only; skipping next skips the game's buying)
---   Leave troops for another AI commander  coe5.wrap("AI_GATHER_TROOPS", function(next, c) if not leader(c) then next(c) end end)   (Windows only)
---   Keep an AI commander from being picked up  coe5.wrap("AI_PICK_UP_LONER", function(next, c, unit) if busy(unit) then return 0 end return next(c, unit) end)   (Windows only)
---   Split AI armies of 30 units or more  coe5.wrap("AI_SPLIT_ARMY", function(next, c, minUnits) next(c, 30) end)   (Windows only)
---   Route onto an army with a group's strength  coe5.wrap("AI_MOVE_COMSTR", function(next, c) return next(c) + helpers(c) end)   (Windows only)
+--   Buy for the AI yourself        coe5.wrap("AI_RECRUIT", function(next, p) local sq = coe5.recruitSquares(p, offer)[1] if sq then coe5.aiBuyOffer(p, offer, sq.x, sq.y) end end)   (skipping next skips the game's buying)
+--   Leave troops for another AI commander  coe5.wrap("AI_GATHER_TROOPS", function(next, c) if not leader(c) then next(c) end end)
+--   Keep an AI commander from being picked up  coe5.wrap("AI_PICK_UP_LONER", function(next, c, unit) if busy(unit) then return 0 end return next(c, unit) end)
+--   Split AI armies of 30 units or more  coe5.wrap("AI_SPLIT_ARMY", function(next, c, minUnits) next(c, 30) end)
+--   Route onto an army with a group's strength  coe5.wrap("AI_MOVE_COMSTR", function(next, c) return next(c) + helpers(c) end)
 --   The commander a unit follows   coe5.get("unitCommander", u)   (-1 for none)
 --   Every army a player sees now   for _, a in ipairs(coe5.armies(p)) do coe5.log(a.x .. "," .. a.y .. " " .. a.owner .. " " .. a.units) end
 --   Does a monster fly             coe5.get("monsterMoveFlags", coe5.get("unitMonster", u)) & 1 ~= 0   (unitMoveFlags adds its items)
@@ -104,12 +106,12 @@
 --   A caster's ritual level        coe5.get("commanderRitualLevel", c)   (its school: commanderRitpow)
 --   A square's library level       coe5.get("squareLibraryLevel", x, y)
 --   Did the player press Space on a commander  coe5.get("commanderDone", c)   ("Commander is done for this turn")
---   Block or add to a Voice of El ceremony  coe5.wrap("CEREMONY_PERFORM", function(next, ceremony, c, target) if coe5.get("ceremonyName", ceremony) ~= "Call the Inquisition" then next(ceremony, c, target) end end)   (Windows only)
---   Change a ceremony's cost       coe5.wrap("CEREMONY_COSTS", function(next, c) next(c) coe5.set("ceremonyCost", n, 30) end)   (n: the ceremony whose ceremonyName you matched; Windows only)
---   Keep a seal from breaking      coe5.wrap("SEAL_BREAK", function(next, slot, seal) if seal ~= 3 then return next(slot, seal) end coe5.set("eventVar", 300, 1) end)   (Windows only)
+--   Block or add to a Voice of El ceremony  coe5.wrap("CEREMONY_PERFORM", function(next, ceremony, c, target) if coe5.get("ceremonyName", ceremony) ~= "Call the Inquisition" then next(ceremony, c, target) end end)
+--   Change a ceremony's cost       coe5.wrap("CEREMONY_COSTS", function(next, c) next(c) coe5.set("ceremonyCost", n, 30) end)   (n: the ceremony whose ceremonyName you matched)
+--   Keep a seal from breaking      coe5.wrap("SEAL_BREAK", function(next, slot, seal) if seal ~= 3 then return next(slot, seal) end coe5.set("eventVar", 300, 1) end)
 --   A line in the map editor's toolbox  local id = coe5.addMapEditorLine{label = "Show grid", onClick = function() on = true end}
 --   Draw over the map editor's map  coe5.wrap("MAP_EDITOR_DRAW", function(next) local v = coe5.mapView() coe5.ui.drawLine(v.originX, 0, v.originX, 600, 1, 1, 1, 0.3) return next() end)
---   Replace a seal's event         coe5.wrap("SEAL_EVENT", function(next, slot, seal) if seal ~= 3 then return next(slot, seal) end coe5.set("eventVar", 300, 1) end)   (Windows only)
+--   Replace a seal's event         coe5.wrap("SEAL_EVENT", function(next, slot, seal) if seal ~= 3 then return next(slot, seal) end coe5.set("eventVar", 300, 1) end)
 --
 -- When CoE5SE refuses a call, the call returns false or coe5.message.notAdded (each note below
 -- says which), and coe5mod.log says why with reason=<word>: api_refused (mod=<your mod>) for calls
@@ -152,7 +154,7 @@ function require(name) end
 ---| "MAIN_MENU_PLAY_GAME"       # fn(next, server): Start New Game or Load Game (server 0 in single player). next returns after the Game Over screen, or at once if the player cancels setup. Not called when the player backs out of a loaded save whose spells changed.
 ---| "PLAY_GAME_NEW_WORLD"       # fn(next, mode): a new game's setup and world. Mode coe5.newGame.normal, .network, or .skipParticipants. next returns 0 on Cancel. Not called for a loaded game.
 ---| "NEW_WORLD_MAP_SCREEN"      # fn(next): Random Map Settings. next returns coe5.newGame.mapScreenOk on Ok, 0 on Cancel.
----| "NEW_WORLD_INIT_PARTICIPANTS"  # fn(next, arg): the default single-player slots, set before Setup Participants draws; after next returns, the slot values are what the screen opens with. Pass arg on unchanged. next returns nothing. Windows only.
+---| "NEW_WORLD_INIT_PARTICIPANTS"  # fn(next, arg): the default single-player slots, set before Setup Participants draws; after next returns, the slot values are what the screen opens with. Pass arg on unchanged. next returns nothing.
 ---| "NEW_WORLD_CREATING_WORLD"  # fn(next, kind, text): "Creating World", before the classes are rolled. next(kind, text) shows the text; other text is shown as it is (a % in it isn't read as a format). next returns nothing.
 ---| "MAP_SETTINGS_WAIT"         # fn(next, block, mode): each frame of Random Map Settings. next returns the clicked id; coe5.newGame.mapSettingsOk is Ok.
 ---| "PARTICIPANTS_WAIT"         # fn(next, block, mode): each frame of Setup Participants. next returns the clicked id; coe5.newGame.participantsOk is Ok.
@@ -183,21 +185,21 @@ function require(name) end
 ---| "UNIT_LIST_WAIT"            # fn(next, block, mode): each frame of a battle's unit list (F1). next returns the clicked id. A unit's row is 100000 + its unit index (negated too); an id for a unit past the game's last becomes 0 (lua_refused, reason=unit_past_table).
 ---| "KEYBOARD_SHORTCUTS_WAIT"   # fn(next, block, mode): each frame of the Keyboard Shortcuts screen. next returns the clicked id.
 ---| "TOOLTIP_LINE_DRAW"         # fn(next, text, index, r, g, b, alpha): one line of the hover text box at the bottom of the screen, on every frame it shows. text is the line as the game cut the hover text to the box's width, index its place (0 the top line; the game draws them from the last up), and r, g, b, alpha its colour, 0 to 1 (the game's white, 1 1 1 1). next(text, index, r, g, b, alpha) draws it in the colour you pass. Pass text and index as they came: other ones are refused (lua_refused reason=text_changed or index_changed) and the line's own kept. next returns nothing.
----| "AI_EXPLORE"                # fn(next, commander, comstr): an AI player's exploration target for one commander, during its moves; comstr is the commander's strength. next(commander, comstr) returns the game's choice: score, x, y (x and y coe5.aiMove.noSquare for none). Return score, x, y to send the commander to any square of the world, on any plane (the game routes it, through portals too); return score alone to keep next's square; return nothing to keep next's choice. The game runs this only while the commander's earlier steps (rally, friendly move, conquest) scored below coe5.aiMove.exploreBelow, and keeps the square only when the score is above their best (commanderAiMoveKind is coe5.aiMove.target when one of them picked a square, at commanderAiTargetX and Y); a score of coe5.aiMove.farExploreBelow or more also skips the game's far exploration. A square off the world or on no plane, a score above 0 with no square, or values that aren't whole numbers are refused (lua_refused reason=off_map, no_plane, no_square, not_a_score, not_a_square, out_of_range) and next's choice kept; another commander in next is refused (commander_changed). Not in network games. Windows only: the Mac AI stays the game's own.
----| "AI_RALLY"                  # fn(next, commander, comstr): the AI's rally step for one commander, the first of its steps: a square of the player's where its other commanders' armies could join this one. Takes and returns what AI_EXPLORE does, with the same refusals; the game keeps the square when the score is above 0, and the move is then coe5.aiMove.target. Windows only.
----| "AI_FRIENDLY_MOVE"          # fn(next, commander, comstr): the AI's move to a square a teammate owns, after AI_RALLY; the game drops a square where an enemy army near it is much stronger than comstr. Kept when the score is above the rally's; as AI_RALLY otherwise. Windows only.
----| "AI_CONQUER"                # fn(next, commander, comstr): the AI's conquest step, after AI_FRIENDLY_MOVE: a square to attack or take, among those the player has seen; -999 for none. Kept when the score is above the earlier steps' best; as AI_RALLY otherwise. Windows only.
----| "AI_FAR_EXPLORE"            # fn(next, commander, comstr): the AI's far exploration, after AI_EXPLORE, run only while the best score is below coe5.aiMove.farExploreBelow: an unseen square anywhere. Kept when the score is above the best, and the move is then coe5.aiMove.explore. As AI_RALLY otherwise. Windows only.
----| "AI_RITUAL_CANDIDATE"       # fn(next, commander, ritual): one candidate of the AI's ritual plan choice for a commander with no plan (commanderRitualPlan 0), after the game's income, "rare", "never plan this" and other data reasons passed it. next(commander, ritual) runs the game's remaining checks of it, the pointless check first, and returns true when they keep it, false when they drop it. Return false to veto the candidate (the game drops it as "pointless" and draws the next); return true or nothing to keep it, which leaves the decision to the game: a kept candidate always gets next's answer, called for you if the wrap didn't, so a wrap can veto but never plan what the game drops. Another value is refused (lua_refused reason=not_a_boolean) and keeps; another commander or ritual in next is refused (commander_changed, ritual_changed). A wrap that errors keeps. coe5.scrapRitualPlan works inside it. Not in network games. Windows only.
----| "AI_RECRUIT"               # fn(next, player): an AI player's recruiting step, once a turn after AI_TURN and before its commanders move. next(player) runs the game's own buying: from the player's offers (coe5.shopOffers) at its citadels, keeping gold for the game's save target (10 turns of gold income, at most 250). Skip next and the game buys nothing this turn. coe5.aiBuyOffer buys inside it, before or after next. next returns nothing. Not in network games. Windows only.
----| "AI_GATHER_TROOPS"         # fn(next, commander): the AI's troop pick-up for one commander, before each of its move steps: next(commander) takes the free troops on its square that may join it, leaving a share there (20% on a citadel, 60% with under 2 citadels), or, with none free, leaves some of its own ranged troops behind. Don't call next to skip it: the commander takes and leaves nothing this step, and the troops stay free for another commander there. Another commander in next is refused (commander_changed). A wrap that errors runs it. coe5.scrapRitualPlan works inside it. Not in network games. Windows only.
----| "AI_PICK_UP_LONER"          # fn(next, commander, unit): the AI's pick-up of one lone commander (unit is its unit) into the army of commander, a caster of a higher ritual level on its square, after the game's checks passed it: from then on the lone commander and its followers follow commander and never move on their own again. next(commander, unit) joins them and returns how many units joined; don't call it (return 0) to keep the lone commander free. Another commander or unit in next is refused (commander_changed, unit_changed). A wrap that errors runs it. coe5.scrapRitualPlan works inside it. Not in network games. Windows only.
----| "AI_SPLIT_ARMY"             # fn(next, commander, minUnits): the AI's split of a commander's army, at the end of its routine before its moves, in 25% of the calls: with minUnits units or more following it (the game's own is 240), the best commander that follows it leaves with some of its troops (each troop of strength up to 100 to 299 with a 10% chance, in two passes, until the larger of a fifth and 40 to 99 units went). minUnits is the game's minimum for this call; next(commander, minUnits) runs the split with the minimum given, 1 or more, for this call only (lua_refused reason=out_of_range keeps the game's). Don't call next to skip it. No commander follows another unless the AI picked it up (AI_PICK_UP_LONER), so with none nothing splits. Another commander in next is refused (commander_changed). A wrap that errors runs it. coe5.scrapRitualPlan works inside it. Not in network games. Windows only.
----| "AI_MOVE_COMSTR"            # fn(next, commander): the strength the AI commander's route takes for one move step, right after AI_GATHER_TROOPS and before the game routes it to the square its steps kept. next(commander) returns the game's own, the strength of the commander's army. The route won't end on a square whose army is stronger than the strength allows (times 100, divided by aiAttackDivOther, aiAttackDivAi or aiAttackDivHuman by that army's owner, less 15, aiAttackMargin's value), so return a larger one, such as several commanders' strength together, to let it route onto a stronger army; the square itself was picked by the steps. Returns a whole number from -1 to 21474836, as coe5.route's comstr; another value is refused (lua_refused reason=not_a_number or out_of_range) and next's kept. Return nothing for next's. Another commander in next is refused (commander_changed). coe5.route works inside it. A wrap that errors gives the game's. Not in network games. Windows only.
----| "CEREMONY_PERFORM"          # fn(next, ceremony, commander, target): one of the Voice of El's ceremonies, a player's (the Ceremonies screen, a map order) or the AI's. ceremony is the game's number for it: match it by coe5.get("ceremonyName", ceremony), never by the number. target is the player a Start Crusade goes against, -1 for every other ceremony. next(ceremony, commander, target) is the game's own: it checks the rank, limits and cost (and does nothing when one fails), charges the cost and action points, and does the ceremony. Skip next and none of it happens: no cost, no action points, no effect, and no message. Code after next adds effects of your own. Another ceremony, commander or target in next is refused (ceremony_changed, commander_changed, target_changed) and the game's kept. A wrap that errors runs it. Not in network games. Windows only.
----| "CEREMONY_COSTS"            # fn(next, commander): the game works out every ceremony's cost for a priest of El: at the top of the Ceremonies screen, before a map order's ceremony, and before the AI's. After next(commander), coe5.get("ceremonyCost", ceremony) holds each one and coe5.set("ceremonyCost", ceremony, value) changes it: the screen shows that cost, the ceremony checks and charges it, and the AI weighs it, until the next time the game works them out. The game multiplies some: Break Seal's by the seal's number (1 for the first), Bolster Devotion's by one more than the player's earlier Bolster Devotions, Increase Divine Favor's by the level it raises the favor to, Convert Settlement's by a fifth of the square's gold income (its action points too). Each is gold, or relics for Break Seal, Bolster Devotion and Increase Divine Favor. Another commander in next is refused (commander_changed). Not in network games. Windows only.
----| "SEAL_BREAK"                # fn(next, slot, seal): one of the Seven Seals breaking, by a player's Break Seal ceremony or an item, slot that player; seal is the seal it breaks, 1 to 7. Inside the wrap the seals broken are still seal - 1; next(slot, seal) breaks it, as the game does. Skip next and the seal stays unbroken, so none of what follows from it happens (its event, SEAL_EVENT; El's minions for the Voice of El players get no stronger), and the next Break Seal ceremony breaks the same seal again. The ceremony's cost and action points are spent either way. To break the seal but replace its event, wrap SEAL_EVENT instead. The seals the game breaks on its own at a month's end ("Cardinal Intervenes", "Heavenly Surge of Power") don't come here. Another slot or seal in next is refused (slot_changed, seal_changed). A wrap that errors breaks it. Not in network games. Windows only.
----| "SEAL_EVENT"                # fn(next, slot, seal): a broken seal's event, at a month's end: the month after it broke, one seal a month in order when several broke, whoever broke it (a ceremony, an item, or the game at a month's end), once per seal. seal is 1 to 7; the game's events: none for the first two, an Apocalyptic Rider for the third to the sixth ("The apocalypse is coming closer"), the Apocalypse for the seventh. slot is always -1: the game keeps no record of who broke a seal. next(slot, seal) lets the game run its event, which it does once every wrap has returned (so code after next runs before the event); next returns nothing. Skip next to replace the event with your own: the seal stays broken, its event counts as done and never comes back, and the next seal can be broken as before. What the wrap returns isn't read. Another slot or seal in next is refused (slot_changed, seal_changed). A wrap that errors runs it. Not in network games. Windows only.
+---| "AI_EXPLORE"                # fn(next, commander, comstr): an AI player's exploration target for one commander, during its moves; comstr is the commander's strength. next(commander, comstr) returns the game's choice: score, x, y (x and y coe5.aiMove.noSquare for none). Return score, x, y to send the commander to any square of the world, on any plane (the game routes it, through portals too); return score alone to keep next's square; return nothing to keep next's choice. The game runs this only while the commander's earlier steps (rally, friendly move, conquest) scored below coe5.aiMove.exploreBelow, and keeps the square only when the score is above their best (commanderAiMoveKind is coe5.aiMove.target when one of them picked a square, at commanderAiTargetX and Y); a score of coe5.aiMove.farExploreBelow or more also skips the game's far exploration. A square off the world or on no plane, a score above 0 with no square, or values that aren't whole numbers are refused (lua_refused reason=off_map, no_plane, no_square, not_a_score, not_a_square, out_of_range) and next's choice kept; another commander in next is refused (commander_changed). Not in network games.
+---| "AI_RALLY"                  # fn(next, commander, comstr): the AI's rally step for one commander, the first of its steps: a square of the player's where its other commanders' armies could join this one. Takes and returns what AI_EXPLORE does, with the same refusals; the game keeps the square when the score is above 0, and the move is then coe5.aiMove.target.
+---| "AI_FRIENDLY_MOVE"          # fn(next, commander, comstr): the AI's move to a square a teammate owns, after AI_RALLY; the game drops a square where an enemy army near it is much stronger than comstr. Kept when the score is above the rally's; as AI_RALLY otherwise.
+---| "AI_CONQUER"                # fn(next, commander, comstr): the AI's conquest step, after AI_FRIENDLY_MOVE: a square to attack or take, among those the player has seen; -999 for none. Kept when the score is above the earlier steps' best; as AI_RALLY otherwise.
+---| "AI_FAR_EXPLORE"            # fn(next, commander, comstr): the AI's far exploration, after AI_EXPLORE, run only while the best score is below coe5.aiMove.farExploreBelow: an unseen square anywhere. Kept when the score is above the best, and the move is then coe5.aiMove.explore. As AI_RALLY otherwise.
+---| "AI_RITUAL_CANDIDATE"       # fn(next, commander, ritual): one candidate of the AI's ritual plan choice for a commander with no plan (commanderRitualPlan 0), after the game's income, "rare", "never plan this" and other data reasons passed it. next(commander, ritual) runs the game's remaining checks of it, the pointless check first, and returns true when they keep it, false when they drop it. Return false to veto the candidate (the game drops it as "pointless" and draws the next); return true or nothing to keep it, which leaves the decision to the game: a kept candidate always gets next's answer, called for you if the wrap didn't, so a wrap can veto but never plan what the game drops. Another value is refused (lua_refused reason=not_a_boolean) and keeps; another commander or ritual in next is refused (commander_changed, ritual_changed). A wrap that errors keeps. coe5.scrapRitualPlan works inside it. Not in network games.
+---| "AI_RECRUIT"               # fn(next, player): an AI player's recruiting step, once a turn after AI_TURN and before its commanders move. next(player) runs the game's own buying: from the player's offers (coe5.shopOffers) at its citadels, keeping gold for the game's save target (10 turns of gold income, at most 250). Skip next and the game buys nothing this turn. coe5.aiBuyOffer buys inside it, before or after next. next returns nothing. Not in network games.
+---| "AI_GATHER_TROOPS"         # fn(next, commander): the AI's troop pick-up for one commander, before each of its move steps: next(commander) takes the free troops on its square that may join it, leaving a share there (20% on a citadel, 60% with under 2 citadels), or, with none free, leaves some of its own ranged troops behind. Don't call next to skip it: the commander takes and leaves nothing this step, and the troops stay free for another commander there. Another commander in next is refused (commander_changed). A wrap that errors runs it. coe5.scrapRitualPlan works inside it. Not in network games.
+---| "AI_PICK_UP_LONER"          # fn(next, commander, unit): the AI's pick-up of one lone commander (unit is its unit) into the army of commander, a caster of a higher ritual level on its square, after the game's checks passed it: from then on the lone commander and its followers follow commander and never move on their own again. next(commander, unit) joins them and returns how many units joined; don't call it (return 0) to keep the lone commander free. Another commander or unit in next is refused (commander_changed, unit_changed). A wrap that errors runs it. coe5.scrapRitualPlan works inside it. Not in network games.
+---| "AI_SPLIT_ARMY"             # fn(next, commander, minUnits): the AI's split of a commander's army, at the end of its routine before its moves, in 25% of the calls: with minUnits units or more following it (the game's own is 240), the best commander that follows it leaves with some of its troops (each troop of strength up to 100 to 299 with a 10% chance, in two passes, until the larger of a fifth and 40 to 99 units went). minUnits is the game's minimum for this call; next(commander, minUnits) runs the split with the minimum given, 1 or more, for this call only (lua_refused reason=out_of_range keeps the game's). Don't call next to skip it. No commander follows another unless the AI picked it up (AI_PICK_UP_LONER), so with none nothing splits. Another commander in next is refused (commander_changed). A wrap that errors runs it. coe5.scrapRitualPlan works inside it. Not in network games.
+---| "AI_MOVE_COMSTR"            # fn(next, commander): the strength the AI commander's route takes for one move step, right after AI_GATHER_TROOPS and before the game routes it to the square its steps kept. next(commander) returns the game's own, the strength of the commander's army. The route won't end on a square whose army is stronger than the strength allows (times 100, divided by aiAttackDivOther, aiAttackDivAi or aiAttackDivHuman by that army's owner, less 15, aiAttackMargin's value), so return a larger one, such as several commanders' strength together, to let it route onto a stronger army; the square itself was picked by the steps. Returns a whole number from -1 to 21474836, as coe5.route's comstr; another value is refused (lua_refused reason=not_a_number or out_of_range) and next's kept. Return nothing for next's. Another commander in next is refused (commander_changed). coe5.route works inside it. A wrap that errors gives the game's. Not in network games.
+---| "CEREMONY_PERFORM"          # fn(next, ceremony, commander, target): one of the Voice of El's ceremonies, a player's (the Ceremonies screen, a map order) or the AI's. ceremony is the game's number for it: match it by coe5.get("ceremonyName", ceremony), never by the number. target is the player a Start Crusade goes against, -1 for every other ceremony. next(ceremony, commander, target) is the game's own: it checks the rank, limits and cost (and does nothing when one fails), charges the cost and action points, and does the ceremony. Skip next and none of it happens: no cost, no action points, no effect, and no message. Code after next adds effects of your own. Another ceremony, commander or target in next is refused (ceremony_changed, commander_changed, target_changed) and the game's kept. A wrap that errors runs it. Not in network games.
+---| "CEREMONY_COSTS"            # fn(next, commander): the game works out every ceremony's cost for a priest of El: at the top of the Ceremonies screen, before a map order's ceremony, and before the AI's. After next(commander), coe5.get("ceremonyCost", ceremony) holds each one and coe5.set("ceremonyCost", ceremony, value) changes it: the screen shows that cost, the ceremony checks and charges it, and the AI weighs it, until the next time the game works them out. The game multiplies some: Break Seal's by the seal's number (1 for the first), Bolster Devotion's by one more than the player's earlier Bolster Devotions, Increase Divine Favor's by the level it raises the favor to, Convert Settlement's by a fifth of the square's gold income (its action points too). Each is gold, or relics for Break Seal, Bolster Devotion and Increase Divine Favor. Another commander in next is refused (commander_changed). Not in network games.
+---| "SEAL_BREAK"                # fn(next, slot, seal): one of the Seven Seals breaking, by a player's Break Seal ceremony or an item, slot that player; seal is the seal it breaks, 1 to 7. Inside the wrap the seals broken are still seal - 1; next(slot, seal) breaks it, as the game does. Skip next and the seal stays unbroken, so none of what follows from it happens (its event, SEAL_EVENT; El's minions for the Voice of El players get no stronger), and the next Break Seal ceremony breaks the same seal again. The ceremony's cost and action points are spent either way. To break the seal but replace its event, wrap SEAL_EVENT instead. The seals the game breaks on its own at a month's end ("Cardinal Intervenes", "Heavenly Surge of Power") don't come here. Another slot or seal in next is refused (slot_changed, seal_changed). A wrap that errors breaks it. Not in network games.
+---| "SEAL_EVENT"                # fn(next, slot, seal): a broken seal's event, at a month's end: the month after it broke, one seal a month in order when several broke, whoever broke it (a ceremony, an item, or the game at a month's end), once per seal. seal is 1 to 7; the game's events: none for the first two, an Apocalyptic Rider for the third to the sixth ("The apocalypse is coming closer"), the Apocalypse for the seventh. slot is always -1: the game keeps no record of who broke a seal. next(slot, seal) lets the game run its event, which it does once every wrap has returned (so code after next runs before the event); next returns nothing. Skip next to replace the event with your own: the seal stays broken, its event counts as done and never comes back, and the next seal can be broken as before. What the wrap returns isn't read. Another slot or seal in next is refused (slot_changed, seal_changed). A wrap that errors runs it. Not in network games.
 
 ---The game calls a script can watch with coe5.observe but not change: each decides or applies game
 ---content. before(...) gets a copy of the arguments before the call, and after(result, ...) the
@@ -360,7 +362,7 @@ function require(name) end
 ---| "bugChecksOff"          # boolean: true skips the game's bug checks, as its --nochecks switch does. At trace level 2 and 3 the game runs them at many places a turn (each over every unit), and they also fix some of what they find.
 ---| "commanderName"         # index 0-9989, string: the commander's name ("Agrippa"); the trace names it "<name> the <monster>". Read-only.
 ---| "commanderStrength"     # index 0-9989, integer: the strength of the commander's army as the game counts it for the AI's moves (the comstr its AI sites get): the commander's unit and every unit following it. Nil for a commander with no living unit. Read-only.
----| "commanderGarrisonLeft" # index 0-9989, integer: the strength that stays on the commander's square when the commander leaves as the AI moves it: its army, the free troops the AI's gather adds to it there, less the units the gather leaves behind, by the game's own rule, measured as squareStrength measures the owner's units (the fort and ranged raise worked out on the staying units). The gather's one random drop (a follower with unit flag 8 that is a tenth to a quarter of the army, 50%) counts as leaving. Nil for a commander with no living unit on a square, and on Mac. Read-only.
+---| "commanderGarrisonLeft" # index 0-9989, integer: the strength that stays on the commander's square when the commander leaves as the AI moves it: its army, the free troops the AI's gather adds to it there, less the units the gather leaves behind, by the game's own rule, measured as squareStrength measures the owner's units (the fort and ranged raise worked out on the staying units). The gather's one random drop (a follower with unit flag 8 that is a tenth to a quarter of the army, 50%) counts as leaving. Nil for a commander with no living unit on a square. Read-only.
 ---| "slotHomeX"             # per slot, integer: the player's home citadel's x, -1 for none. Read-only.
 ---| "slotHomeY"             # per slot, integer: the player's home citadel's y. Read-only.
 ---| "squareGems"            # index: x 0-999, then y 0-159, then a gem kind 0-3, integer: the square's gem income of that kind; the game lets a player with a gem gatherer own a square with any above 0. Read-only.
@@ -376,9 +378,64 @@ function require(name) end
 ---| "monsterAttackWeapon"   # index: a monster, then a row 0-15, integer: the row's weapon (weaponDmgType takes it), or for a spell attack (types 3, 6, 14, 15, 19) its spell path; nil where monsterAttackType is. Read-only.
 ---| "monsterAttackValue"    # index: a monster, then a row 0-15, integer: the row's number as the .c5m wrote it: the damage value, a special damage weapon's kind (a bitmask: 262144 Confusion), or a spell attack's level; nil where monsterAttackType is. Read-only.
 ---| "weaponDmgType"         # index 0-4999, integer: the weapon's damage type (dmgtype): 1 slash, 2 blunt, 3 pierce, 4 fire, 5 cold, 6 shock, 7 magic, 8 fear, 9 poison, 10 acid, 11 phantasm, 12 special damage (its kind in the attack row's value), 13 special benefit, 14 charm, 15 polymorph, 16 sleep, 17 paralyze, 18 summon, 19 enslave, 20 swallow, 21 mirror image, 22 corrupt, 23 banish, 24 petrify, 25 animate, 26 heal. Read-only.
----| "ceremonyName"          # index 0 to ceremonyLastIndex, string: the game's name for a Voice of El ceremony number, its label on the Ceremonies screen: "Convert Settlement", "Break Seal", "Bolster Devotion", "Start Crusade", "Call the Inquisition", "Ceremony of Mastery" (three numbers, one per rank it raises a priest to), "Increase Divine Favor"; nil for a number with none. Match ceremonies by it, never by their numbers. Nil on Mac. Read-only.
----| "ceremonyLastIndex"     # integer: the last ceremony number the game takes; ceremonyName runs 0 to it. Nil on Mac. Read-only.
----| "ceremonyCost"          # index 0 to ceremonyLastIndex, integer: a ceremony's cost as the game worked it out for the commander of the running CEREMONY_COSTS wrap (see there for the ceremonies the game multiplies it for), after that wrap's next (before it, the last costs the game worked out); nil outside the wrap, and for a number with no cost. Writable in it, 0 to 100000: the screen shows, the ceremony charges, and the AI weighs the new one (lua_refused reason=no_cost for a number with none, out_of_range past the bounds). Nil on Mac.
+---| "ceremonyName"          # index 0 to ceremonyLastIndex, string: the game's name for a Voice of El ceremony number, its label on the Ceremonies screen: "Convert Settlement", "Break Seal", "Bolster Devotion", "Start Crusade", "Call the Inquisition", "Ceremony of Mastery" (three numbers, one per rank it raises a priest to), "Increase Divine Favor"; nil for a number with none. Match ceremonies by it, never by their numbers. Read-only.
+---| "ceremonyLastIndex"     # integer: the last ceremony number the game takes; ceremonyName runs 0 to it. Read-only.
+---| "unitXp"                # index 0-98999, integer: the unit's experience (xp). Read-only.
+---| "unitKills"             # index 0-98999, integer: the unit's kills. Read-only.
+---| "unitItem"              # index: a unit, then an equipment place 0-7: integer, the item there (itemName takes it), -1 for an empty place. A place keeps its number when an earlier one is empty. Read-only.
+---| "unitKnownSpell"        # index: a unit, then 0-59: integer, a spell the unit knows. Nil at and past the first value below 0, the list's end. Read-only.
+---| "unitMemorizedSpell"    # index: a unit, then 0-29: integer, a spell the unit memorized for battle. Nil at and past the list's end. Read-only.
+---| "squareItem"            # index: x, y, then a place 0-5: integer, an item lying on the square (itemName takes it), -1 for an empty place. Read-only.
+---| "commanderRepeatRitual" # index 0-9989, integer: the ritual the commander repeats each turn (ritualName takes it), -1 a slave hunt. Read-only.
+---| "slotBolsterDevotions"  # index 0-31, integer: the Bolster Devotion ceremonies the player performed. Read-only.
+---| "slotDivineFavor"       # index 0-31, integer: the player's Divine Favor, 0 to 4. Read-only.
+---| "sealsBroken"           # integer: the seven seals broken, 0 to 7, one count for every player. Read-only.
+---| "sealEventsDone"        # integer: the seals whose event has happened; the game catches up one seal a turn. Read-only.
+---| "starsReliability"      # integer: the stars' reading for summoning control, -2 to 2 (2: "The stars are perfect for reliable summonings."). Read-only.
+---| "starsPower"            # integer: the stars' reading for summoning size, -2 to 2 (2: "Summonings would be very powerful now."). Read-only.
+---| "starsMonths"           # integer: the months the stars' readings still hold. Read-only.
+---| "starsFlags"            # integer: 1 when the stars can't be read, 2 the water star. Read-only.
+---| "apocalypseMonths"      # integer: 0 until the seventh seal's event, then the months of the apocalypse so far. Read-only.
+---| "magicTaintedMonths"    # integer: the months of tainted magic left ("Horrors are drawing closer to our world and magic has become tainted"), 0 for none; the game's AI casts no ritual meanwhile. Read-only.
+---| "mapZoom"               # number: the map view's UI units per square: 48 at the start, Page Up and Down glide it between 8 (12 outside the map editor) and 100. Read-only.
+---| "mapCameraX"            # number: the world x, in squares, at the map view's centre column. Read-only.
+---| "mapCameraY"            # number: the y, in squares; the square at the centre row is mapCameraY + 1. Read-only.
+---| "mapViewPlane"          # integer: the plane the map view shows (planeName takes it). Read-only.
+---| "enchantLastIndex"      # integer: the last record of the active ritual effects in use, at most 999. Read-only.
+---| "enchantKind"           # index 0-999, integer: the effect's kind, 0 for a free record. Read-only.
+---| "enchantCaster"         # index 0-999, integer: the unit that cast the effect. Read-only.
+---| "enchantOwner"          # index 0-999, integer: the caster's player. Read-only.
+---| "enchantRitual"         # index 0-999, integer: the ritual that made the effect (ritualName takes it), 0 or below for none. Read-only.
+---| "enchantX"              # index 0-999, integer: the effect's square. Read-only.
+---| "enchantY"              # index 0-999, integer: its y. Read-only.
+---| "battleSeed"            # integer: the random seed of the battle being fought, or of the last one. Read-only.
+---| "battleX"               # integer: that battle's square. Read-only.
+---| "battleY"               # integer: its y. Read-only.
+---| "battleWidth"           # integer: that battle's battlefield columns. Read-only.
+---| "battleRound"           # integer: that battle's round: -15 first, movement from 0. Read-only.
+---| "battleWinner"          # integer: the winning side's player once the fight ends, -1 for none. Read-only.
+---| "battleStarveRound"     # integer: the round past which every unit takes (round - it) damage each round. Read-only.
+---| "battleChargeRound"     # integer: the round from which ranks 0 and -1 stop holding. Read-only.
+---| "battleAmbush"          # boolean: that battle is an ambush. Read-only.
+---| "battleAtSea"           # boolean: that battle is at sea. Read-only.
+---| "battleSiege"           # boolean: that battle is a siege. Read-only.
+---| "eventPlayer"           # integer: the player of the event being run. Read-only.
+---| "eventTargetX"          # integer: that event's target square, -1 for none. Read-only.
+---| "eventTargetY"          # integer: its y. Read-only.
+---| "eventSquareX"          # integer: the square an event's trigger is being checked on. Read-only.
+---| "eventSquareY"          # integer: its y. Read-only.
+---| "unitLastSpawned"       # integer: the last unit a populate or a commander spawn made. Read-only.
+---| "commanderLastSpawned"  # integer: the last commander a populate or a commander spawn made. Read-only.
+---| "unitTempAbilityId"     # index: a unit, then 0-3: integer, a temporary ability's id (effectName and unitAbility take it): 0 at the list's end, -1 for a free place. Read-only.
+---| "unitTempAbilityValue"  # index: a unit, then 0-3: integer, that temporary ability's value. Read-only.
+---| "slotBlessingId"        # index: a slot 0-31, then 0-23: integer, a blessing the player has. Nil at and past the first id 0, the list's end. Read-only.
+---| "slotBlessingValue"     # index: a slot, then 0-23: integer, that blessing's value. Nil at and past the list's end. Read-only.
+---| "slotMostCitadels"      # index 0-31, integer: the most citadels the player has held; the game's AI plays desperate above 2 with under 2 now. Read-only.
+---| "slotAbility"           # index: a slot 0-31, then an ability 0-1501 or its .c5m word: integer, the player's value of it as the game reckons it: its class's value, then the best among its living units. Read-only.
+---| "slotAbilitySum"        # index: as slotAbility: integer, the class's value, then the sum over its living units. Read-only.
+---| "unitStateFlags"        # index 0-98999, integer: the unit's state bits with its items' (afflictions, insane 2^13, Fatigued 2^37). Nil for a unit that isn't alive. Read-only.
+---| "unitReturns"           # index 0-98999, boolean: the unit comes back from death (immortal, reforming), as the game decides it. Nil for an empty record. Read-only.
+---| "ceremonyCost"          # index 0 to ceremonyLastIndex, integer: a ceremony's cost as the game worked it out for the commander of the running CEREMONY_COSTS wrap (see there for the ceremonies the game multiplies it for), after that wrap's next (before it, the last costs the game worked out); nil outside the wrap, and for a number with no cost. Writable in it, 0 to 100000: the screen shows, the ceremony charges, and the AI weighs the new one (lua_refused reason=no_cost for a number with none, out_of_range past the bounds).
 ---| "weaponAoe"             # index 0-4999, integer: the weapon's area (aoe): 0 a single target, n a burst of n, -n n strikes, 1000s beams and cones. Read-only.
 ---| "unitMoveFlags"         # index 0-98999, integer: the unit's move flags, the game's sum of its monster's move words and its items' (boots of flying): flying 1, immobile 4, slow 8, fast 16, swamp 32, water 64 (swims or sails), float 128, mountain 256, noland 512, passwall 2^32, stationary 2^35 (also for a unit the game holds in place), teleport 2^39, shipmove 2^40, tunnel 2^42, and the terrain words (forest1 2^23, snow 2^37 and the rest). Test a bit with &: coe5.get("unitMoveFlags", u) & 1 ~= 0 flies. It shows another player's unit with its items, which the game's AI never weighs: for what the AI may know, read monsterFlags or monsterMoveFlags of its unitMonster. Nil for an empty record. Read-only.
 ---| "unitFlags"             # index 0-98999, integer: the unit's flag words, its monster's and items' added as the game adds them (resrestrict's test): human 2^3, undead 2^4, spiritsight 2^5, stealth 2^17, invisible 2^22, ethereal 2^26, demonic 2^33, foreststealth 2^44, desertstealth 2^41, snowstealth 2^56, and the rest of the monster flag words. Shows another player's items, as unitMoveFlags does. Nil for an empty record. Read-only.
@@ -602,6 +659,18 @@ function coe5.turn() end
 ---@return integer index the message's index, or coe5.message.notAdded when no message was added. With coe5.message.everyHuman it is always coe5.message.notAdded, even when the message was sent. A bad slot or a network game is logged (api_refused or lua_refused).
 function coe5.sendMessage(player, title, text) end
 
+---Shows the game's message box at once, with your title and text and one Ok button (Enter clicks
+---it), and returns when the player closes it. Nothing is added to what you give. Use it when a
+---human is at the screen, such as in an onPortalCrossing handler for a human's Enter Gateway or
+---step. The box doesn't wrap: end each line with \n. The game fixes up the text's English, as on
+---every box it shows: the word after a 1 and a space loses a last s that follows a
+---small letter other than s or u ("1 gems" is drawn "1 gem", "21 gems" "21 gem", "option1 is"
+---"option1 i"; "1 glass" stays).
+---@param title string cut to 99 characters
+---@param text string cut to 4999 characters
+---@return boolean shown true once the player closed it; false when refused, with nothing shown: in a network game (network_game), during the AI's or the independents' turn or inside an AI site (ai_turn), and in an onPortalCrossing handler for a route being planned (planning_route), each logged as lua_refused
+function coe5.showMessageBox(title, text) end
+
 ---Reads one of your mod's settings. Every mod declares its settings with newsetting blocks in
 ---<ModName>.c5se next to its .c5m, and nowhere else (the format is in src/jazzy_api.h, "Mod
 ---Settings starter"); a script only reads them. Names match ignoring case. The value is the
@@ -710,6 +779,29 @@ function coe5.monsterVariant(monster) end
 ---@return {x: integer, y: integer}[] exits empty for a square with no entrance or outside the world
 function coe5.portalExits(x, y) end
 
+---Calls `handler` before every crossing through a portal, so a mod can refuse it: a human's Enter
+---Gateway (asked before the exit is drawn or seen), each step a human's route, a standing order, an
+---AI commander or a wandering monster takes through a portal, an independent army's random exit,
+---and every route the game plans, the AI's, a human's shown route and coe5.route's (with
+---`planning` true). A handler that returns false refuses that one crossing, and the game goes on as
+---for a portal it won't take itself: Enter Gateway does nothing (no exit is revealed, no action
+---points are spent), a step is refused (the AI drops that move), a route goes another way or none,
+---an independent army stays. Anything else, nil included, leaves the crossing to the game. Your mod
+---decides everything else: which portals, one way or both, who may pass, and any message
+---(coe5.showMessageBox, coe5.sendMessage, coe5.ui). Any number of mods may add handlers; each is asked in the order they
+---were added, until one refuses. No handler means no call at all, and in network games none is asked.
+---A handler runs inside the game's own move or route, so keep it quick: route planning asks many
+---times a turn (a commander's every route that reaches the portal). coe5.route inside a handler
+---returns nil (lua_refused reason=inside_portal_handler), and crossings a handler causes aren't asked.
+---A handler that errors stops your script, and its crossings go through.
+---@param handler fun(crossing: {x: integer, y: integer, toX: integer?, toY: integer?, portal: integer, player: integer?, commander: integer?, planning: boolean}): boolean?
+---  x, y: the square the army leaves. toX, toY: where it arrives; nil for Enter Gateway, asked before
+---  the game draws one of the portal's exits. portal: the leaving square's squarePortal, above 0.
+---  player: the army's player (nil for none). commander: the moving commander (nil for an
+---  independent army without one). planning: true for a route being planned, false for a move.
+---@return boolean added false when refused: a game build CoE5SE wasn't made for (site_unavailable), each logged as lua_refused
+function coe5.onPortalCrossing(handler) end
+
 ---The living units on square (x, y), the units the game counts there (squareStrength, its square
 ---checks): hp above 0 and standing on the square, in unit order. A square's army is what stands on
 ---it; unitCommander tells which follow which commander. Sees through fog, as squareStrength does.
@@ -775,7 +867,7 @@ function coe5.scrapRitualPlan(commander) end
 ---player whose AI turn runs (coe5.get("activePlayer")). Refused (lua_refused) and false: outside an AI
 ---site (reason=outside_ai_site), in a network game (network_game), a unit past the table (bad_unit),
 ---one dead or of no player (no_unit), one whose player isn't an AI (not_ai), one of another player
----(not_moving_player), and on Mac (windows_only). Each release logs ai_follower_released with the
+---(not_moving_player). Each release logs ai_follower_released with the
 ---unit, its old commander, and its player.
 ---@param unit integer 0-98999
 ---@return boolean ok true when the unit follows no one now (released, or it followed no one)
@@ -783,14 +875,15 @@ function coe5.releaseFollower(unit) end
 
 ---Moves one unit of an AI player from the commander it follows to another commander of the same
 ---player on the same square, the game's way: the army screen's own transfer, with its rules (no
----stationary unit, none that moves on its own, none led by a wandering or insane commander) and both
+---stationary unit, none that moves on its own, none led by a wandering commander, no insane
+---commander's own unit) and both
 ---commanders' cached action points reset. Only inside an AI site, for a unit of the player whose AI
 ---turn runs, as coe5.releaseFollower. Refused (lua_refused) and false: the reasons of
 ---coe5.releaseFollower, then a commander past the table (bad_commander), one with no living unit
 ---(no_commander), one of another player (other_player), the commander's own unit (same_unit), a unit
 ---that follows no one (not_following), one that follows the commander already (already_following),
 ---the two on different squares (not_same_square), and one the game's transfer refuses
----(game_refused); windows_only on Mac.
+---(game_refused).
 ---Each transfer logs ai_follower_transferred.
 ---@param unit integer 0-98999
 ---@param commander integer 0-9989
@@ -887,14 +980,14 @@ function coe5.planRitual(commander, ritual) end
 ---@return boolean|nil counts false for a square off the world; nil for a code the game can't check (below -1500, or 2000 and up)
 function coe5.terrainMatch(code, x, y) end
 
----Keeps only some of the game's debug trace lines (log.txt in the game folder, at "traceLevel" 1 to
----3): from now on the game writes a line only when its format text, after its leading spaces,
+---Keeps only some of the game's debug trace lines (log.txt in the game folder on Windows, standard
+---output on Mac, at "traceLevel" 1 to 3): from now on the game writes a line only when its format text, after its leading spaces,
 ---starts with one of the words, and drops the rest before it formats them. The words match the
 ---game's format text, not the finished line: "bt%d:" keeps the battle lines that read "bt3: ...".
 ---nil or an empty list keeps every line again. CoE5SE keeps one list for every mod: the last call
----wins. The list does nothing in a network game. Windows only.
+---wins. The list does nothing in a network game.
 ---@param words? string[] each a word a kept line starts with ("ailog", "removing player")
----@return boolean set false when refused (lua_refused reason=not_a_list, not_a_string, empty_word, leading_space, bad_character, out_of_memory; windows_only on Mac; site_unavailable when the game's trace functions aren't the code CoE5SE knows, logged as trace_filter_installed)
+---@return boolean set false when refused (lua_refused reason=not_a_list, not_a_string, empty_word, leading_space, bad_character, out_of_memory; site_unavailable when the game's trace functions aren't the code CoE5SE knows, logged as trace_filter_installed)
 function coe5.keepTraceLines(words) end
 
 ---Declares a plane of the mod's, at script load only. At each new world CoE5SE adds it beside the

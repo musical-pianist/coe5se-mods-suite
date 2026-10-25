@@ -143,5 +143,7 @@ can rebuild with a copy of the same releases from another source.
 - Hashes only: `shasum -a 256 -c SHA256.txt` (Mac, Linux) or
   `Get-FileHash -Algorithm SHA256 <file>` (Windows PowerShell), compared with `SHA256.txt`.
 - A full rebuild without the scripts: download the archives above, check their SHA-256, then run
-  `src/build.sh` with `CC` set to llvm-mingw's `x86_64-w64-mingw32-clang`, and `src/build_mac.sh`
-  with `ZIG` set to zig. Both write over the binaries in this folder, so run them on a copy.
+  `src/build.sh` with `CC` set to llvm-mingw's `x86_64-w64-mingw32-clang` and `WINDRES` to its
+  `x86_64-w64-mingw32-windres` (it compiles the file details in `src/*.rc`, the name, version, and
+  description Windows shows under Properties > Details), and `src/build_mac.sh` with `ZIG` set to
+  zig. Both write over the binaries in this folder, so run them on a copy.

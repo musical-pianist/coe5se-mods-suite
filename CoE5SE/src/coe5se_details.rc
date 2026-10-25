@@ -1,0 +1,31 @@
+// The file details on a DLL's Properties > Details tab; the including .rc sets DETAILS_NAME and DETAILS_DESCRIPTION.
+#include "coe5se_version.h"
+
+1 VERSIONINFO
+FILEVERSION     COE5SE_VERSION_NUMBERS
+PRODUCTVERSION  COE5SE_VERSION_NUMBERS
+FILEFLAGSMASK   0x3F
+FILEFLAGS       0x0
+FILEOS          0x40004
+FILETYPE        0x2
+FILESUBTYPE     0x0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName",      "MusicalPianist"
+      VALUE "FileDescription",  DETAILS_DESCRIPTION
+      VALUE "FileVersion",      COE5SE_VERSION
+      VALUE "InternalName",     DETAILS_NAME
+      VALUE "LegalCopyright",   "Copyright MusicalPianist"
+      VALUE "OriginalFilename", DETAILS_NAME ".dll"
+      VALUE "ProductName",      "CoE5SE (Conquest of Elysium 5 Script Extender)"
+      VALUE "ProductVersion",   COE5SE_VERSION
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

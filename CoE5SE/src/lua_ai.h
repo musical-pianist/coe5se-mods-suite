@@ -29,6 +29,7 @@ static int lRoute(lua_State *L) {
     int ownStrength = lua_isnoneornil(L, 4);
     lua_Integer comstr = ownStrength ? 0 : luaL_checkinteger(L, 4);
     const char *reason = routeRefusal(aiMoveSiteRunning(), commander, x, y, comstr, G32(RVA_MAP_DEPTH), G32(RVA_MAP_H));
+    if (portalHandlerRunning) reason = "inside_portal_handler";
     if (reason) {
         LuaScript *s = luaScriptOf(L);
         refuseLuaCall(s ? s->mod : "?", "coe5.route", reason, "commander=%lld x=%lld y=%lld comstr=%lld", (long long)commander,
@@ -107,9 +108,7 @@ static int lScrapRitualPlan(lua_State *L) {
 
 // ---- AI armies: coe5.releaseFollower -------------------------------------------------------------
 // Why coe5.releaseFollower refuses its call, or NULL.
-static const char *followerReleaseRefusal(int inAiSite, int network, int windowsOnly, lua_Integer unit, int owner, int controller,
-                                          int activePlayer) {
-    if (windowsOnly) return "windows_only";
+static const char *followerReleaseRefusal(int inAiSite, int network, lua_Integer unit, int owner, int controller, int activePlayer) {
     if (!inAiSite) return "outside_ai_site";
     if (network) return "network_game";
     if (unit < 0 || unit >= UNIT_TABLE_MAX) return "bad_unit";
@@ -119,13 +118,7 @@ static const char *followerReleaseRefusal(int inAiSite, int network, int windows
     return NULL;
 }
 
-// @platform-split release_follower: Windows only, as the AI sites (Mac's AI_TURN observers refuse it)
 // coe5.releaseFollower(unit): frees one unit of an AI player from the commander it follows.
-#ifdef __APPLE__
-static int releaseFollowerWindowsOnly = 1;
-#else
-static int releaseFollowerWindowsOnly = 0;
-#endif
 static int lReleaseFollower(lua_State *L) {
     lua_Integer unit = luaL_checkinteger(L, 1);
     int owner = -1, controller = CONTROLLER_REMOVED, leader = -1;
@@ -136,8 +129,7 @@ static int lReleaseFollower(lua_State *L) {
     }
     int active = G32(RVA_ACTIVE_PLAYER);
     LuaScript *s = luaScriptOf(L);
-    const char *reason = followerReleaseRefusal(aiSiteRunning(), isNetworkGame(), releaseFollowerWindowsOnly, unit, owner, controller,
-                                                active);
+    const char *reason = followerReleaseRefusal(aiSiteRunning(), isNetworkGame(), unit, owner, controller, active);
     if (reason) {
         refuseLuaCall(s ? s->mod : "?", "coe5.releaseFollower", reason, "unit=%lld player=%d controller=%d active=%d commander=%d",
                       (long long)unit, owner, controller, active, leader);
@@ -155,10 +147,9 @@ static int lReleaseFollower(lua_State *L) {
 
 // ---- AI armies: coe5.transferFollower --------------------------------------------------------------
 // Why coe5.transferFollower refuses its call, or NULL.
-static const char *followerTransferRefusal(int inAiSite, int network, int windowsOnly, lua_Integer unit, int owner, int controller,
-                                           int activePlayer, lua_Integer commander, int commanderOwner, int commanderUnit, int leader,
-                                           int sameSquare) {
-    const char *reason = followerReleaseRefusal(inAiSite, network, windowsOnly, unit, owner, controller, activePlayer);
+static const char *followerTransferRefusal(int inAiSite, int network, lua_Integer unit, int owner, int controller, int activePlayer,
+                                           lua_Integer commander, int commanderOwner, int commanderUnit, int leader, int sameSquare) {
+    const char *reason = followerReleaseRefusal(inAiSite, network, unit, owner, controller, activePlayer);
     if (reason) return reason;
     if (commander < 0 || commander >= COMMANDER_TABLE_MAX) return "bad_commander";
     if (commanderOwner < 0) return "no_commander";
@@ -170,9 +161,58 @@ static const char *followerTransferRefusal(int inAiSite, int network, int window
     return NULL;
 }
 
-// @platform-split transfer_follower: Windows only; RVA_TRANSFER_UNIT_TO_COMMANDER wasn't looked up on Mac
-// The game's own one-unit transfer.
-static int (*transferUnitGame)(int unit, int commander);
+// The game's own one-unit transfer, worked out on both builds.
+static int unitAiSkips(int u) {
+    if (u < 0 || u >= UNIT_TABLE_MAX) return 0;
+    if ((short)G16(RVA_UNIT_MONSTER + (size_t)u * UNIT_SIZE) < 0) return 1;
+    return (GAME_FN(unsigned long long (*)(int), RVA_UNIT_FLAGS)(u) & UNIT_FLAGS_AI_SKIP) != 0;
+}
+static int commanderOwnerOf(int c) {
+    if (c < 0 || c > G32(RVA_LAST_COMMANDER) || c >= COMMANDER_TABLE_MAX) return -1;
+    int unit = G32(RVA_COMMANDERS + (size_t)c * COMMANDER_SIZE);
+    return unit < 0 || unit >= UNIT_TABLE_MAX ? -1 : (short)G16(RVA_UNIT_PLAYER + (size_t)unit * UNIT_SIZE);
+}
+static int unitMayJoinCommander(int c, int u) {
+    if (c < 0 || u < 0 || u >= UNIT_TABLE_MAX) return -1;
+    int own = c <= G32(RVA_LAST_COMMANDER) && c < COMMANDER_TABLE_MAX ? G32(RVA_COMMANDERS + (size_t)c * COMMANDER_SIZE) : -1;
+    if (own == u) return -1;
+    if ((GAME_FN(unsigned long long (*)(int), RVA_UNIT_FLAGS)(u) >> MONSTER_FLAG_NO_COMMANDER) & 1) return -1;
+    int owner = u <= G32(RVA_UNIT_COUNT) ? (short)G16(RVA_UNIT_PLAYER + (size_t)u * UNIT_SIZE) : -1;
+    if (owner != commanderOwnerOf(c)) return -1;
+    return !unitAiSkips(u);
+}
+static int unitMayLeaveLeader(int u) {
+    if (u < 0 || u >= UNIT_TABLE_MAX) return 0;
+    int leader = G32(RVA_UNIT_LEADER + (size_t)u * UNIT_SIZE);
+    if (leader < 0) return 1;
+    if (leader >= COMMANDER_TABLE_MAX) return 0;
+    int leaderUnit = G32(RVA_COMMANDERS + (size_t)leader * COMMANDER_SIZE);
+    if (leaderUnit < 0 || leaderUnit >= UNIT_TABLE_MAX || (short)G16(RVA_UNIT_HP + (size_t)leaderUnit * UNIT_SIZE) <= 0) return 1;
+    if (leaderUnit <= G32(RVA_UNIT_COUNT) && (short)G16(RVA_UNIT_MONSTER + (size_t)leaderUnit * UNIT_SIZE) >= 0 &&
+        unitAbilityTotal(leaderUnit, ABILITY_WANDER, 1) > 0)
+        return 0;
+    return !unitAiSkips(leaderUnit);
+}
+static int transferUnitToCommander(int u, int c) {
+    if (u < 0 || u >= UNIT_TABLE_MAX) return 0;
+    size_t at = (size_t)u * UNIT_SIZE;
+    if (c >= 0) {
+        if (unitMayJoinCommander(c, u) <= 0) return 0;
+        int last = G32(RVA_LAST_COMMANDER);
+        for (int k = 0; k <= last && k < COMMANDER_TABLE_MAX; k++)
+            if (G32(RVA_COMMANDERS + (size_t)k * COMMANDER_SIZE) == u) {
+                if (G32(RVA_UNITS + at) & UNIT_INSANE) return 0;
+                break;
+            }
+    }
+    if (!unitMayLeaveLeader(u)) return 0;
+    int old = G32(RVA_UNIT_LEADER + at);
+    G32(RVA_UNIT_LEADER + at) = c;
+    if (old >= 0) flushCommanderCache(old);
+    if (c >= 0) flushCommanderCache(c);
+    return 1;
+}
+static int (*transferUnitGame)(int unit, int commander) = transferUnitToCommander;
 
 // coe5.transferFollower(unit, commander): moves one unit to another commander on the same square.
 static int lTransferFollower(lua_State *L) {
@@ -193,13 +233,10 @@ static int lTransferFollower(lua_State *L) {
             cx = G32(RVA_UNIT_X + (size_t)commanderUnit * UNIT_SIZE), cy = G32(RVA_UNIT_X + (size_t)commanderUnit * UNIT_SIZE + 4);
         }
     }
-#ifndef __APPLE__
-    if (!transferUnitGame) transferUnitGame = GAME_FN(int (*)(int, int), RVA_TRANSFER_UNIT_TO_COMMANDER);
-#endif
     int active = G32(RVA_ACTIVE_PLAYER);
     LuaScript *s = luaScriptOf(L);
-    const char *reason = followerTransferRefusal(aiSiteRunning(), isNetworkGame(), transferUnitGame == NULL, unit, owner, controller,
-                                                 active, commander, commanderOwner, commanderUnit, leader, ux == cx && uy == cy);
+    const char *reason = followerTransferRefusal(aiSiteRunning(), isNetworkGame(), unit, owner, controller, active, commander,
+                                                 commanderOwner, commanderUnit, leader, ux == cx && uy == cy);
     if (!reason && !transferUnitGame((int)unit, (int)commander)) reason = "game_refused";
     if (reason) {
         refuseLuaCall(s ? s->mod : "?", "coe5.transferFollower", reason,
@@ -218,7 +255,6 @@ static int lTransferFollower(lua_State *L) {
 // ---- AI recruiting: coe5.shopOffers, classRecruits, recruitSquares, aiBuyOffer -------------------
 // A player's recruitment offers, its class's list, its recruit squares, and the AI's buy.
 
-// @platform-split ai_recruit: Windows only; the Mac step is inlined and its helpers not looked up
 // The game functions the square rules and the buy call.
 typedef struct AiRecruitCalls {
     int (*offerAvailable)(int player, int offer, int x, int y);
@@ -233,8 +269,239 @@ typedef struct AiRecruitCalls {
 } AiRecruitCalls;
 static AiRecruitCalls aiRecruitCalls;
 
+// ---- The AI's buys, as CoE5SE's own code ------------------------------------------------------------
+#if defined(__APPLE__) || defined(COE5SE_BUY_SELFCHECK)
+#define AI_SPAWN_ABILITY_MINO 403
+#define AI_SPAWN_ABILITY_CENT 402
+#define AI_SPAWN_ABILITY_SATYR 400
+#define AI_SPAWNBOOSTER_TERRAIN (-65)
+#define AI_PAID_COSTS 14
+#define FORT_PART_CITADEL_WALLS 0x1800
+
+static int unitAt(int unit, int x, int y) {
+    return G32(RVA_UNIT_X + (size_t)unit * UNIT_SIZE) == x && G32(RVA_UNIT_X + (size_t)unit * UNIT_SIZE + 4) == y;
+}
+// The commander whose unit is `unit`, or -1.
+static int commanderOfUnit(int unit) {
+    int last = G32(RVA_LAST_COMMANDER);
+    for (int c = 0; c <= last && c < COMMANDER_TABLE_MAX; c++)
+        if (G32(RVA_COMMANDERS + (size_t)c * COMMANDER_SIZE) == unit) return c;
+    return -1;
+}
+// The terrain of square (x, y), -1 off the map, as the troop buy reads it.
+static int buyTerrainAt(int x, int y) {
+    if (x < 0 || y < 0 || x >= G32(RVA_MAP_W) || y >= G32(RVA_MAP_H) || x >= MAP_COLUMNS_MAX || y >= MAP_COLUMN_SQUARES) return -1;
+    return (short)G16(RVA_SQUARES + ((size_t)x * MAP_COLUMN_SQUARES + (size_t)y) * SQUARE_SIZE);
+}
+// The places on the player's ships at (x, y), less its sailors there.
+static int countAiFreeBoatPlaces(int player, int x, int y) {
+    int places = 0, sailors = 0, last = G32(RVA_UNIT_COUNT);
+    for (int u = 0; u <= last && u < UNIT_TABLE_MAX; u++) {
+        size_t rec = (size_t)u * UNIT_SIZE;
+        if ((short)G16(RVA_UNIT_PLAYER + rec) != player || x < 0 || (short)G16(RVA_UNIT_HP + rec) <= 0 || !unitAt(u, x, y)) continue;
+        int ship = (short)G16(RVA_UNIT_MONSTER + rec) >= 0 ? unitAbilityTotal(u, MONSTER_ABILITY_SHIP, 1) : 0;
+        if (ship > 0) places += ship;
+        else if (*(const unsigned long long *)GAME_PTR(RVA_UNITS + rec) & UNIT_AI_SAILOR) sailors++;
+    }
+    return places - sailors;
+}
+// The player's unit at (x, y) with the most of `ability` that stays put, or -1.
+static int findAiBestBoosterAt(int player, int x, int y, int ability) {
+    int best = 0, found = -1, last = G32(RVA_UNIT_COUNT);
+    for (int u = 0; u <= last && u < UNIT_TABLE_MAX; u++) {
+        size_t rec = (size_t)u * UNIT_SIZE;
+        if ((short)G16(RVA_UNIT_PLAYER + rec) != player || x < 0 || (short)G16(RVA_UNIT_HP + rec) <= 0 || !unitAt(u, x, y)) continue;
+        int value = ability > 0 && (short)G16(RVA_UNIT_MONSTER + rec) >= 0 ? unitAbilityTotal(u, ability, 1) : 0;
+        if (value <= best) continue;
+        int c = commanderOfUnit(u);
+        unsigned long long flags = GAME_FN(unsigned long long (*)(int), RVA_UNIT_FLAGS)(u);
+        if ((flags >> MONSTER_FLAG_NO_COMMANDER) & 1 || (c >= 0 && (short)G16(RVA_COMMANDER_AI_PLAN + (size_t)c * COMMANDER_SIZE) == -1))
+            best = value, found = u;
+    }
+    return found;
+}
+// Sends the player's spawnboosters with `ability` at (x, y) back to plan 0.
+static void freeAiSpawnboosters(int player, int x, int y, int ability) {
+    int freed = 0, last = G32(RVA_LAST_COMMANDER);
+    for (int c = 0; c <= last && c < COMMANDER_TABLE_MAX; c++) {
+        int u = G32(RVA_COMMANDERS + (size_t)c * COMMANDER_SIZE);
+        if (u < 0 || u >= UNIT_TABLE_MAX) continue;
+        size_t rec = (size_t)u * UNIT_SIZE;
+        if ((short)G16(RVA_UNIT_PLAYER + rec) != player || x < 0 || (short)G16(RVA_UNIT_HP + rec) <= 0 || !unitAt(u, x, y)) continue;
+        short *plan = (short *)GAME_PTR(RVA_COMMANDER_AI_PLAN + (size_t)c * COMMANDER_SIZE);
+        if (unitAbilityTotal(u, ability, 1) > 0 && *plan == -1) *plan = 0, freed++;
+    }
+    GAME_FN(void (*)(const char *, ...), RVA_TRACE)("ailog: removed %d old spawnboosters at %d,%d\n", freed, x, y);
+}
+// Pays an offer's first AI_PAID_COSTS costs, `sign` -1 to take them and 1 to add them.
+static void payAiOffer(int player, int offer, int sign) {
+    const int *costs = (const int *)GAME_PTR(RVA_SHOP_COSTS + (size_t)player * PLAYER_BLOCK_SIZE + (size_t)offer * SHOP_COST_COUNT * 4);
+    for (int i = 0; i < AI_PAID_COSTS; i++) GAME_FN(void (*)(int, int, int, int, int), RVA_PAY_RESOURCE_AT)(player, i, sign * costs[i], -1, -1);
+}
+// The offer's "=" limiter, the unit name an upgrade starts from ("" for none).
+static void aiOfferLimiter(int player, int offer, char out[SHOP_OFFER_TEXT_SIZE + 1]) {
+    memcpy(out, GAME_PTR(RVA_SHOP_OFFER_LIMITS + (size_t)player * PLAYER_BLOCK_SIZE + (size_t)offer * SHOP_OFFER_TEXT_SIZE), SHOP_OFFER_TEXT_SIZE);
+    out[SHOP_OFFER_TEXT_SIZE] = 0;
+}
+// Turns unit `u` into `monster`, keeping its wounds; with `free`, it follows no commander after.
+static void upgradeAiUnit(int u, int monster, int free) {
+    size_t rec = (size_t)u * UNIT_SIZE;
+    int (*maxHp)(int) = GAME_FN(int (*)(int), RVA_UNIT_MAX_HP);
+    int wounds = maxHp(u) - (short)G16(RVA_UNIT_HP + rec);
+    G16(RVA_UNIT_MONSTER + rec) = (short)monster;
+    if (free) G32(RVA_UNIT_LEADER + rec) = -1;
+    int hp = maxHp(u) - wounds;
+    G16(RVA_UNIT_HP + rec) = (short)(hp < 1 ? 1 : hp);
+}
+
+// The commander's name as the AI's traces give it, "<name> the <unit's shown name>", in the game's ring.
+static const char *commanderTheName(int commander) {
+    if (commander < 0 || commander > G32(RVA_LAST_COMMANDER) || commander >= COMMANDER_TABLE_MAX) return "John Doe";
+    int ring = G32(RVA_COMMANDER_THE_NAME_INDEX);
+    ring = ring >= 9 ? 0 : ring + 1;
+    G32(RVA_COMMANDER_THE_NAME_INDEX) = ring;
+    const char *shown = GAME_FN(const char *(*)(int), RVA_UNIT_SHOWN_NAME)(G32(RVA_COMMANDERS + (size_t)commander * COMMANDER_SIZE));
+    char *out = (char *)GAME_PTR(RVA_COMMANDER_THE_NAME_RING + (size_t)ring * 100);
+    snprintf(out, 100, "%.47s the %.50s", (const char *)GAME_PTR(RVA_COMMANDER_NAMES + (size_t)commander * COMMANDER_SIZE), shown);
+    return out;
+}
+
+// The troop buy: the offer's units at (x, y), their sailors and guards, the costs, and the square's army.
+static void buyAiTroops(int player, int offer, int x, int y) {
+    if (x < 0 || y < 0 || player < 0) return;   // No log: the game's own buy does nothing either
+    size_t block = (size_t)player * PLAYER_BLOCK_SIZE;
+    int monster = G32(RVA_SHOP_OFFERS + block + (size_t)offer * 4), count = G32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4);
+    char limiter[SHOP_OFFER_TEXT_SIZE + 1];
+    aiOfferLimiter(player, offer, limiter);
+    int terrain = buyTerrainAt(x, y);
+    if (terrain < 0) return;   // No log: as the game's
+    unsigned parts = GAME_FN(unsigned (*)(int, int), RVA_SQUARE_FORT_PARTS)(x, y);
+    const unsigned char *t = GAME_PTR(RVA_TERRAIN_TABLE + (size_t)terrain * TERRAIN_SIZE);
+    int gold = *(const short *)(t + TERRAIN_GOLD), trade = *(const short *)(t + TERRAIN_TRADE), fort = (parts & FORT_PART_FORT) != 0;
+    int worth;
+    if (x == (short)G16(RVA_PLAYER_HOME_X + (size_t)player * 2) && y == (short)G16(RVA_PLAYER_HOME_Y + (size_t)player * 2)) worth = fort + 1;
+    else if (gold >= 4 && trade >= 1 && fort) worth = 1;
+    else worth = gold > 1 && fort && (parts & FORT_PART_CITADEL_WALLS);
+    if (GAME_FN(int (*)(int, int, int), RVA_AI_REFORMS_HERE)(player, x, y) > 0) worth++;
+    int places = countAiFreeBoatPlaces(player, x, y);
+    GAME_FN(void (*)(const char *, ...), RVA_TRACE)("cbm: %d %d @ %d,%d\n", count, monster, x, y);
+    int (*random)(int) = GAME_FN(int (*)(int), RVA_RANDOM);
+    for (int i = 0; i < count; i++) {
+        int u = limiter[0] ? GAME_FN(int (*)(int, int, int, const char *), RVA_FIND_UPGRADE_UNIT)(player, x, y, limiter) : -1;
+        if (u < 0) {
+            u = GAME_FN(int (*)(int, int, int, int, int), RVA_NEW_UNIT)(x, y, player, -1, monster);
+        } else {
+            upgradeAiUnit(u, monster, 1);
+        }
+        if (u < 0 || u >= UNIT_TABLE_MAX) continue;   // No log: no free unit record; the game's own buy goes on too
+        unsigned long long *flags = (unsigned long long *)GAME_PTR(RVA_UNITS + (size_t)u * UNIT_SIZE);
+        int ship = monsterAbility(monster, MONSTER_ABILITY_SHIP);
+        if (ship > 0) {
+            *flags |= UNIT_AI_SAILOR;
+            places += ship;
+        } else if (GAME_FN(int (*)(int), RVA_UNIT_BOAT_SIZE)(u) == 1 && places > 2) {
+            *flags |= UNIT_AI_SAILOR;
+            places--;
+        } else if (GAME_FN(int (*)(int), RVA_AI_UNIT_MAY_GUARD)(u)) {
+            int guard = 0;
+            if (count > 2 && i == 0 && worth > 1) guard = 1;
+            else if (count > 4 && i == 1 && worth != 0) guard = random(100) < 50;
+            else if (count > 4 && i == 2 && worth > 2) guard = 1;
+            if (count > 9 && (i == 2 || i == 3) && worth > 1) guard = 1;
+            if (count > 14 && (i == 4 || i == 5) && worth > 1) guard = 1;
+            if (guard) *flags |= UNIT_AI_GUARD;
+        }
+    }
+    payAiOffer(player, offer, -1);
+    GAME_FN(void (*)(int, int), RVA_REBUILD_SQUARE_ARMY)(x, y);
+}
+
+// The commander buy at (x, y): returns the commander, -1 for none.
+static int buyAiCommander(int player, int offer, int x, int y) {
+    if (x < 0 || y < 0 || player < 0) return -1;   // No log: the game's own buy does nothing either
+    size_t block = (size_t)player * PLAYER_BLOCK_SIZE;
+    int monster = G32(RVA_SHOP_OFFERS + block + (size_t)offer * 4), commander = -1, upgraded = -1;
+    char limiter[SHOP_OFFER_TEXT_SIZE + 1];
+    aiOfferLimiter(player, offer, limiter);
+    if (limiter[0]) {
+        upgraded = GAME_FN(int (*)(int, int, int, const char *), RVA_FIND_UPGRADE_UNIT)(player, x, y, limiter);
+        GAME_FN(void (*)(const char *, ...), RVA_TRACE_C)("upgrading from %s (du %d)\n", limiter, upgraded);
+        if (upgraded < 0) return -1;   // No log: the game's own buy pays nothing then either
+        commander = commanderOfUnit(upgraded);
+        if (commander >= 0) upgradeAiUnit(upgraded, monster, 0);
+    }
+    if (commander < 0) {
+        commander = GAME_FN(int (*)(int, int, int, int), RVA_NEW_COMMANDER)(x, y, player, monster);
+        if (commander >= 0 && commander < COMMANDER_TABLE_MAX) {
+            char *name = (char *)GAME_PTR(RVA_COMMANDER_NAMES + (size_t)commander * COMMANDER_SIZE);
+            const char *offered = (const char *)GAME_PTR(RVA_SHOP_OFFER_NAMES + block + (size_t)offer * SHOP_OFFER_TEXT_SIZE);
+            size_t n = 0;
+            while (n < COMMANDER_NAME_SIZE - 1 && offered[n]) name[n] = offered[n], n++;
+            name[n] = 0;
+            int made = G32(RVA_COMMANDERS + (size_t)commander * COMMANDER_SIZE);
+            if (upgraded >= 0 && made >= 0 && made < UNIT_TABLE_MAX) {
+                G32(RVA_COMMANDERS + (size_t)commander * COMMANDER_SIZE) = upgraded;
+                G16(RVA_UNIT_MONSTER + (size_t)upgraded * UNIT_SIZE) = (short)monster;
+                G32(RVA_UNIT_LEADER + (size_t)upgraded * UNIT_SIZE) = -1;
+                G16(RVA_UNIT_HP + (size_t)made * UNIT_SIZE) = -1;
+                G32(RVA_UNIT_X + (size_t)made * UNIT_SIZE) = -1;
+                G32(RVA_UNIT_X + (size_t)made * UNIT_SIZE + 4) = -1;
+                G32(RVA_UNIT_LEADER + (size_t)made * UNIT_SIZE) = -1;
+            }
+        } else {
+            commander = -1;
+        }
+    }
+    payAiOffer(player, offer, 1);
+    GAME_FN(void (*)(int, int), RVA_REBUILD_SQUARE_ARMY)(x, y);
+    return commander;
+}
+
+// After a commander buy: a commander with a spawn ability on spawning ground may become a spawnbooster.
+static void makeAiSpawnbooster(int commander) {
+    if (commander < 0 || commander > G32(RVA_LAST_COMMANDER) || commander >= COMMANDER_TABLE_MAX) return;   // No log: the game's own does nothing
+    int u = G32(RVA_COMMANDERS + (size_t)commander * COMMANDER_SIZE);
+    if (u < 0 || u >= UNIT_TABLE_MAX) return;   // No log: as the game's
+    int ability = unitAbilityTotal(u, AI_SPAWN_ABILITY_MINO, 1) > 0   ? AI_SPAWN_ABILITY_MINO
+                  : unitAbilityTotal(u, AI_SPAWN_ABILITY_CENT, 1) > 0 ? AI_SPAWN_ABILITY_CENT
+                  : unitAbilityTotal(u, AI_SPAWN_ABILITY_SATYR, 1) > 0 ? AI_SPAWN_ABILITY_SATYR
+                                                                       : 0;
+    if (!ability) return;   // No log: not a spawner
+    int (*random)(int) = GAME_FN(int (*)(int), RVA_RANDOM), level;
+    if (commanderRitpowOf(commander, &level) > 0 && random(100) < 50) return;   // No log: the game's own coin
+    if (GAME_FN(int (*)(int), RVA_UNIT_HAS_SPELL_WEAPON)(u) && random(100) < 50) return;   // No log: the game's own coin
+    size_t rec = (size_t)u * UNIT_SIZE;
+    int player = u > G32(RVA_UNIT_COUNT) ? -1 : (short)G16(RVA_UNIT_PLAYER + rec);
+    int x = G32(RVA_UNIT_X + rec), y = G32(RVA_UNIT_X + rec + 4);
+    if (!GAME_FN(int (*)(int, int, int), RVA_TERRAIN_MATCH)(AI_SPAWNBOOSTER_TERRAIN, x, y)) return;   // No log: not spawning ground
+    int best = findAiBestBoosterAt(player, x, y, ability);
+    if (best != u) {
+        int theirs = best >= 0 && best <= G32(RVA_UNIT_COUNT) && (short)G16(RVA_UNIT_MONSTER + (size_t)best * UNIT_SIZE) >= 0
+                         ? unitAbilityTotal(best, ability, 1)
+                         : 0;
+        if (unitAbilityTotal(u, ability, 1) <= theirs) return;   // No log: one there boosts as much
+    }
+    GAME_FN(void (*)(const char *, ...), RVA_TRACE)("ailog: turn %s into spawnbooster at %d,%d\n", commanderTheName(commander), x, y);
+    freeAiSpawnboosters(player, x, y, ability);
+    G16(RVA_COMMANDER_AI_PLAN + (size_t)commander * COMMANDER_SIZE) = -1;
+}
+#endif
+
 static const AiRecruitCalls *aiRecruitGame(void) {
-#ifndef __APPLE__
+#ifdef __APPLE__
+    // @platform-split ai_recruit_buys: Mac's buys are CoE5SE's copies; Windows calls the game's
+    if (!aiRecruitCalls.offerAvailable) {
+        aiRecruitCalls.offerAvailable = GAME_FN(int (*)(int, int, int, int), RVA_SHOP_OFFER_AVAILABLE);
+        aiRecruitCalls.citadelFor = GAME_FN(int (*)(int, int, int), RVA_SQUARE_IS_CITADEL_FOR);
+        aiRecruitCalls.squareAbilityTotal = GAME_FN(int (*)(int, int, int, int, int), RVA_SQUARE_ABILITY_TOTAL);
+        aiRecruitCalls.countMonsterAt = GAME_FN(int (*)(int, int, int, int), RVA_COUNT_MONSTER_AT);
+        aiRecruitCalls.seaAreaSize = GAME_FN(int (*)(int, int, int), RVA_SEA_AREA_SIZE);
+        aiRecruitCalls.squareHasFort = squareHasFort;
+        aiRecruitCalls.buyTroops = buyAiTroops;
+        aiRecruitCalls.buyCommander = buyAiCommander;
+        aiRecruitCalls.makeSpawnbooster = makeAiSpawnbooster;
+    }
+#else
     if (!aiRecruitCalls.offerAvailable) {
         aiRecruitCalls.offerAvailable = GAME_FN(int (*)(int, int, int, int), RVA_SHOP_OFFER_AVAILABLE);
         aiRecruitCalls.citadelFor = GAME_FN(int (*)(int, int, int), RVA_SQUARE_IS_CITADEL_FOR);
@@ -625,11 +892,7 @@ static int lKeepTraceLines(lua_State *L) {
         if (reason) bad = i;
         lua_pop(L, 1);
     }
-#ifdef __APPLE__
-    if (!reason && n) reason = "windows_only";   // @platform-split trace_filter: Windows only; the Mac trace functions weren't read for it
-#else
     if (!reason && n && !installTraceFilter()) reason = "site_unavailable";
-#endif
     if (!reason && !setTraceKeepList(words, lengths, (int)n)) reason = "out_of_memory";
     free(words);
     free(lengths);

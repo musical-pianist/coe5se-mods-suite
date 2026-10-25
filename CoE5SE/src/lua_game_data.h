@@ -65,6 +65,9 @@ enum {
     T_SQUARE_HAS_FORT,
     T_RECORD_WORD,
     T_AI_ATTACK_MARGIN,
+    T_SLOT_ABILITY,
+    T_UNIT_STATE_FLAGS,
+    T_UNIT_RETURNS,
 };
 typedef struct {
     const char *name;
@@ -76,7 +79,7 @@ typedef struct {
 // A square value coe5.set writes only while the world is built, inside the area being built.
 #define WRITABLE_WHILE_BUILDING 2
 // The variables that need more than two indexes, by name.
-enum { LIST_NONE, LIST_TO_EMPTY_NAME, LIST_TO_BELOW_ONE, LIST_TO_BELOW_ONE_I32, LIST_TO_BELOW_ZERO_I32 };
+enum { LIST_NONE, LIST_TO_EMPTY_NAME, LIST_TO_BELOW_ONE, LIST_TO_BELOW_ONE_I32, LIST_TO_BELOW_ZERO_I32, LIST_TO_BELOW_ZERO };
 typedef struct { const char *name; int count3, stride3, list, nameBack; uintptr_t lastAt; int everyPlayer; } GameVarShape;
 // Types that differ between the two builds.
 #ifdef __APPLE__
@@ -97,24 +100,6 @@ typedef struct { const char *name; int count3, stride3, list, nameBack; uintptr_
 #else
 #define WINDOWS_ONLY_RVA(rva) (rva)
 #define BUG_CHECKS_OFF_TYPE T_FLAG_I32
-#endif
-// @platform-split garrison_left: commanderGarrisonLeft reads nil on Mac (RVA_AI_GATHER_TROOPS and the functions it calls not looked up)
-// What stays on a commander's square when it leaves: Windows only.
-#ifdef __APPLE__
-#define GARRISON_LEFT_TYPE T_WINDOWS_ONLY
-#else
-#define GARRISON_LEFT_TYPE T_GARRISON_LEFT
-#endif
-// @platform-split ceremony_values: ceremonyName, ceremonyCost and ceremonyLastIndex read nil on Mac (the ceremony code and table not looked up)
-// The Voice of El's ceremonies: their names, the cost table, and the last number.
-#ifdef __APPLE__
-#define CEREMONY_NAME_TYPE T_WINDOWS_ONLY
-#define CEREMONY_COST_TYPE T_WINDOWS_ONLY
-#define CEREMONY_LAST_TYPE T_WINDOWS_ONLY
-#else
-#define CEREMONY_NAME_TYPE T_CEREMONY_NAME
-#define CEREMONY_COST_TYPE T_CEREMONY_COST
-#define CEREMONY_LAST_TYPE T_CEREMONY_LAST
 #endif
 #define CEREMONY_INDEXES (CEREMONY_LAST + 1)
 #define FORT_PART_BITS 32
@@ -276,7 +261,7 @@ static const GameVar GAME_VARS[] = {
     {"bugChecksOff",   RVA_NO_CHECKS,                     BUG_CHECKS_OFF_TYPE, 1, 0, 0, 1, 0, 0, 0},
     {"commanderName",  RVA_COMMANDER_NAMES,               T_STR, COMMANDER_TABLE_MAX, COMMANDER_SIZE, COMMANDER_NAME_SIZE, 0, 0, 0, 0},
     {"commanderStrength", RVA_COMMANDERS, T_COMMANDER_STRENGTH, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
-    {"commanderGarrisonLeft", WINDOWS_ONLY_RVA(RVA_COMMANDERS), GARRISON_LEFT_TYPE, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
+    {"commanderGarrisonLeft", RVA_COMMANDERS, T_GARRISON_LEFT, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
     {"slotHomeX",      RVA_PLAYER_HOME_X,                 T_I16, 32, 2, 0, 0, 0, 0, 0},
     {"slotHomeY",      RVA_PLAYER_HOME_Y,                 T_I16, 32, 2, 0, 0, 0, 0, 0},
     {"squareGems",     RVA_SQUARE_RECORDS + SQUARE_GEMS,  T_U8, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 0, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
@@ -317,9 +302,65 @@ static const GameVar GAME_VARS[] = {
     {"aiAttackDivAi",  RVA_AI_ATTACK_DIV_AI, T_I32, 1, 0, 0, 0, 0, 0, 0},
     {"aiAttackDivHuman", RVA_AI_ATTACK_DIV_HUMAN, T_I32, 1, 0, 0, 0, 0, 0, 0},
     {"aiAttackMargin", 0,                                 T_AI_ATTACK_MARGIN, 1, 0, 0, 0, 0, 0, 0},
-    {"ceremonyName",   0,                                 CEREMONY_NAME_TYPE, CEREMONY_INDEXES, 0, 0, 0, 0, 0, 0},
-    {"ceremonyCost",   0,                                 CEREMONY_COST_TYPE, CEREMONY_INDEXES, 0, 0, 1, SITE_CEREMONY_COSTS, 0, 0},
-    {"ceremonyLastIndex", 0,                              CEREMONY_LAST_TYPE, 1, 0, 0, 0, 0, 0, 0},
+    {"ceremonyName",   0,                                 T_CEREMONY_NAME,    CEREMONY_INDEXES, 0, 0, 0, 0, 0, 0},
+    {"ceremonyCost",   0,                                 T_CEREMONY_COST,    CEREMONY_INDEXES, 0, 0, 1, SITE_CEREMONY_COSTS, 0, 0},
+    {"ceremonyLastIndex", 0,                              T_CEREMONY_LAST,    1, 0, 0, 0, 0, 0, 0},
+    {"unitXp",         RVA_UNIT_XP,                       T_I16, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
+    {"unitKills",      RVA_UNIT_KILLS,                    T_I16, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
+    {"unitItem",       RVA_UNIT_ITEMS,                    T_I16, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, UNIT_ITEM_SLOTS, 2},
+    {"unitKnownSpell", RVA_UNIT_KNOWN_SPELLS,             T_I16, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, UNIT_KNOWN_SPELLS_MAX, 2},
+    {"unitMemorizedSpell", RVA_UNIT_MEMORIZED_SPELLS,     T_I16, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, UNIT_MEMORIZED_SPELLS_MAX, 2},
+    {"squareItem",     RVA_GROUND_ITEMS,                  T_I16, MAP_COLUMNS_MAX, MAP_COLUMN_SQUARES * GROUND_ITEMS_PER_SQUARE * 2, 0, 0, 0,
+     MAP_COLUMN_SQUARES, GROUND_ITEMS_PER_SQUARE * 2},
+    {"commanderRepeatRitual", RVA_COMMANDER_REPEAT_RITUAL, T_I16, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
+    {"slotBolsterDevotions", RVA_PLAYER_BOLSTERS,         T_I32, PLAYER_SLOTS, PLAYER_BLOCK_SIZE, 0, 0, 0, 0, 0},
+    {"slotDivineFavor", RVA_PLAYER_DIVINE_FAVOR,          T_I32, PLAYER_SLOTS, PLAYER_BLOCK_SIZE, 0, 0, 0, 0, 0},
+    {"sealsBroken",    RVA_SEALS_BROKEN,                  T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"sealEventsDone", RVA_SEAL_EVENTS_DONE,              T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"starsReliability", RVA_STARS_RELIABILITY,           T_I16, 1, 0, 0, 0, 0, 0, 0},
+    {"starsPower",     RVA_STARS_POWER,                   T_I16, 1, 0, 0, 0, 0, 0, 0},
+    {"starsMonths",    RVA_STARS_MONTHS,                  T_I16, 1, 0, 0, 0, 0, 0, 0},
+    {"starsFlags",     RVA_STARS_FLAGS,                   T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"apocalypseMonths", RVA_APOCALYPSE_MONTHS,           T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"magicTaintedMonths", RVA_MAGIC_TAINTED_MONTHS,      T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"mapZoom",        RVA_MAP_ZOOM,                      T_F32, 1, 0, 0, 0, 0, 0, 0},
+    {"mapCameraX",     RVA_MAP_CAMERA_X,                  T_F32, 1, 0, 0, 0, 0, 0, 0},
+    {"mapCameraY",     RVA_MAP_CAMERA_Y,                  T_F32, 1, 0, 0, 0, 0, 0, 0},
+    {"mapViewPlane",   RVA_MAP_VIEW_PLANE,                T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"enchantLastIndex", RVA_LAST_ENCHANT,                T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"enchantKind",    RVA_ENCHANTS + ENCHANT_KIND,       T_I32, ENCHANTS_MAX, ENCHANT_SIZE, 0, 0, 0, 0, 0},
+    {"enchantCaster",  RVA_ENCHANTS + ENCHANT_CASTER,     T_I32, ENCHANTS_MAX, ENCHANT_SIZE, 0, 0, 0, 0, 0},
+    {"enchantOwner",   RVA_ENCHANTS + ENCHANT_OWNER,      T_I32, ENCHANTS_MAX, ENCHANT_SIZE, 0, 0, 0, 0, 0},
+    {"enchantRitual",  RVA_ENCHANTS + ENCHANT_RITUAL,     T_I32, ENCHANTS_MAX, ENCHANT_SIZE, 0, 0, 0, 0, 0},
+    {"enchantX",       RVA_ENCHANTS + ENCHANT_X,          T_I32, ENCHANTS_MAX, ENCHANT_SIZE, 0, 0, 0, 0, 0},
+    {"enchantY",       RVA_ENCHANTS + ENCHANT_Y,          T_I32, ENCHANTS_MAX, ENCHANT_SIZE, 0, 0, 0, 0, 0},
+    {"battleSeed",     RVA_BATTLE_SEED,                   T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"battleX",        RVA_BATTLE_X,                      T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"battleY",        RVA_BATTLE_Y,                      T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"battleWidth",    RVA_BATTLE_WIDTH,                  T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"battleRound",    RVA_BATTLE_ROUND,                  T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"battleWinner",   RVA_BATTLE_WINNER_PLAYER,          T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"battleStarveRound", RVA_BATTLE_STARVE_ROUND,        T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"battleChargeRound", RVA_BATTLE_CHARGE_ROUND,        T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"battleAmbush",   RVA_BATTLE_IS_AMBUSH,              INT_FLAG_TYPE, 1, 0, 0, 0, 0, 0, 0},
+    {"battleAtSea",    RVA_BATTLE_AT_SEA,                 INT_FLAG_TYPE, 1, 0, 0, 0, 0, 0, 0},
+    {"battleSiege",    RVA_BATTLE_IS_SIEGE,               INT_FLAG_TYPE, 1, 0, 0, 0, 0, 0, 0},
+    {"eventPlayer",    RVA_EVENT_PLAYER,                  T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"eventTargetX",   RVA_EVENT_TARGET_X,                T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"eventTargetY",   RVA_EVENT_TARGET_Y,                T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"eventSquareX",   RVA_EVENT_SQUARE_X,                T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"eventSquareY",   RVA_EVENT_SQUARE_Y,                T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"unitLastSpawned", RVA_LAST_SPAWNED_UNIT,            T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"commanderLastSpawned", RVA_LAST_SPAWNED_COMMANDER,  T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"unitTempAbilityId", RVA_UNIT_TEMP_ABILITY_IDS,      T_I16, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, UNIT_TEMP_ABILITIES, 2},
+    {"unitTempAbilityValue", RVA_UNIT_TEMP_ABILITY_VALUES, T_I32, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, UNIT_TEMP_ABILITIES, 4},
+    {"slotBlessingId", RVA_PLAYER_BLESSINGS,              T_I32, PLAYER_SLOTS, PLAYER_BLOCK_SIZE, 0, 0, 0, PLAYER_BLESSINGS_MAX, 8},
+    {"slotBlessingValue", RVA_PLAYER_BLESSINGS + 4,       T_I32, PLAYER_SLOTS, PLAYER_BLOCK_SIZE, 0, 0, 0, PLAYER_BLESSINGS_MAX, 8},
+    {"slotMostCitadels", RVA_PLAYER_SHORT,                T_I16, PLAYER_SLOTS, PLAYER_BLOCK_SIZE, 0, 0, 0, 0, 0},
+    {"slotAbility",    0,                                 T_SLOT_ABILITY, PLAYER_SLOTS, 0, 0, 0, 0, RITUAL_EFFECT_ID_COUNT, 0},
+    {"slotAbilitySum", 0,                                 T_SLOT_ABILITY, PLAYER_SLOTS, 0, 1, 0, 0, RITUAL_EFFECT_ID_COUNT, 0},
+    {"unitStateFlags", RVA_UNITS,                         T_UNIT_STATE_FLAGS, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
+    {"unitReturns",    RVA_UNITS,                         T_UNIT_RETURNS, UNIT_TABLE_MAX, UNIT_SIZE, 0, 0, 0, 0, 0},
     // The terrain word for fort part bit n (walls, irongate, ...), as the game's terrain reader has it.
     {"fortPartWord",   0,                                 T_FORT_PART_WORD, FORT_PART_BITS, 0, 0, 0, 0, 0, 0},
     // A content record by the .c5m words of its block: coe5.get("monster", m, "hp"), read-only.
@@ -350,6 +391,11 @@ static const GameVarShape GAME_VAR_SHAPES[] = {
     {"squareRememberedStrength", MAP_COLUMN_SQUARES, SQUARE_SIZE, LIST_NONE, 0, 0, 0},
     {"unitStrength", 0, 0, LIST_NONE, 0, 0, 1},
     {"squareCitadel", MAP_COLUMN_SQUARES, 0, LIST_NONE, 0, 0, 1},
+    {"unitKnownSpell", 0, 0, LIST_TO_BELOW_ZERO, 0, 0, 0},
+    {"unitMemorizedSpell", 0, 0, LIST_TO_BELOW_ZERO, 0, 0, 0},
+    {"squareItem", GROUND_ITEMS_PER_SQUARE, 2, LIST_NONE, 0, 0, 0},
+    {"slotBlessingId", 0, 0, LIST_TO_BELOW_ONE_I32, 0, 0, 0},
+    {"slotBlessingValue", 0, 0, LIST_TO_BELOW_ONE_I32, 4, 0, 0},
 };
 // Variable v's GameVarShape, or one with no third index and no list.
 static GameVarShape gameVarShape(const GameVar *v) {
@@ -405,7 +451,7 @@ static int abilityIdOfWord(const char *word) {
 }
 
 // Whether a variable's second index is an ability id, which a script may also give as its .c5m word.
-static int takesAbilityWord(int type) { return type == T_UNIT_ABILITY || type == T_MONSTER_ABILITY; }
+static int takesAbilityWord(int type) { return type == T_UNIT_ABILITY || type == T_MONSTER_ABILITY || type == T_SLOT_ABILITY; }
 
 // Finds the variable named by argument 1 of coe5.get or coe5.set, and returns its address.
 static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg) {
@@ -457,6 +503,7 @@ static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg
         int ended = shape.list == LIST_TO_BELOW_ONE       ? *(const short *)entry < 1
                     : shape.list == LIST_TO_BELOW_ONE_I32  ? *(const int *)entry < 1
                     : shape.list == LIST_TO_BELOW_ZERO_I32 ? *(const int *)entry < 0
+                    : shape.list == LIST_TO_BELOW_ZERO     ? *(const short *)entry < 0
                                                            : !*entry;
         if (ended) return NULL;
     }
@@ -632,6 +679,19 @@ static int unitStrengthFor(int player, int unit) {
 static int unitArmorNow(int unit) {
     if (!unitAliveInTable(unit)) return -1;
     return GAME_FN(int (*)(int), RVA_UNIT_ARMOR)(unit);
+}
+
+// A living unit's state bits, its items' with them, into *flags; 0 for a unit that isn't alive.
+static int unitStateFlagsNow(int unit, unsigned long long *flags) {
+    if (!unitAliveInTable(unit)) return 0;
+    *flags = GAME_FN(unsigned long long (*)(int), RVA_UNIT_STATE_FLAGS)(unit);
+    return 1;
+}
+
+// Whether unit `unit` comes back from death, as the game decides it; -1 for an empty record.
+static int unitReturnsNow(int unit) {
+    if (unit < 0 || unit >= UNIT_TABLE_MAX || unit > G32(RVA_UNIT_COUNT) || (short)G16(RVA_UNIT_MONSTER + (size_t)unit * UNIT_SIZE) < 0) return -1;
+    return GAME_FN(int (*)(int), RVA_UNIT_RETURNS)(unit) != 0;
 }
 
 // Whether player `player` sees unit `unit`.

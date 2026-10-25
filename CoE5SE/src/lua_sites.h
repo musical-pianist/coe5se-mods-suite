@@ -373,8 +373,8 @@ static u64 callSplitArmyNext(void *next, const u64 *v) {
     if (splitMinUnits() != own) setSplitMinUnits(own);
     return r;
 }
-// The Seven Seals broken: Windows only so far.
-#define SEALS_BROKEN_RVA WINDOWS_ONLY_RVA(RVA_SEALS_BROKEN)
+// The Seven Seals broken (RVA_SEALS_BROKEN).
+#define SEALS_BROKEN_RVA RVA_SEALS_BROKEN
 // SEAL_BREAK's next.
 static u64 sealBreakNext(void *next, const u64 *v) {
     G32(SEALS_BROKEN_RVA) = (int)v[2];

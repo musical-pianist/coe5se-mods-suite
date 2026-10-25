@@ -79,6 +79,7 @@ verify() {
   tar -xf "$WORK/tc.tar.xz" -C "$WORK" || return 1
   tar -xf "$WORK/zig.tar.xz" -C "$WORK" || return 1
   CC="$WORK/$TC_DIR/bin/x86_64-w64-mingw32-clang"
+  WINDRES="$WORK/$TC_DIR/bin/x86_64-w64-mingw32-windres"
   ZIG="$WORK/$ZIG_DIR/zig"
   # zig keeps its cache in the temporary folder too, so nothing stays behind.
   export ZIG_GLOBAL_CACHE_DIR="$WORK/zig-cache" ZIG_LOCAL_CACHE_DIR="$WORK/zig-cache"
@@ -95,11 +96,15 @@ verify() {
   echo "    > \"$CC\" $FLAGS -o \"$OUT/glu32.dll\" frozen_stub/glu32_stub.c frozen_stub/glu32.def -lbcrypt -luser32"
   "$CC" $FLAGS -o "$OUT/glu32.dll" frozen_stub/glu32_stub.c frozen_stub/glu32.def -lbcrypt -luser32 || BUILD_FAILED=1
   echo "  coe5se_loader.dll"
-  echo "    > \"$CC\" $FLAGS -o \"$OUT/coe5se_loader.dll\" coe5se_loader.c -lbcrypt -luser32"
-  "$CC" $FLAGS -o "$OUT/coe5se_loader.dll" coe5se_loader.c -lbcrypt -luser32 || BUILD_FAILED=1
+  echo "    > \"$WINDRES\" -O coff -o \"$WORK/coe5se_loader.rc.o\" coe5se_loader.rc"
+  "$WINDRES" -O coff -o "$WORK/coe5se_loader.rc.o" coe5se_loader.rc || BUILD_FAILED=1
+  echo "    > \"$CC\" $FLAGS -o \"$OUT/coe5se_loader.dll\" coe5se_loader.c -lbcrypt -luser32 \"$WORK/coe5se_loader.rc.o\""
+  "$CC" $FLAGS -o "$OUT/coe5se_loader.dll" coe5se_loader.c -lbcrypt -luser32 "$WORK/coe5se_loader.rc.o" || BUILD_FAILED=1
   echo "  coe5se.c5plugin.dll"
-  echo "    > \"$CC\" $FLAGS -o \"$OUT/coe5se.c5plugin.dll\" coe5se_plugin.c fanpatch/fix_feeblemind.c fanpatch/fix_item_reset.c fanpatch/fix_token_sprites.c lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/lobject.c lua/lopcodes.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c -I. -Ilua -lbcrypt"
-  "$CC" $FLAGS -o "$OUT/coe5se.c5plugin.dll" coe5se_plugin.c fanpatch/fix_feeblemind.c fanpatch/fix_item_reset.c fanpatch/fix_token_sprites.c lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/lobject.c lua/lopcodes.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c -I. -Ilua -lbcrypt || BUILD_FAILED=1
+  echo "    > \"$WINDRES\" -O coff -o \"$WORK/coe5se.c5plugin.rc.o\" coe5se.c5plugin.rc"
+  "$WINDRES" -O coff -o "$WORK/coe5se.c5plugin.rc.o" coe5se.c5plugin.rc || BUILD_FAILED=1
+  echo "    > \"$CC\" $FLAGS -o \"$OUT/coe5se.c5plugin.dll\" coe5se_plugin.c fanpatch/fix_feeblemind.c fanpatch/fix_item_reset.c fanpatch/fix_token_sprites.c lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/lobject.c lua/lopcodes.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c -I. -Ilua -lbcrypt \"$WORK/coe5se.c5plugin.rc.o\""
+  "$CC" $FLAGS -o "$OUT/coe5se.c5plugin.dll" coe5se_plugin.c fanpatch/fix_feeblemind.c fanpatch/fix_item_reset.c fanpatch/fix_token_sprites.c lua/lapi.c lua/lauxlib.c lua/lbaselib.c lua/lcode.c lua/lcorolib.c lua/lctype.c lua/ldebug.c lua/ldo.c lua/ldump.c lua/lfunc.c lua/lgc.c lua/llex.c lua/lmathlib.c lua/lmem.c lua/lobject.c lua/lopcodes.c lua/lparser.c lua/lstate.c lua/lstring.c lua/lstrlib.c lua/ltable.c lua/ltablib.c lua/ltm.c lua/lundump.c lua/lutf8lib.c lua/lvm.c lua/lzio.c -I. -Ilua -lbcrypt "$WORK/coe5se.c5plugin.rc.o" || BUILD_FAILED=1
   echo "  coe5se.dylib"
   echo "    > \"$ZIG\" cc $MAC_FLAGS -install_name coe5se.dylib -o \"$OUT/coe5se.dylib\" frozen_stub/mac_stub.c -isystem frozen_stub/mac_sdk frozen_stub/mac_sdk/CoreFoundation.tbd"
   "$ZIG" cc $MAC_FLAGS -install_name coe5se.dylib -o "$OUT/coe5se.dylib" frozen_stub/mac_stub.c -isystem frozen_stub/mac_sdk frozen_stub/mac_sdk/CoreFoundation.tbd || BUILD_FAILED=1

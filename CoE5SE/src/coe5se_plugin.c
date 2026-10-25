@@ -177,6 +177,9 @@ static int flagOffLineHook(const char *line, size_t len, int mod, int level);
 static int weaponTraitLineHook(const char *line, size_t len, int level);
 static void weaponTraitsBeforePass(int level);
 static void ritualWordsAfterPass(int level);
+static void noExplodeLineHook(const char *line, size_t len, int mod, int level);
+static void noExplodeAfterPass(int level);
+static void noExplodeBeforePass(int level);
 static int declinedFlagOffLine(const char *line);
 static void finishSpellBlock(void);
 static unsigned int spellPassCount(void);
@@ -1015,7 +1018,13 @@ static int wrapFor(void *caller, const char *call, CallSite site, void *hook, vo
         else moduleFileName(m ? (const void *)m : caller, owner, sizeof owner);
         WrapPlace place = {.priority = priority, .layer = luaMod ? WRAP_LAYER_INNER : WRAP_LAYER_PLUGIN,
                            .gated = luaMod || !runsInNetworkGames(hook)};
-        insertWrap(site, hook, next, place, owner, &reason);
+#ifdef __APPLE__
+        // A step the game copied into its caller runs only Lua wraps, split at next() (lua_split_chain.h).
+        // @platform-split ai_steps_mac: Mac's copied AI steps take only script wraps (Windows calls them)
+        if (!luaMod && isSplitSite(site)) reason = "lua_only_site";
+        else
+#endif
+            insertWrap(site, hook, next, place, owner, &reason);
     }
     if (reason) {
         refuseApiCall(caller, call, reason, "site=%s priority=%d", SITES[site].name, priority);
@@ -1650,6 +1659,7 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "spells_changed.h"
 #include "code_check.h"
 #include "weapon_traits.h"
+#include "no_explode.h"
 #include "trace_filter.h"
 #include "seal_events.h"
 #include "data_area_max.h"
@@ -1658,7 +1668,9 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "lua_game_data.h"
 #include "lua_get_set.h"
 #include "lua_sites.h"
+#include "lua_split_chain.h"
 #include "lua_coe5_table.h"
+#include "portal_crossing.h"
 #include "lua_ai.h"
 #include "lua_units.h"
 #include "lua_data_files.h"
@@ -1770,6 +1782,7 @@ static void startCoe5se(const char *via) {
     monsterFlagWordsInit();
     ritualWordsInit();
     weaponTraitsInit();
+    noExplodeInit();
     nameListsInit();
     maxdataWordInit();
     sidecarInit();

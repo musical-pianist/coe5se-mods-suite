@@ -52,6 +52,7 @@ static int squareLibraryLevel(int x, int y) {
 
 // Whether square (x, y) has a fort, as the game's AI buy asks it for an aihold monster.
 #define FORT_PART_FORT 0x200
+#define FORT_PARTS_LEVEL_2 0x11800
 static int squareHasFort(int x, int y) {
     if (x >= G32(RVA_MAP_DEPTH) || y >= G32(RVA_MAP_H)) return 0;
     return (GAME_FN(unsigned (*)(int, int), RVA_SQUARE_FORT_PARTS)(x, y) & FORT_PART_FORT) != 0;
@@ -136,7 +137,6 @@ static int slotIncome(int slot, int resource) {
 
 // ---- What stays home: commanderGarrisonLeft --------------------------------------------------------
 // The strength that stays on a commander's square when it leaves with its army.
-#ifndef __APPLE__
 enum { GARRISON_GAME, GARRISON_JOINED, GARRISON_DROPPED };
 static unsigned char garrisonState[UNIT_TABLE_MAX];
 static unsigned long long garrisonUnitFlags[UNIT_TABLE_MAX];
@@ -147,8 +147,40 @@ static int garrisonLeader(int c, int u) {
     if (garrisonState[u] == GARRISON_DROPPED) return -1;
     return G32(RVA_UNIT_LEADER + (size_t)u * UNIT_SIZE);
 }
-static int garrisonUnitStrength(int u) { return GAME_FN(int (*)(int), RVA_UNIT_STRENGTH)(u); }
 static unsigned long long garrisonUnitFlagsOf(int u) { return GAME_FN(unsigned long long (*)(int), RVA_UNIT_FLAGS)(u); }
+
+// The game's small unit and square reads the gather makes, as the game works them out.
+static int garrisonUnitStrength(int u) {
+    if (u < 0 || u >= UNIT_TABLE_MAX) return 0;
+    return GAME_FN(int (*)(int, int, int), RVA_UNIT_STRENGTH_CORE)(u, -1, (short)G16(RVA_UNIT_HP + (size_t)u * UNIT_SIZE));
+}
+static int garrisonUnitX(int u) { return u < 0 || u >= UNIT_TABLE_MAX ? -1 : G32(RVA_UNIT_X + (size_t)u * UNIT_SIZE); }
+static int garrisonUnitY(int u) { return u < 0 || u >= UNIT_TABLE_MAX ? -1 : G32(RVA_UNIT_X + 4 + (size_t)u * UNIT_SIZE); }
+static int garrisonUnitHp(int u) { return u < 0 || u >= UNIT_TABLE_MAX ? 0 : (short)G16(RVA_UNIT_HP + (size_t)u * UNIT_SIZE); }
+static int garrisonUnitOwner(int u) {
+    if (u < 0 || u >= UNIT_TABLE_MAX || u > G32(RVA_UNIT_COUNT)) return -1;
+    return (short)G16(RVA_UNIT_PLAYER + (size_t)u * UNIT_SIZE);
+}
+static int garrisonCommanderOf(int u) {
+    int last = G32(RVA_LAST_COMMANDER);
+    for (int c = 0; c <= last && c < COMMANDER_TABLE_MAX; c++)
+        if (G32(RVA_COMMANDERS + (size_t)c * COMMANDER_SIZE) == u) return c;
+    return -1;
+}
+static int garrisonSameTeam(int a, int b) {
+    if (a < 0 || a >= PLAYER_SLOTS || b < 0 || b >= PLAYER_SLOTS) return 0;
+    if (a == b) return 1;
+    int teamA = (short)G16(RVA_SLOT_TEAM + (size_t)a * PLAYER_BLOCK_SIZE), teamB = (short)G16(RVA_SLOT_TEAM + (size_t)b * PLAYER_BLOCK_SIZE);
+    return teamA > 0 && teamA == teamB;
+}
+static int garrisonSquareTerrain(int x, int y) {
+    if (x < 0 || y < 0 || x >= G32(RVA_MAP_W) || y >= G32(RVA_MAP_H) || x >= MAP_COLUMNS_MAX || y >= MAP_COLUMN_SQUARES) return -1;
+    return (short)G16(RVA_SQUARE_RECORDS + ((size_t)x * MAP_COLUMN_SQUARES + (size_t)y) * SQUARE_SIZE + SQUARE_TERRAIN_TYPE);
+}
+static int garrisonFortLevel(int x, int y) {
+    if (!squareHasFort(x, y)) return 0;
+    return (GAME_FN(unsigned (*)(int, int), RVA_SQUARE_FORT_PARTS)(x, y) & FORT_PARTS_LEVEL_2) ? 2 : 1;
+}
 
 // RVA_COMMANDER_STRENGTH (flags 0) or RVA_COMMANDER_FLAGGED_STRENGTH, on the mirrored leaders.
 static int garrisonArmyStrength(int c, int last, unsigned long long flags) {
@@ -171,9 +203,9 @@ static int garrisonReformsHere(int player, int x, int y, int last) {
 
 // Whether unit u may join in the gather's pick-up passes.
 static int garrisonMayJoin(int c, int u, int player, int x, int y, int kind) {
-    if (GAME_FN(int (*)(int), RVA_GET_UNIT_X)(u) != x || GAME_FN(int (*)(int), RVA_GET_UNIT_Y)(u) != y) return 0;
-    if (GAME_FN(int (*)(int), RVA_GET_UNIT_HP)(u) <= 0 || garrisonLeader(c, u) != -1) return 0;
-    if (GAME_FN(int (*)(int), RVA_UNIT_OWNER)(u) != player || GAME_FN(int (*)(int), RVA_UNIT_COMMANDER_INDEX)(u) != -1) return 0;
+    if (garrisonUnitX(u) != x || garrisonUnitY(u) != y) return 0;
+    if (garrisonUnitHp(u) <= 0 || garrisonLeader(c, u) != -1) return 0;
+    if (garrisonUnitOwner(u) != player || garrisonCommanderOf(u) != -1) return 0;
     return GAME_FN(int (*)(int, int), RVA_AI_UNIT_JOIN_KIND)(c, u) >= kind;
 }
 
@@ -189,9 +221,10 @@ static int garrisonHas8(int u) { return (garrisonUnitFlagsOf(u) & 8) != 0; }
 
 // RVA_AI_GATHER_TROOPS for commander c, on the mirrored leaders.
 static void garrisonGather(int c, int unit, int player, int x, int y, int last) {
-    if (GAME_FN(int (*)(int), RVA_UNIT_NO_COMMANDER_FLAG)(unit) || GAME_FN(int (*)(int), RVA_COMMANDER_NO_GATHER)(c)) return;
+    if ((garrisonUnitFlagsOf(unit) >> MONSTER_FLAG_NO_COMMANDER) & 1) return;
+    if ((GAME_FN(unsigned long long (*)(int), RVA_UNIT_RESISTANCES)(unit) >> UNIT_RESISTANCE_NOLEADER) & 1) return;
     if (*(unsigned long long *)(gameBase + RVA_UNITS + (size_t)unit * UNIT_SIZE) & UNIT_AI_SAILOR) return;
-    int terrain = GAME_FN(int (*)(int, int), RVA_SQUARE_TERRAIN)(x, y);
+    int terrain = garrisonSquareTerrain(x, y);
     if (terrain < 0 || terrain >= TERRAIN_TABLE_MAX) return;
     int gold = G16(RVA_TERRAIN_TABLE + (size_t)terrain * TERRAIN_SIZE + TERRAIN_GOLD);
     int citadel = GAME_FN(int (*)(int, int, int), RVA_SQUARE_IS_CITADEL_FOR)(player, x, y) != 0;
@@ -218,14 +251,14 @@ static void garrisonGather(int c, int unit, int player, int x, int y, int last) 
         int t = (int)((unsigned)army * (unsigned)keep) / 100;
         for (int start = 0; start <= 1; start++)
             for (int u = start; u <= last && t > own; u += 2) {
-                if (garrisonLeader(c, u) != c || GAME_FN(int (*)(int), RVA_GET_UNIT_HP)(u) <= 0) continue;
+                if (garrisonLeader(c, u) != c || garrisonUnitHp(u) <= 0) continue;
                 int strength = garrisonUnitStrength(u);
                 if (t - strength < own || !GAME_FN(int (*)(int), RVA_AI_UNIT_MAY_GUARD)(u)) continue;
                 garrisonState[u] = GARRISON_DROPPED;
                 t -= strength;
             }
     }
-    if (GAME_FN(int (*)(int, int), RVA_SQUARE_HAS_FORT)(x, y)) garrisonDropFollowers(c, last, garrisonHolds);
+    if (squareHasFort(x, y)) garrisonDropFollowers(c, last, garrisonHolds);
     if (gold <= 1 && !citadel) return;
     unsigned long long f = garrisonUnitFlagsOf(unit);
     if (f & 0x10) {
@@ -254,19 +287,13 @@ static int garrisonLeaves(int c, int cUnit, int u) {
     }
     return 0;
 }
-#endif
 
 // The strength that stays on commander c's square when c leaves, or -1.
 static int commanderGarrisonLeft(int c) {
-#ifdef __APPLE__
-    (void)c;
-    return -1;
-#else
     int unit = G32(RVA_COMMANDERS + (size_t)c * COMMANDER_SIZE);
     if (unit < 0 || unit >= UNIT_TABLE_MAX || G16(RVA_UNIT_HP + (size_t)unit * UNIT_SIZE) <= 0) return -1;
-    int player = GAME_FN(int (*)(int), RVA_UNIT_OWNER)(unit);
-    int x = -1, y = -1;
-    GAME_FN(void (*)(int, int *, int *), RVA_UNIT_SQUARE)(unit, &x, &y);
+    int player = garrisonUnitOwner(unit);
+    int x = garrisonUnitX(unit), y = garrisonUnitY(unit);
     if (player < 0 || player >= PLAYER_SLOTS || x < 0 || y < 0) return -1;
     int last = G32(RVA_UNIT_COUNT);
     if (last >= UNIT_TABLE_MAX) last = UNIT_TABLE_MAX - 1;
@@ -275,16 +302,15 @@ static int commanderGarrisonLeft(int c) {
     long long sum = 0;
     int count = 0, ranged = 0;
     for (int u = 0; u <= last; u++) {
-        if (!GAME_FN(int (*)(int, int, int), RVA_UNIT_ALIVE_AT)(u, x, y)) continue;
-        if (!GAME_FN(int (*)(int, int), RVA_SAME_TEAM)(player, GAME_FN(int (*)(int), RVA_UNIT_OWNER)(u))) continue;
+        if (!unitAliveAt(u, x, y)) continue;
+        if (!garrisonSameTeam(player, garrisonUnitOwner(u))) continue;
         if (garrisonLeaves(c, unit, u)) continue;
-        sum += GAME_FN(int (*)(int, int), RVA_UNIT_STRENGTH_FOR)(player, u);
+        sum += unitStrengthFor(player, u);
         count++;
-        ranged += GAME_FN(int (*)(int, int), RVA_UNIT_HAS_RANGED)(u, 3) != 0;
+        ranged += GAME_FN(int (*)(int, int, int), RVA_UNIT_HAS_RANGED)(u, 3, 1) != 0;
     }
-    if (ranged > count / 10) sum = sum * (100 + 60 * GAME_FN(int (*)(int, int), RVA_SQUARE_FORT_LEVEL)(x, y)) / 100;
+    if (ranged > count / 10) sum = sum * (100 + 60 * garrisonFortLevel(x, y)) / 100;
     return sum < INT_MAX ? (int)sum : INT_MAX;
-#endif
 }
 
 // A player's remembered strength of square (x, y).
@@ -595,25 +621,25 @@ static const char *fortPartWord(int bit) {
 // The game's own name for Voice of El ceremony `ceremony`.
 static unsigned int ceremonyNameRva(int ceremony) {
     switch (ceremony) {
-    case CEREMONY_CONVERT: return WINDOWS_ONLY_RVA(RVA_STR_CEREMONY_CONVERT);
-    case CEREMONY_BREAK_SEAL: return WINDOWS_ONLY_RVA(RVA_STR_CEREMONY_BREAK_SEAL);
-    case CEREMONY_BOLSTER_DEVOTION: return WINDOWS_ONLY_RVA(RVA_STR_CEREMONY_BOLSTER);
-    case CEREMONY_START_CRUSADE: return WINDOWS_ONLY_RVA(RVA_STR_CEREMONY_CRUSADE);
-    case CEREMONY_CALL_INQUISITION: return WINDOWS_ONLY_RVA(RVA_STR_CEREMONY_INQUISITION);
+    case CEREMONY_CONVERT: return RVA_STR_CEREMONY_CONVERT;
+    case CEREMONY_BREAK_SEAL: return RVA_STR_CEREMONY_BREAK_SEAL;
+    case CEREMONY_BOLSTER_DEVOTION: return RVA_STR_CEREMONY_BOLSTER;
+    case CEREMONY_START_CRUSADE: return RVA_STR_CEREMONY_CRUSADE;
+    case CEREMONY_CALL_INQUISITION: return RVA_STR_CEREMONY_INQUISITION;
     case CEREMONY_MASTERY_ARCH_BISHOP:
     case CEREMONY_MASTERY_CARDINAL:
-    case CEREMONY_MASTERY_PONTIFF: return WINDOWS_ONLY_RVA(RVA_STR_CEREMONY_MASTERY);
-    case CEREMONY_INCREASE_FAVOR: return WINDOWS_ONLY_RVA(RVA_STR_CEREMONY_FAVOR);
+    case CEREMONY_MASTERY_PONTIFF: return RVA_STR_CEREMONY_MASTERY;
+    case CEREMONY_INCREASE_FAVOR: return RVA_STR_CEREMONY_FAVOR;
     default: return 0;
     }
 }
 
-// @platform-split ceremony_values: Mac keeps the one-table offsets, which only the unit tests reach
 // Where ceremony `ceremony`'s cost is, as an offset from the row's address.
-#ifdef __APPLE__
-#define CEREMONY_COST_ENTRY(name) CEREMONY_COST_##name##_AT
-#else
 #define CEREMONY_COST_ENTRY(name) (int)RVA_CEREMONY_COST_##name
+#ifdef __APPLE__
+#define CEREMONY_MASTERY_ENTRY(name) (int)RVA_CEREMONY_COST_##name##_SET
+#else
+#define CEREMONY_MASTERY_ENTRY(name) (int)RVA_CEREMONY_COST_##name
 #endif
 static int ceremonyCostAt(int ceremony, int *also) {
     *also = -1;
@@ -623,9 +649,9 @@ static int ceremonyCostAt(int ceremony, int *also) {
     case CEREMONY_BOLSTER_DEVOTION: *also = CEREMONY_COST_ENTRY(BOLSTER_BASE); return CEREMONY_COST_ENTRY(BOLSTER_STEP);
     case CEREMONY_START_CRUSADE: return CEREMONY_COST_ENTRY(CRUSADE);
     case CEREMONY_CALL_INQUISITION: return CEREMONY_COST_ENTRY(INQUISITION);
-    case CEREMONY_MASTERY_ARCH_BISHOP: return CEREMONY_COST_ENTRY(ARCH_BISHOP);
-    case CEREMONY_MASTERY_CARDINAL: return CEREMONY_COST_ENTRY(CARDINAL);
-    case CEREMONY_MASTERY_PONTIFF: return CEREMONY_COST_ENTRY(PONTIFF);
+    case CEREMONY_MASTERY_ARCH_BISHOP: return CEREMONY_MASTERY_ENTRY(ARCH_BISHOP);
+    case CEREMONY_MASTERY_CARDINAL: return CEREMONY_MASTERY_ENTRY(CARDINAL);
+    case CEREMONY_MASTERY_PONTIFF: return CEREMONY_MASTERY_ENTRY(PONTIFF);
     case CEREMONY_INCREASE_FAVOR: return CEREMONY_COST_ENTRY(FAVOR_STEP);
     default: return -1;
     }
@@ -851,6 +877,21 @@ static int lGet(lua_State *L) {
     case T_SQUARE_HAS_FORT: lua_pushboolean(L, squareHasFort((int)lua_tointeger(L, 2), (int)lua_tointeger(L, 3))); break;
     case T_RECORD_WORD: pushRecordWord(L, v->name, v->size, p, luaL_checkstring(L, arg)); break;
     case T_AI_ATTACK_MARGIN: lua_pushinteger(L, AI_ATTACK_MARGIN); break;
+    case T_SLOT_ABILITY:
+        lua_pushinteger(L, GAME_FN(int (*)(int, int, int), RVA_PLAYER_ABILITY)((int)lua_tointeger(L, 2), (int)lua_tointeger(L, 3), v->size));
+        break;
+    case T_UNIT_STATE_FLAGS: {
+        unsigned long long flags = 0;
+        if (!unitStateFlagsNow((int)lua_tointeger(L, 2), &flags)) lua_pushnil(L);
+        else lua_pushinteger(L, (lua_Integer)flags);
+        break;
+    }
+    case T_UNIT_RETURNS: {
+        int returns = unitReturnsNow((int)lua_tointeger(L, 2));
+        if (returns < 0) lua_pushnil(L);
+        else lua_pushboolean(L, returns);
+        break;
+    }
     case T_I16: lua_pushinteger(L, *(short *)p); break;
     case T_FLAG_U8: lua_pushboolean(L, *p != 0); break;
     case T_FLAG_POSITIVE: lua_pushboolean(L, *(int *)p > 0); break;
