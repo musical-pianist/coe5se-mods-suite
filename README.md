@@ -1,7 +1,6 @@
 # Conquest of Elysium 5 Script Extender (CoE5SE)
 
 [![Latest release](https://img.shields.io/github/v/release/musical-pianist/coe5se_mods_suite?label=latest)](https://github.com/musical-pianist/coe5se_mods_suite/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/musical-pianist/coe5se_mods_suite/total)](https://github.com/musical-pianist/coe5se_mods_suite/releases)
 [![Docs](https://img.shields.io/badge/docs-coe5se--docs-blue)](https://musical-pianist.github.io/coe5se-docs/)
 
 CoE5SE is the script extender for Conquest of Elysium 5. It raises the game's limits, runs Lua scripts, and adds Mod Settings to the main menu, so mods can do what the game alone can't.
