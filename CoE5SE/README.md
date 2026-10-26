@@ -8,7 +8,7 @@ CoE5SE lets modders write Lua scripts for Conquest of Elysium 5 and adds Mod Set
 
 With it, a mod can add buttons and screens, put lines in the Game Menu, read keys, remember a setup between games, and go past 3000 rituals.
 
-Built for game version 5.41. Still on 5.40? Download "CoE5SE for CoE5 5.40" from the Files tab.
+Built for game version 5.42. Still on 5.40? Download "CoE5SE for CoE5 5.40" from the Files tab.
 
 ## Functionality Out-of-the-Box
 

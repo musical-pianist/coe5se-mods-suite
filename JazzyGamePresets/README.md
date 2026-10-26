@@ -11,7 +11,7 @@ Save your whole new-game setup (map, society, every player slot, every AI's diff
 
 ### Presets
 
-- Hit Ok on Setup Participants and your setup auto-saves as *Last game*. Instant rematch.
+- Hit Ok on Setup Participants and your setup auto-saves as *Previous Game Settings*. Instant rematch.
 - Want to keep a setup? Click *Save as preset* above Ok and give it a name (up to 32 characters).
 - Saving with a name you already used overwrites that preset. No warning.
 
@@ -20,8 +20,7 @@ Save your whole new-game setup (map, society, every player slot, every AI's diff
 ![](https://staticdelivery.nexusmods.com/mods/10486/images/3/3-1791869147-951036108.png)
 
 - Start New Game now asks *Load a preset?* Pick one, hit Ok, and both setup screens fill in. Change anything you like before you start.
-- *No preset* plays like vanilla.
-- Delete takes two clicks, so you can't nuke a preset by accident. *Last game* can't be deleted.
+- Delete takes two clicks, so you can't nuke a preset by accident. *Previous Game Settings* can't be deleted.
 - The list shows up to 20 presets.
 
 ### What's in a Preset
@@ -41,7 +40,7 @@ Presets live in **%APPDATA%\coe5\coe5se_data\JazzyGamePresets\jazzy_campaign_pre
 - An AI left on Random gets one of the ticked classes, picked by the game's own rules. An unticked class is never picked for an AI.
 - With *unique random players* on and more AIs than ticked classes, the extra AIs share ticked classes.
 - A class you pick for a slot yourself always goes in, and your own Random slot still rolls from every class.
-- The list saves with the preset and with *Last game*. A class from a mod you turned off is remembered for when the mod comes back.
+- The list saves with the preset and with *Previous Game Settings*. A class from a mod you turned off is remembered for when the mod comes back.
 
 ### Extended Game Settings
 
