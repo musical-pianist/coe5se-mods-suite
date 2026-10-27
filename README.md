@@ -57,16 +57,19 @@ Write Lua scripts that read units, battles, players, classes, the world, rituals
 
 Go past the game's limits, in single player and network games alike:
 
+<!-- limits start -->
 | Mods can add | Without CoE5SE | With CoE5SE |
 | --- | --- | --- |
 | Rituals | 2,250 | 10,000 |
 | Spells | none | 3,000 |
 | Magic paths | none | 58 |
 | Custom planes<br>(like the Chaos Wastes) | none | 8 |
+| Factions | none | 16 |
 | Weapons | 3,799 | 5,799 |
 | Monsters | 3,999 | 4,999 |
 | Magic items | 699 | 1,699 |
 | Classes | 169 | 219 |
+<!-- limits end -->
 
 Use new commands in your .c5se:
 
