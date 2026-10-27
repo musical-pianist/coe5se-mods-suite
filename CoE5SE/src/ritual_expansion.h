@@ -31,7 +31,7 @@ _Static_assert(RITUAL_COUNTED_SLOTS * 2 + 0x38 <= PLAYER_BLOCK_SIZE, "each playe
 #define PLAYER_BLOCKS_RVA         RVA_SLOT_NAME
 #define CAST_COUNTS_OFFSET        0x38
 _Static_assert(RVA_CAST_COUNTS - PLAYER_BLOCKS_RVA == CAST_COUNTS_OFFSET, "the cast counts sit at + 0x38 in each player block");
-#define PLAYER_BLOCKS_SIZE        (PLAYER_SLOTS * PLAYER_BLOCK_SIZE)
+#define PLAYER_BLOCKS_SIZE        (PLAYER_SLOTS_MOVED * PLAYER_BLOCK_SIZE)
 #define CAST_COUNTS_BYTES         PLAYER_BLOCKS_SIZE
 
 // The block of extra cast counts after a save or turn file's last marker.
@@ -143,7 +143,8 @@ static int turnFilePlayer = -1;
 // Returns the moved cast counts for a pointer to a player's first count in the game's own.
 static void *movedCastCounts(void *counts, int *player) {
     ptrdiff_t offset = (unsigned char *)counts - (gameBase + RVA_CAST_COUNTS);
-    if (offset < 0 || offset % PLAYER_BLOCK_SIZE || offset / PLAYER_BLOCK_SIZE >= PLAYER_SLOTS) {
+    if (offset < 0 || offset >= (ptrdiff_t)PLAYER_SLOTS * PLAYER_BLOCK_SIZE) offset = (unsigned char *)counts - playerTableAddress(RVA_CAST_COUNTS);
+    if (offset < 0 || offset % PLAYER_BLOCK_SIZE || offset / PLAYER_BLOCK_SIZE >= PLAYER_SLOTS_MOVED) {
         writeLog("ritual_cast_counts_unexpected", "pointer=%p", counts);
         return counts;
     }
@@ -177,7 +178,7 @@ static size_t readCastCounts(void *counts, size_t size, size_t count, void *file
 static void saveTurnPlayerBlock(int player, void *file) {
     turnFilePlayer = player;
     if (player >= 0 && player < PLAYER_SLOTS)
-        memcpy(gameBase + RVA_CAST_COUNTS + (size_t)player * PLAYER_BLOCK_SIZE, castCounts + (size_t)player * PLAYER_BLOCK_SIZE,
+        memcpy(playerTableAddress(RVA_CAST_COUNTS) + (size_t)player * PLAYER_BLOCK_SIZE, castCounts + (size_t)player * PLAYER_BLOCK_SIZE,
                VANILLA_RITUAL_SLOTS * sizeof(short));
     GAME_FN(SavePlayerBlockFn, RVA_SAVE_PLAYER_BLOCK)(player, file);
 }
@@ -238,9 +239,10 @@ static int readExtraCastCounts(void *file, int onlyPlayer, const char *kind) {
 
 // The game's clears and moves of the player blocks.
 static void mirrorPlayerBlocks(const unsigned char *dst, const unsigned char *src, size_t size, int value) {
-    const unsigned char *blocks = gameBase + PLAYER_BLOCKS_RVA;
-    if (dst < blocks || dst + size > blocks + PLAYER_BLOCKS_SIZE) return;
-    if (src && (src < blocks || src + size > blocks + PLAYER_BLOCKS_SIZE)) {
+    const unsigned char *blocks = playerTableAddress(PLAYER_BLOCKS_RVA);
+    size_t span = (size_t)playerSlotCount() * PLAYER_BLOCK_SIZE;
+    if (dst < blocks || dst + size > blocks + span) return;
+    if (src && (src < blocks || src + size > blocks + span)) {
         writeLog("ritual_cast_counts_unexpected", "copy=move offset=%zu size=%zu", (size_t)(dst - blocks), size);
         return;
     }
@@ -558,6 +560,7 @@ static void protectOldRitualTable(unsigned char *oldTable) {
 }
 
 // Moves the table and turns every part of the expansion on, or changes nothing.
+static void adjustSaveCastCountRead(void);
 static int installRitualExpansion(void) {
     if (!gameCodeMatches) {
         writeLog("ritual_expansion_off", "reason=game_code_differs queued=0");
@@ -609,6 +612,7 @@ static int installRitualExpansion(void) {
     }
     closeGameCode();
     ritualExpansionActive = 1;
+    adjustSaveCastCountRead();
     writeLog("ritual_table_moved", "from=%p to=%p slots=%d mod_slots=%d-%d cast_counts=%p", (void *)oldTable,
              (void *)ritualTable, RITUAL_SLOT_CAP, FIRST_MOD_RITUAL_SLOT, LAST_MOD_RITUAL_SLOT, (void *)castCounts);
     protectOldRitualTable(oldTable);
@@ -760,21 +764,21 @@ static uint32_t branchWord(uint32_t op, const unsigned char *at, const unsigned 
 }
 
 // Writes `words` into the header padding and queues a `b` to it from the named site at `rva`.
-static int queueBranchToCode(unsigned int rva, uint32_t *words, int count, int back, const char *name) {
-    if (!namedSite(rva)) return 0;
+static unsigned char *queueBranchToCode(unsigned int rva, uint32_t *words, int count, int back, const char *name) {
+    if (!namedSite(rva)) return NULL;
     size_t size = ((size_t)count * 4 + 15) & ~(size_t)15;
     unsigned char *code = takePadding(size);
     if (!code) {
         writeLog("ritual_expansion_no_padding", "name=%s", name);
-        return 0;
+        return NULL;
     }
     if (back >= 0) words[back] = branchWord(0x14000000u, code + 4 * back, gameBase + rva + 4);
     if (!writeGameCode(code, words, (size_t)count * 4)) {
         writeLog("ritual_expansion_write_failed", "name=%s", name);
-        return 0;
+        return NULL;
     }
     queueWord(gameBase + rva, branchWord(0x14000000u, gameBase + rva, code));
-    return 1;
+    return code;
 }
 
 // The code a compare branches to when its value doesn't fit the 12-bit field.
@@ -818,7 +822,7 @@ static int queueRitualMacBound(const RitualMacBound *b) {
     }
     uint32_t words[4];
     ritualCompareStubWords(gameWord(b->rva), b->value, (unsigned int)b->reg, words);
-    return queueBranchToCode(b->rva, words, 4, 2, b->name);
+    return queueBranchToCode(b->rva, words, 4, 2, b->name) != NULL;
 }
 
 // Checks that the `bl` at `callRva` calls `targetRva`, and queues its redirect.
@@ -858,6 +862,10 @@ static unsigned char *allocAfterImage(size_t size) {
     }
     return NULL;
 }
+
+// The three stubs that add the distance to the expansion's cast counts, each with that distance as its literal at +16.
+#define CAST_DELTA_CODES 3
+static unsigned char *castDeltaCode[CAST_DELTA_CODES];
 
 #define ADRP_PAGE_SHIFT 12
 #define ADRP_PAGE_MASK  ((1u << ADRP_PAGE_SHIFT) - 1)
@@ -904,13 +912,14 @@ static int queueRitualWrites(unsigned char *table, unsigned char *blocks) {
     uint32_t executeCode[6] = {0x5800008bu, 0x8b0b014au, 0, 0xd503201fu};
     long long executeDelta = castDelta + CAST_COUNTS_OFFSET;
     memcpy(&executeCode[4], &executeDelta, 8);
-    ok &= queueBranchToCode(RVA_EXECUTE_RITUAL_CAST_COUNTS, executeCode, 6, 2, "execute_ritual_cast_counts");
+    castDeltaCode[0] = queueBranchToCode(RVA_EXECUTE_RITUAL_CAST_COUNTS, executeCode, 6, 2, "execute_ritual_cast_counts");
     uint32_t saveCode[6] = {0x58000088u, 0x8b0802e8u, 0x78747908u, 0};
     memcpy(&saveCode[4], &castDelta, 8);
-    ok &= queueBranchToCode(RVA_SAVE_GAME_CAST_COUNT_READ, saveCode, 6, 3, "save_game_cast_counts");
+    castDeltaCode[1] = queueBranchToCode(RVA_SAVE_GAME_CAST_COUNT_READ, saveCode, 6, 3, "save_game_cast_counts");
     uint32_t turnCode[6] = {0x58000088u, 0x8b0802c8u, 0x78797908u, 0};
     memcpy(&turnCode[4], &castDelta, 8);
-    ok &= queueBranchToCode(RVA_SAVE_2H_CAST_COUNT_READ, turnCode, 6, 3, "save_2h_cast_counts");
+    castDeltaCode[2] = queueBranchToCode(RVA_SAVE_2H_CAST_COUNT_READ, turnCode, 6, 3, "save_2h_cast_counts");
+    for (int i = 0; i < CAST_DELTA_CODES; i++) ok &= castDeltaCode[i] != NULL;
 
     ok &= queueCall(RVA_LOAD_2H_CAST_COUNTS_CALL, RVA_FREAD, (void *)readCastCounts, "load_2h_cast_counts");
     ok &= queueCall(RVA_LOAD_GAME_CAST_COUNTS_CALL, RVA_FREAD, (void *)readCastCounts, "load_game_cast_counts");
@@ -945,6 +954,7 @@ static void protectOldRitualTable(unsigned char *oldTable) {
 }
 
 // Moves the table and turns every part of the expansion on, or changes nothing.
+static void adjustSaveCastCountRead(void);
 static int installRitualExpansion(void) {
     if (!gameCodeMatches) {
         writeLog("ritual_expansion_off", "reason=game_code_differs queued=0");
@@ -987,6 +997,7 @@ static int installRitualExpansion(void) {
         return 0;
     }
     ritualExpansionActive = 1;
+    adjustSaveCastCountRead();
     writeLog("ritual_table_moved", "from=%p to=%p slots=%d mod_slots=%d-%d cast_counts=%p", (void *)oldTable,
              (void *)ritualTable, RITUAL_SLOT_CAP, FIRST_MOD_RITUAL_SLOT, LAST_MOD_RITUAL_SLOT, (void *)castCounts);
     protectOldRitualTable(oldTable);

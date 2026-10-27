@@ -44,6 +44,7 @@ static int installPlaneTintHooks(void);
 static void buildCustomPlane(CustomPlane *p);
 static void addCustomPlanesSpecialSquares(void);
 static void populateCustomPlanes(void);
+static void populateFactions(void);
 static void loadCustomPlaneFile(const CustomPlane *p);
 static void resolvePlaneNames(int planesKnown);
 static int vanillaPlaneNamed(const char *name);
@@ -274,12 +275,14 @@ static void specialTerrainHook(int noPlanes) {
 static void populateAfterVoidHook(void) {
     GAME_FN(void (*)(void), RVA_POPULATE_VOID)();
     populateCustomPlanes();
+    populateFactions();
 }
 #else
 #define POPULATE_AFTER_VOID_TARGET RVA_SPELL_BUG_CHECK
 static void populateAfterVoidHook(const char *text, int level) {
     GAME_FN(void (*)(const char *, int), RVA_SPELL_BUG_CHECK)(text, level);
     populateCustomPlanes();
+    populateFactions();
 }
 #endif
 
@@ -333,7 +336,7 @@ static void addCustomPlanesChunk(SaveList *list) {
 }
 
 // Whether the save being loaded may pass the magic check.
-static int loadedSavePlanesAccepted;
+static int loadedSavePlanesAccepted, loadedSavePlanesPresent;
 
 // The accepted save's planes by name and index.
 static struct {
@@ -366,7 +369,7 @@ static void addMissingPlaneName(char *list, size_t size, const char *name, const
 
 // Reads PLNS from the end of the save at `path`, when it has one, and decides whether it loads.
 static void readLoadedSavePlanes(const char *path) {
-    loadedSavePlanesAccepted = 0;
+    loadedSavePlanesAccepted = loadedSavePlanesPresent = 0;
     loadedSavePlanes.pending = 0;
     FILE *f = fopen(path, "rb");
     if (!f) return;
@@ -392,6 +395,7 @@ static void readLoadedSavePlanes(const char *path) {
         if (strcmp(result, "none")) writeLog("save_planes_read", "result=%s", result);
         return;
     }
+    loadedSavePlanesPresent = 1;
     SaveCursor c = {payload, payload + payloadSize, 0};
     int version = saveCursorInt(&c), count = saveCursorInt(&c), missing = 0, waiting = 0;
     char missingNames[512] = "";
@@ -472,12 +476,23 @@ static void applyLoadedSavePlanes(int level) {
 // Whether this world holds a mod's plane, so its save takes SAVE_MAGIC_CUSTOM_PLANES.
 static int customPlanesInWorld(void) { return planeTableMoved && G32(RVA_LAST_PLANE) > PLANE_ELYSIUM2; }
 
+// Whether this world holds what a game without CoE5SE can't read: a mod's plane or a mod's faction.
+static int factionsInWorld(void);
+static int saveNeedsCoe5se(void) { return customPlanesInWorld() || factionsInWorld(); }
+
+// Whether the save being loaded may pass the magic check: what its PLNS and FCTN name is here, and it has one.
+static int loadedSaveFactionsDecision(void);
+static int loadedSaveMagicAccepted(void) {
+    int factions = loadedSaveFactionsDecision();
+    return (loadedSavePlanesPresent || factions >= 0) && (!loadedSavePlanesPresent || loadedSavePlanesAccepted) && factions != 0;
+}
+
 // save_game's fwrite of the magic.
 typedef size_t (*GameFileFn)(void *data, size_t size, size_t count, void *file);
 static size_t writeSaveMagicHook(void *data, size_t size, size_t count, void *file) {
     int magic;
     memcpy(&magic, data, 4);
-    if (customPlanesInWorld() && magic == SAVE_MAGIC_GAME) {
+    if (saveNeedsCoe5se() && magic == SAVE_MAGIC_GAME) {
         magic = SAVE_MAGIC_CUSTOM_PLANES;
         return GAME_FN(GameFileFn, RVA_FWRITE)(&magic, size, count, file);
     }
@@ -489,7 +504,7 @@ static size_t readSaveMagicHook(void *data, size_t size, size_t count, void *fil
     size_t read = GAME_FN(GameFileFn, RVA_FREAD)(data, size, count, file);
     int magic, game = SAVE_MAGIC_GAME;
     memcpy(&magic, data, 4);
-    if (magic == SAVE_MAGIC_CUSTOM_PLANES && loadedSavePlanesAccepted) memcpy(data, &game, 4);
+    if (magic == SAVE_MAGIC_CUSTOM_PLANES && loadedSaveMagicAccepted()) memcpy(data, &game, 4);
     return read;
 }
 
@@ -506,7 +521,7 @@ static size_t countSaveMagicHook(void *data, size_t size, size_t count, void *fi
 // The server screen's copy of save_game writes the magic with write_int(0x6eb65, file).
 typedef int (*GameWriteIntFn)(int value, void *file);
 static int writeServerSaveMagicHook(int value, void *file) {
-    if (customPlanesInWorld() && value == SAVE_MAGIC_GAME) value = SAVE_MAGIC_CUSTOM_PLANES;
+    if (saveNeedsCoe5se() && value == SAVE_MAGIC_GAME) value = SAVE_MAGIC_CUSTOM_PLANES;
     return GAME_FN(GameWriteIntFn, RVA_FILE_WRITE_INT)(value, file);
 }
 
@@ -541,6 +556,33 @@ static int pointCustomPlaneCall(unsigned int callRva, unsigned int targetRva, vo
 }
 #endif
 
+// Points the save and load's magic at the hooks above, once; 1 when all are in.
+static int saveMagicHooksState;
+static int installSaveMagicHooks(void) {
+    static const struct { unsigned int callRva, targetRva; void *hook; const char *name; } CALLS[] = {
+        {RVA_SAVE_GAME_MAGIC_WRITE,       RVA_FWRITE,              (void *)writeSaveMagicHook,    "save_game_magic"},
+        {RVA_LOAD_GAME_MAGIC_READ,        RVA_FREAD,               (void *)readSaveMagicHook,     "load_game_magic"},
+#ifndef __APPLE__
+        {RVA_SERVER_SAVE_MAGIC_WRITE,     RVA_FILE_WRITE_INT,      (void *)writeServerSaveMagicHook, "server_save_magic"},
+#endif
+    };
+    if (saveMagicHooksState) return saveMagicHooksState > 0;
+    int ok = 0, wanted = (int)(sizeof CALLS / sizeof CALLS[0]);
+    for (int i = 0; i < wanted; i++) ok += pointCustomPlaneCall(CALLS[i].callRva, CALLS[i].targetRva, CALLS[i].hook, CALLS[i].name);
+    saveMagicHooksState = ok == wanted ? 1 : -1;
+    writeLog("save_magic_hooks_installed", "ok=%d of %d", ok, wanted);
+    return saveMagicHooksState > 0;
+}
+
+// Points new_world's last population call at populateAfterVoidHook, once; 1 when it is in.
+static int populateAfterVoidState;
+static int installPopulateAfterVoidHook(void) {
+    if (!populateAfterVoidState)
+        populateAfterVoidState = pointCustomPlaneCall(RVA_NEW_WORLD_POP_AFTER_VOID_CALL, POPULATE_AFTER_VOID_TARGET, (void *)populateAfterVoidHook,
+                                                      "new_world_populate_custom") ? 1 : -1;
+    return populateAfterVoidState > 0;
+}
+
 // Installs the world build, setplane and save hooks, at the first plane a mod declares.
 static int installCustomPlaneHooks(void) {
     static const struct { unsigned int callRva, targetRva; void *hook; const char *name; } CALLS[] = {
@@ -549,15 +591,11 @@ static int installCustomPlaneHooks(void) {
         {RVA_RITUAL_SETPLANE_RANDOM_CALL, RVA_RANDOM,              (void *)setplaneRandomHook,    "setplane_random"},
         {RVA_NEW_GAME_SPECIAL_TERRAIN_CALL, RVA_PLANE_SPECIAL_TERRAIN, (void *)specialTerrainHook, "new_game_special_terrain"},
         {RVA_NEW_WORLD_SPECIAL_TERRAIN_CALL, RVA_PLANE_SPECIAL_TERRAIN, (void *)specialTerrainHook, "new_world_special_terrain"},
-        {RVA_NEW_WORLD_POP_AFTER_VOID_CALL, POPULATE_AFTER_VOID_TARGET, (void *)populateAfterVoidHook, "new_world_populate_custom"},
-        {RVA_SAVE_GAME_MAGIC_WRITE,       RVA_FWRITE,              (void *)writeSaveMagicHook,    "save_game_magic"},
-        {RVA_LOAD_GAME_MAGIC_READ,        RVA_FREAD,               (void *)readSaveMagicHook,     "load_game_magic"},
-#ifndef __APPLE__
-        {RVA_SERVER_SAVE_MAGIC_WRITE,     RVA_FILE_WRITE_INT,      (void *)writeServerSaveMagicHook, "server_save_magic"},
-#endif
     };
     int ok = 0, wanted = (int)(sizeof CALLS / sizeof CALLS[0]), viewWanted = 0;
     for (int i = 0; i < wanted; i++) ok += pointCustomPlaneCall(CALLS[i].callRva, CALLS[i].targetRva, CALLS[i].hook, CALLS[i].name);
+    ok += installPopulateAfterVoidHook(), wanted++;
+    ok += installSaveMagicHooks(), wanted++;
     ok += installPlaneShapeHooks(), wanted++;
     int viewOk = installCustomPlaneViewHooks(&viewWanted);
     installPlaneGroundHooks();

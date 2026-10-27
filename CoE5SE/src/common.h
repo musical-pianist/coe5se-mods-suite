@@ -348,6 +348,20 @@ static UNUSED int makePagesReadWrite(void *address, size_t size) {
 }
 #endif
 
+// Builds redirectCall's stub, to run at `stub`, in `code` (0x20 bytes); returns its length.
+static UNUSED size_t buildRedirectCallStub(unsigned char *code, const unsigned char *stub, const void *hook, const uintptr_t *rspSlot) {
+    unsigned char *p = code;
+    if (rspSlot) {
+        int disp = (int)((const unsigned char *)rspSlot - (stub + 7));
+        p[0] = 0x48; p[1] = 0x89; p[2] = 0x25; memcpy(p + 3, &disp, 4);
+        p += 7;
+    }
+    p[0] = 0xff; p[1] = 0x25; memset(p + 2, 0, 4);
+    memcpy(p + 6, &hook, 8);
+    p += 14;
+    return (size_t)(p - code);
+}
+
 #if !defined(__aarch64__) && defined(COE5SE_RAW_ADDRESSES)
 // Allocates `bytes` of executable memory within 2 GB of `target`.
 static UNUSED unsigned char *allocNearBytes(unsigned char *target, size_t bytes) {
@@ -366,27 +380,20 @@ static UNUSED unsigned char *allocNearBytes(unsigned char *target, size_t bytes)
 // One page: allocNearBytes(target, 0x1000).
 static UNUSED unsigned char *allocNear(unsigned char *target) { return allocNearBytes(target, 0x1000); }
 
-// Points the instruction "call <targetRva>" at `siteRva` to `hook`, through a 0x20-byte stub at `stub`.
+// Points the call or tail jump to `targetRva` at `siteRva` to `hook`, through a 0x20-byte stub at `stub`.
 static UNUSED int redirectCall(unsigned int siteRva, unsigned int targetRva, unsigned char *stub, void *hook,
                                 const char *label, uintptr_t *rspSlot) {
     unsigned char *site = gameBase + siteRva;
     int rel;
     memcpy(&rel, site + 1, 4);
-    if (site[0] != 0xe8 || site + 5 + rel != gameBase + targetRva) {
+    if ((site[0] != 0xe8 && site[0] != 0xe9) || site + 5 + rel != gameBase + targetRva) {
         writeLog("hook_skipped", "site=%s reason=not_the_expected_call address=%p", label, site);
         return 0;
     }
-    unsigned char code[0x20], *p = code;
-    if (rspSlot) {
-        int disp = (int)((unsigned char *)rspSlot - (stub + 7));
-        p[0] = 0x48; p[1] = 0x89; p[2] = 0x25; memcpy(p + 3, &disp, 4);
-        p += 7;
-    }
-    p[0] = 0xff; p[1] = 0x25; memset(p + 2, 0, 4);
-    memcpy(p + 6, &hook, 8);
-    p += 14;
+    unsigned char code[0x20];
+    size_t codeSize = buildRedirectCallStub(code, stub, hook, rspSlot);
     rel = (int)(stub - (site + 5));
-    if (!writeGameCode(stub, code, (size_t)(p - code)) || !writeGameCode(site + 1, &rel, 4)) {
+    if (!writeGameCode(stub, code, codeSize) || !writeGameCode(site + 1, &rel, 4)) {
         writeLog("hook_skipped", "site=%s reason=code_unwritable address=%p", label, site);
         return 0;
     }

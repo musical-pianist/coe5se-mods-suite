@@ -21,8 +21,6 @@ static int entryHookAt(const void *target) {
 }
 
 #ifndef __APPLE__
-#define ENTRY_HOOK_SLOT 64
-#define ENTRY_HOOK_STUB 40
 static unsigned char *entryHookPage;
 #endif
 
@@ -34,6 +32,10 @@ int fanpatchHookCreate(void *target, void *detour, void **original) {
     }
     const EntryHookSite *s = &ENTRY_HOOK_SITES[i];
     unsigned char *at = gameBase + s->rva;
+    if (!s->size) {
+        writeLog("entry_hook_refused", "name=%s reason=not_on_this_build", s->name);
+        return 0;
+    }
     if (!gameCodeMatches) {
         writeLog("entry_hook_refused", "name=%s rva=0x%x reason=game_code_differs", s->name, s->rva);
         return 0;
@@ -53,23 +55,12 @@ int fanpatchHookCreate(void *target, void *detour, void **original) {
         makePagesReadExecute(entryHookPage, ENTRY_HOOK_COUNT * ENTRY_HOOK_SLOT);
     }
     unsigned char *t = entryHookPage + i * ENTRY_HOOK_SLOT, *stub = t + ENTRY_HOOK_STUB, slot[ENTRY_HOOK_SLOT];
-    memset(slot, 0, sizeof slot);
-    memcpy(slot, entryHooks[i].saved, (size_t)s->size);
-    for (int k = 0; k < s->fixupCount; k++) {
-        long long rel = (gameBase + s->fixups[k].target) - (t + s->fixups[k].at + 4);
-        int rel32 = (int)rel;
-        if (rel != rel32) {
-            writeLog("entry_hook_refused", "name=%s reason=fixup_out_of_reach", s->name);
-            return 0;
-        }
-        memcpy(slot + s->fixups[k].at, &rel32, 4);
+    CodeFixup fixups[2];
+    for (int k = 0; k < s->fixupCount; k++) fixups[k] = (CodeFixup){s->fixups[k].at, gameBase + s->fixups[k].target};
+    if (!buildEntryHookSlot(slot, t, at, entryHooks[i].saved, s->size, fixups, s->fixupCount, detour)) {
+        writeLog("entry_hook_refused", "name=%s reason=fixup_out_of_reach", s->name);
+        return 0;
     }
-    slot[s->size] = 0xe9;
-    int back = (int)((at + s->size) - (t + s->size + 5));
-    memcpy(slot + s->size + 1, &back, 4);
-    static const unsigned char JMP_RIP[6] = {0xff, 0x25, 0, 0, 0, 0};
-    memcpy(slot + ENTRY_HOOK_STUB, JMP_RIP, sizeof JMP_RIP);
-    memcpy(slot + ENTRY_HOOK_STUB + 6, &detour, 8);
     if (!writeGameCode(t, slot, ENTRY_HOOK_STUB + 14)) {
         writeLog("entry_hook_refused", "name=%s reason=trampoline_unwritable", s->name);
         return 0;
@@ -108,10 +99,7 @@ int fanpatchHookEnable(void *target, int enable) {
         memcpy(code, entryHooks[i].saved, (size_t)s->size);
     } else {
 #ifndef __APPLE__
-        code[0] = 0xe9;
-        int rel = (int)(entryHooks[i].stub - (at + 5));
-        memcpy(code + 1, &rel, 4);
-        memset(code + 5, 0x90, (size_t)s->size - 5);
+        buildEntryHookJump(code, at, entryHooks[i].stub, s->size);
 #else
         uint32_t jump[2] = {0x58000050u, 0xd61f0200u};
         memcpy(code, jump, 8);

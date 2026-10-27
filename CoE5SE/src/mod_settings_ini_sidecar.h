@@ -245,6 +245,28 @@ static int cutSidecarComment(char *raw) {
 }
 
 // Reads the text of `mod`'s sidecar into reading `r`.
+static char *readSettingsFileText(const char *mod, const char *path, int in);
+static void noteSettingsInclude(const char *mod, const char *path);
+static int settingsIncludeRead(const char *mod, const char *path);
+static void readSidecarSettingsText(IniParse *r, const char *text, int in);
+
+// Reads the settings blocks of `file`, an include line's, into reading `r`, then goes on with file `in`.
+static void readIncludedSettings(IniParse *r, const char *file, int in) {
+    char path[MAX_PATH], *text;
+    finishSidecarBlock(r);
+    endSettingsFile(r);
+    if (!r->dir || findIncludedFileIn(r->dir, r->mod, file, path, sizeof path) || settingsIncludeRead(r->mod, path)) return;
+    noteSettingsInclude(r->mod, path);
+    int label = includeLabelIndex(file);
+    int included = label >= 0 ? SETTINGS_IN_INCLUDED + label : SETTINGS_IN_C5SE;
+    if ((text = readSettingsFileText(r->mod, path, included)) != NULL) {
+        readSidecarSettingsText(r, text, included);
+        free(text);
+    }
+    r->sidecar = in;
+    sidecarBlock.open = 0;
+}
+
 static void readSidecarSettingsText(IniParse *r, const char *text, int in) {
     r->sidecar = in;
     sidecarBlock.open = 0;
@@ -269,6 +291,11 @@ static void readSidecarSettingsText(IniParse *r, const char *text, int in) {
         const char *at = raw;
         skipSpaces(&at);
         if (!*at) continue;
+        char file[INCLUDE_FILE_MAX + 2];
+        if (in < SETTINGS_IN_INCLUDED && readIncludeLine(at, file, sizeof file) > 0) {
+            readIncludedSettings(r, file, in);
+            continue;
+        }
         if (isSettingLine(at)) noteSidecarSettingRef(r, at, line);
         const char *args = at;
         readWord(&args, word, sizeof word);

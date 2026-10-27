@@ -199,12 +199,27 @@ static void resolvePluginAddresses(PluginRecord *r) {
         AddressSlot *s = &slots[i];
         if (s->magic != ADDRESS_SLOT_MAGIC) continue;
         const AddressEntry *e = addressEntryById(s->id);
-        s->value = e->kind == ADDRESS_KIND_OFFSET ? (uintptr_t)(gameBase + e->value) : (uintptr_t)e->value;
+        s->value = e->kind == ADDRESS_KIND_OFFSET ? (uintptr_t)playerTableAddress(e->value) : (uintptr_t)e->value;
         int first = 1;
         for (size_t j = 0; j < i && first; j++) first = slots[j].magic != ADDRESS_SLOT_MAGIC || slots[j].id != s->id;
         distinct += first;
     }
     if (used) writeLog("plugin_addresses_resolved", "dll=%s names=%d uses=%d format=%d", r->file, distinct, used, ADDRESS_ID_FORMAT);
+}
+
+// Points every loaded plugin's per-player table addresses at the moved tables, after the player table move.
+static void refreshPluginPlayerAddresses(void) {
+    for (int k = 0; k < pluginRecordCount; k++) {
+        PluginRecord *r = pluginRecords[k];
+        if (!r->module || !r->addressesChecked || r->reason) continue;
+        size_t count;
+        AddressSlot *slots = moduleAddressSlots(r->module, &count);
+        for (size_t i = 0; i < count; i++) {
+            if (slots[i].magic != ADDRESS_SLOT_MAGIC) continue;
+            const AddressEntry *e = addressEntryById(slots[i].id);
+            if (e && e->kind == ADDRESS_KIND_OFFSET) slots[i].value = (uintptr_t)playerTableAddress(e->value);
+        }
+    }
 }
 
 // ---- 3. The entry ------------------------------------------------------------------------------

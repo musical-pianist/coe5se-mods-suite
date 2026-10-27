@@ -20,6 +20,49 @@ static const char *sidecarLineText(const char *line) {
     return strncmp(line, SIDECAR_LINE_PREFIX, n) ? NULL : line + n;
 }
 
+// include "<file>.c5se": a line of a mod's .c5se, or a #!@ line of its .c5m, that has the file read where it stands.
+#define INCLUDE_WORD     "include"
+#define INCLUDE_FILE_MAX 198
+
+// What `line` is: 0 another line, 1 an include line with its quoted file in `file`, -1 one written wrong.
+static int readIncludeLine(const char *line, char *file, size_t size) {
+    while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n') line++;
+    size_t n = sizeof INCLUDE_WORD - 1;
+    if (strncmp(line, INCLUDE_WORD, n)) return 0;
+    const char *p = line + n;
+    if (*p && *p != ' ' && *p != '\t' && *p != '"' && *p != '\r' && *p != '\n' && *p != '#') return 0;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p != '"') return -1;
+    const char *end = strchr(++p, '"');
+    if (!end || (size_t)(end - p) >= size) return -1;
+    snprintf(file, size, "%.*s", (int)(end - p), p);
+    for (p = end + 1; *p == ' ' || *p == '\t' || *p == '\r' || *p == '\n'; p++) {}
+    return *p && *p != '#' ? -1 : 1;
+}
+
+// Included files' names as "/<file>", kept for the launch: what a message names after the mod's name.
+static char **includeLabels;
+static int includeLabelCount, includeLabelCapacity;
+
+// The index of `file`'s label, or -1 when it can't be kept.
+static int includeLabelIndex(const char *file) {
+    for (int i = 0; i < includeLabelCount; i++)
+        if (!strcmp(includeLabels[i] + 1, file)) return i;
+    char *label = malloc(strlen(file) + 2);
+    if (!label || !growList((void **)&includeLabels, &includeLabelCapacity, includeLabelCount + 1, sizeof *includeLabels)) {
+        free(label);
+        return -1;
+    }
+    snprintf(label, strlen(file) + 2, "/%s", file);
+    includeLabels[includeLabelCount] = label;
+    return includeLabelCount++;
+}
+
+// Label `index`, or the sidecar's suffix for one that couldn't be kept.
+static const char *includeLabelText(int index) {
+    return index >= 0 && index < includeLabelCount ? includeLabels[index] : SIDECAR_SUFFIX;
+}
+
 // The folder of mod `mod`.
 static const char *modFolder(int mod) {
     return (const char *)(gameBase + RVA_MOD_FOLDERS + (size_t)mod * MOD_RECORD_SIZE);

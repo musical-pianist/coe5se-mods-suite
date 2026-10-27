@@ -11,9 +11,11 @@
 #define SETTINGS_IN_INI   0
 #define SETTINGS_IN_C5SE  1
 #define SETTINGS_IN_C5M   2
+#define SETTINGS_IN_INCLUDED 3
 
+// What a message names after the mod's name: ".c5m", ".c5se", ".ini", or an included file's "/<file>".
 static const char *settingsFileSuffix(int in) {
-    return in == SETTINGS_IN_C5M ? MOD_FILE_SUFFIX : in ? SIDECAR_SUFFIX : ".ini";
+    return in >= SETTINGS_IN_INCLUDED ? includeLabelText(in - SETTINGS_IN_INCLUDED) : in == SETTINGS_IN_C5M ? MOD_FILE_SUFFIX : in ? SIDECAR_SUFFIX : ".ini";
 }
 
 #define ID_MS_BACK    9
@@ -66,7 +68,7 @@ typedef struct {
     char mod[MOD_NAME_MAX];
     int line;
     char text[192];
-    char file[MOD_NAME_MAX + 8];
+    char file[MOD_NAME_MAX + INCLUDE_FILE_MAX + 2];
     char source[160];
 } BadLine;
 
@@ -419,11 +421,21 @@ static const char *modName(int mod) {
 
 // Logs c5m_refused for a line of mod `mod`'s .c5m that starts with `word`.
 static int readingSidecarNow(void);
+static int includedLabelNow(void);
+static unsigned int modFileNow(void);
+static const char *includingModName(void);
+static const char *findIncludedFileIn(const char *folder, const char *name, const char *file, char *path, size_t size);
 static void logSidecarRefusal(const char *word, const char *mod, const char *reason, ...) {
     va_list ap;
     va_start(ap, reason);
-    logRefusal("c5m_refused", word, "mod", mod, reason, "%s file=%s" SIDECAR_SUFFIX, ap);
+    logRefusal("c5m_refused", word, "mod", mod, reason, "%s file=%s%s", ap);
     va_end(ap);
+}
+
+// The file field of a sidecar line's refusal for `in` (SETTINGS_IN_C5SE or an included file's): its two parts.
+static void sidecarRefusalFile(int in, const char *mod, const char **name, const char **suffix) {
+    *name = in >= SETTINGS_IN_INCLUDED ? "" : mod;
+    *suffix = in >= SETTINGS_IN_INCLUDED ? includeLabelText(in - SETTINGS_IN_INCLUDED) + 1 : SIDECAR_SUFFIX;
 }
 
 static PRINTF_FORMAT(4, 5) void refuseC5mLine(const char *word, const char *mod, const char *reason, const char *fmt, ...) {
@@ -432,7 +444,10 @@ static PRINTF_FORMAT(4, 5) void refuseC5mLine(const char *word, const char *mod,
     if (readingSidecarNow()) {
         char details[512];
         vsnprintf(details, sizeof details, fmt, ap);
-        logSidecarRefusal(word, mod, reason, details, mod);
+        int label = includedLabelNow();
+        const char *name, *suffix;
+        sidecarRefusalFile(label >= 0 ? SETTINGS_IN_INCLUDED + label : SETTINGS_IN_C5SE, mod, &name, &suffix);
+        logSidecarRefusal(word, mod, reason, details, name, suffix);
     } else {
         logRefusal("c5m_refused", word, "mod", mod, reason, fmt, ap);
     }
@@ -446,8 +461,13 @@ static PRINTF_FORMAT(5, 6) void refuseSidecarLine(int in, const char *word, cons
     va_start(ap, fmt);
     vsnprintf(details, sizeof details, fmt, ap);
     va_end(ap);
-    if (in == SETTINGS_IN_C5M) refuseC5mLine(word, mod, reason, "%s", details);
-    else logSidecarRefusal(word, mod, reason, details, mod);
+    if (in == SETTINGS_IN_C5M) {
+        refuseC5mLine(word, mod, reason, "%s", details);
+        return;
+    }
+    const char *name, *suffix;
+    sidecarRefusalFile(in, mod, &name, &suffix);
+    logSidecarRefusal(word, mod, reason, details, name, suffix);
 }
 
 // Logs ini_refused for a line of mod `mod`'s .ini.

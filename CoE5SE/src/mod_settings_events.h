@@ -18,12 +18,16 @@ static void eventLineHook(const char *line, int level) {
     const char *base = slash ? slash + 1 : file;
     size_t len = strlen(base), c5m = sizeof MOD_FILE_SUFFIX - 1, side = sizeof SIDECAR_SUFFIX - 1;
     char mod[MOD_NAME_MAX] = "", name[SETTING_NAME_SIZE];
-    if (len > c5m && !_stricmp(base + len - c5m, MOD_FILE_SUFFIX)) snprintf(mod, sizeof mod, "%.*s", (int)(len - c5m), base);
+    if (includingModName()) snprintf(mod, sizeof mod, "%s", includingModName());
+    else if (len > c5m && !_stricmp(base + len - c5m, MOD_FILE_SUFFIX)) snprintf(mod, sizeof mod, "%.*s", (int)(len - c5m), base);
     else if (len > side && !_stricmp(base + len - side, SIDECAR_SUFFIX)) snprintf(mod, sizeof mod, "%.*s", (int)(len - side), base);
     noteModLine(mod, level);
     line = planeNameEventLine(line, level, mod);
     if (!line) return;
+    line = factionNameEventLine(line, level, mod);
+    if (!line) return;
     if (eventLogicLine(line, level)) return;
+    if (corpseEventLine(line, level)) return;
     if (!isSettingLine(line)) {
         eventFindersLineBegin();
         nextEventLine(line, level);
@@ -75,6 +79,7 @@ static void declinedEventLineHook(const char *line, int level) {
     if (isSettingLine(line)) refuseC5mLine(line[0] == '+' ? "+setting" : "-setting", "-", "plugins_declined", "line=%s", line);
     else if (isEventLogicWord(line)) refuseC5mLine("or", "-", "plugins_declined", "line=%s", line);
     else if (declinedPlaneEventLine(line)) refuseC5mLine("plane", "-", "plugins_declined", "line=%s", line);
+    else if (declinedFactionNameLine(line, strcspn(line, " \t"))) refuseC5mLine("faction", "-", "plugins_declined", "line=%s", line);
     else nextEventLine(line, level);
 }
 

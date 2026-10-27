@@ -208,6 +208,7 @@ static const GameVar GAME_VARS[] = {
      WRITABLE_WHILE_BUILDING, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
     {"squarePlane",    0,                                 T_PLANE_AT, MAP_COLUMNS_MAX, 0, 0, 0, 0, MAP_COLUMN_SQUARES, 0},
     {"commanderLastIndex", RVA_LAST_COMMANDER,            T_I32, 1, 0, 0, 0, 0, 0, 0},
+    {"selectedCommander", RVA_SELECTED_COMMANDER,         T_I32, 1, 0, 0, 0, 0, 0, 0},
     {"commanderUnit",  RVA_COMMANDERS,                    T_I32, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0, 0, 0},
     {"commanderRitual", RVA_COMMANDER_KNOWN_RITUALS,      T_I16, COMMANDER_TABLE_MAX, COMMANDER_SIZE, 0, 0, 0,
      COMMANDER_KNOWN_RITUALS_MAX, 2},
@@ -265,6 +266,7 @@ static const GameVar GAME_VARS[] = {
     {"slotHomeX",      RVA_PLAYER_HOME_X,                 T_I16, 32, 2, 0, 0, 0, 0, 0},
     {"slotHomeY",      RVA_PLAYER_HOME_Y,                 T_I16, 32, 2, 0, 0, 0, 0, 0},
     {"squareGems",     RVA_SQUARE_RECORDS + SQUARE_GEMS,  T_U8, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 0, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
+    {"squareCorpses",  RVA_SQUARE_RECORDS + SQUARE_CORPSES, T_I16, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 1, 0, MAP_COLUMN_SQUARES, SQUARE_SIZE},
     {"squareStrength", 0,                                 T_SQUARE_STRENGTH, PLAYER_SLOTS, 0, 0, 0, 0, MAP_COLUMNS_MAX, 0},
     {"squareRememberedStrength", RVA_SQUARE_RECORDS + SQUARE_AI_STRENGTH, T_REMEMBERED_STRENGTH, PLAYER_SLOTS, 4, 0, 0, 0,
      MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE},
@@ -387,6 +389,7 @@ static const GameVarShape GAME_VAR_SHAPES[] = {
     {"planeName", 0, 0, LIST_NONE, 0, RVA_LAST_PLANE, 0},
     {"planeTint", 0, 0, LIST_NONE, 0, RVA_LAST_PLANE, 0},
     {"squareGems", SQUARE_GEM_KINDS, 1, LIST_NONE, 0, 0, 0},
+    {"squareCorpses", SQUARE_CORPSE_KINDS, 2, LIST_NONE, 0, 0, 0},
     {"squareStrength", MAP_COLUMN_SQUARES, 0, LIST_NONE, 0, 0, 1},
     {"squareRememberedStrength", MAP_COLUMN_SQUARES, SQUARE_SIZE, LIST_NONE, 0, 0, 0},
     {"unitStrength", 0, 0, LIST_NONE, 0, 0, 1},
@@ -453,6 +456,12 @@ static int abilityIdOfWord(const char *word) {
 // Whether a variable's second index is an ability id, which a script may also give as its .c5m word.
 static int takesAbilityWord(int type) { return type == T_UNIT_ABILITY || type == T_MONSTER_ABILITY || type == T_SLOT_ABILITY; }
 
+// Whether a variable's index `which` (1 or 2) is a player, which a script may also give as a faction's name.
+static int indexIsPlayer(const GameVar *v, int which) {
+    if (which == 2) return v->type == T_UNIT_VISIBLE;
+    return !strncmp(v->name, "slot", 4) || v->addr == RVA_SQUARE_RECORDS + SQUARE_SEEN;
+}
+
 // Finds the variable named by argument 1 of coe5.get or coe5.set, and returns its address.
 static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg) {
     const char *name = luaL_checkstring(L, 1);
@@ -460,12 +469,14 @@ static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg
     if (!v) { luaL_error(L, "unknown game variable '%s'", name); return NULL; }
     int isRitualTable = v->count == COUNT_AT_CALL && v->addr >= RVA_RITUAL_TABLE && v->addr < RVA_RITUAL_TABLE + RITUAL_SIZE;
     int movedTable = isRitualTable || !v->addr ? -1 : tableHolding(v->addr, v->stride);
+    int playerTable = !isRitualTable && movedTable < 0 && v->addr && v->count == PLAYER_SLOTS && playerTableHolding(v->addr) >= 0;
     lua_Integer index = 0;
-    int count = isRitualTable ? ritualSlotCount() : movedTable >= 0 ? tableRecords(movedTable) : v->count;
+    int squareSight = v->addr == RVA_SQUARE_RECORDS + SQUARE_SEEN;
+    int count = isRitualTable ? ritualSlotCount() : movedTable >= 0 ? tableRecords(movedTable) : playerTable || squareSight ? playerSlotCount() : v->count;
     GameVarShape shape = gameVarShape(v);
     if (count > 1) {
         int first = shape.everyPlayer ? -1 : 0;
-        index = luaL_checkinteger(L, (*arg)++);
+        index = indexIsPlayer(v, 1) ? luaCheckPlayer(L, (*arg)++) : luaL_checkinteger(L, (*arg)++);
         if (index < first || index >= count) luaL_error(L, "%s: index %I out of range %d-%d", name, (LUAI_UACINT)index, first, count - 1);
     }
     lua_Integer index2 = 0, index3 = 0;
@@ -478,7 +489,7 @@ static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg
             lua_pushinteger(L, id);
             lua_replace(L, *arg);
         }
-        index2 = luaL_checkinteger(L, (*arg)++);
+        index2 = indexIsPlayer(v, 2) ? luaCheckPlayer(L, (*arg)++) : luaL_checkinteger(L, (*arg)++);
         if (index2 < 0 || index2 >= count2) luaL_error(L, "%s: index %I out of range 0-%d", name, (LUAI_UACINT)index2, count2 - 1);
     }
     if (shape.count3 > 1) {
@@ -492,9 +503,11 @@ static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg
         return sp ? (unsigned char *)(sp + v->addr) : NULL;
     }
     if ((v->type == T_SITE_I32 || v->type == T_CEREMONY_COST) && !luaSiteDepth[v->site]) return NULL;
+    if (squareSight && factionSlot((int)index)) return factionSquareSeen ? factionSquareSeen + factionSquareIndex((int)index2, (int)index3, (int)index) : NULL;
     unsigned char *table = v->type == T_CAST_COUNT ? castCountsBase()
                          : v->addr == RVA_PLANES ? planeTableAddress()
                          : movedTable >= 0 ? tableAddress(movedTable) + (v->addr - tableMoves[movedTable].rva)
+                         : playerTable ? playerTableAddress(v->addr)
                          : gameBase + (isRitualTable ? ritualTableRva() + (v->addr - RVA_RITUAL_TABLE) : v->addr);
     if (shape.lastAt && index > G32(shape.lastAt)) return NULL;
     unsigned char *entries = table + (size_t)index * v->stride;
@@ -549,7 +562,7 @@ static int commanderCostAvailable(int commander, int type, int *have) {
     int unit = G32(RVA_COMMANDERS + (size_t)commander * COMMANDER_SIZE);
     if (unit < 0 || unit >= UNIT_TABLE_MAX) return -1;
     int owner = G16(RVA_UNIT_PLAYER + (size_t)unit * UNIT_SIZE);
-    if (owner < 0 || owner >= PLAYER_SLOTS) return -1;
+    if (owner < 0 || owner >= playerSlotCount()) return -1;
     int x = G32(RVA_UNIT_X + (size_t)unit * UNIT_SIZE), y = G32(RVA_UNIT_X + 4 + (size_t)unit * UNIT_SIZE);
     if (type == 14 || type == 17) *have = corpsesAt(x, y, type == 14);
     else *have = GAME_FN(int (*)(int, int, int, int), RVA_RESOURCE_AVAILABLE)(owner, type, x, y);
@@ -609,9 +622,8 @@ static int commanderStrength(int commander) {
 }
 
 // The strength of the units on square (x, y) of player `team` and its teammates.
-static int squareStrength(int team, int x, int y) {
-    return GAME_FN(int (*)(int, int, int), RVA_SQUARE_STRENGTH)(team, x, y);
-}
+static int strengthQuery(int team, int x, int y);
+static int squareStrength(int team, int x, int y) { return strengthQuery(team, x, y); }
 
 static int unitAliveAt(int u, int x, int y);
 

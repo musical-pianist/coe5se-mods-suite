@@ -1363,12 +1363,14 @@ static void applyPlaneSwap(const CustomPlane *p) {
 
 // After new_world's last population: each placed plane's population and its zones' lists, then its swap.
 static void populatePlaneWithZones(const CustomPlane *p);
+static void giveFactionsTheirPlane(const CustomPlane *p);
 static void populateCustomPlanes(void) {
     for (int i = 0; i < customPlaneCount; i++) {
         const CustomPlane *p = &customPlanes[i];
         if (p->skipped || p->index < 0) continue;
         populatePlaneWithZones(p);
         applyPlaneSwap(p);
+        giveFactionsTheirPlane(p);
     }
 }
 

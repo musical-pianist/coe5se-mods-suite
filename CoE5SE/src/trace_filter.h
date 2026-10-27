@@ -112,10 +112,6 @@ __asm__(".text\n"
         "1:  retq\n"
         ".seh_endproc\n");
 
-#define TRACE_STUB_SIZE   0x40
-#define TRACE_RESUME_AT   0x20
-#define TRACE_MOVED_BYTES 5
-
 // Points the four trace functions at coe5seTraceHook, once.
 static int installTraceFilter(void) {
     if (traceFilterState) return traceFilterState > 0;
@@ -148,16 +144,8 @@ static int installTraceFilter(void) {
     traceImageEnd = gameBase + nt->OptionalHeader.SizeOfImage;
     void *hook = (void *)coe5seTraceHook;
     for (int i = 0; i < COUNT; i++) {
-        unsigned char *fn = gameBase + FUNCTIONS[i].rva, *entry = page + i * TRACE_STUB_SIZE, *resume = entry + TRACE_RESUME_AT;
-        memcpy(resume, fn, TRACE_MOVED_BYTES);
-        resume[TRACE_MOVED_BYTES] = 0xe9;
-        int back = (int)(fn + TRACE_MOVED_BYTES - (resume + TRACE_MOVED_BYTES + 5));
-        memcpy(resume + TRACE_MOVED_BYTES + 1, &back, 4);
-        unsigned char *p = entry;
-        uintptr_t resumeAddress = (uintptr_t)resume;
-        *p++ = 0x48; *p++ = 0xb8; memcpy(p, &resumeAddress, 8); p += 8;
-        *p++ = 0xff; *p++ = 0x25; memset(p, 0, 4); p += 4;
-        memcpy(p, &hook, 8);
+        unsigned char *fn = gameBase + FUNCTIONS[i].rva, *entry = page + i * TRACE_STUB_SIZE;
+        buildTraceStubs(entry, entry, fn, fn, hook);
     }
     makePagesReadExecute(page, 0x1000);
     int ok = 0;
@@ -165,8 +153,7 @@ static int installTraceFilter(void) {
         unsigned char *fn = gameBase + FUNCTIONS[i].rva, *entry = page + i * TRACE_STUB_SIZE;
         unsigned long long word;
         memcpy(&word, fn, 8);
-        unsigned int rel = (unsigned int)(int)(entry - (fn + 5));
-        word = (word & 0xffffff0000000000ULL) | (unsigned long long)rel << 8 | 0xe9;
+        word = buildTraceJumpWord(word, fn, entry);
         ok += writeGameCode(fn, &word, 8);
     }
     traceFilterState = ok ? 1 : -1;

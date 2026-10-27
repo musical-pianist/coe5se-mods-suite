@@ -141,10 +141,10 @@ static int armyHereForPlayer(int player, int x, int y) {
     if (!army) return 0;
     if (player < 0 || army < 0) return 1;
     int owner = *(const short *)(gameBase + RVA_SQUARE_RECORDS + square * SQUARE_SIZE + SQUARE_ARMY_OWNER);
-    if (owner < 0 || owner >= PLAYER_SLOTS || player >= PLAYER_SLOTS) return 0;
+    if (owner < 0 || owner >= playerSlotCount() || player >= playerSlotCount()) return 0;
     if (owner == player) return 1;
-    short ownerTeam = (short)G16(RVA_SLOT_TEAM + (size_t)owner * PLAYER_BLOCK_SIZE);
-    short playerTeam = (short)G16(RVA_SLOT_TEAM + (size_t)player * PLAYER_BLOCK_SIZE);
+    short ownerTeam = (short)(*(short *)playerSlotAddress(RVA_SLOT_TEAM, owner, PLAYER_BLOCK_SIZE));
+    short playerTeam = (short)(*(short *)playerSlotAddress(RVA_SLOT_TEAM, player, PLAYER_BLOCK_SIZE));
     return ownerTeam > 0 && playerTeam > 0 && ownerTeam == playerTeam;
 }
 #endif

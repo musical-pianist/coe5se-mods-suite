@@ -25,7 +25,7 @@ static PieceTools pieceTools(void) {
     return (PieceTools){
         GAME_FN(int (*)(int), RVA_RANDOM),
         GAME_FN(int (*)(int, int, const char *, int, int, int), RVA_POPULATE),
-        GAME_FN(void (*)(int, int), RVA_REBUILD_SQUARE_ARMY),
+        rebuildSquareArmyHook,
         GAME_FN(void (*)(int, int, int), RVA_POPULATE_SET_HOLDIT),
         GAME_FN(void (*)(int, int, int), RVA_CHANGE_SQUARE_TERRAIN),
         GAME_FN(void (*)(int, int, int, int, int), RVA_SET_GROUND_RECT),
@@ -727,6 +727,20 @@ static int inStockArea(const PlaneLayout *layout, int x, int y, int area) {
     return area >= 0 ? z == area : z < 0 || !zoneHasOwnStock(&layout->zones[z]);
 }
 
+// Whether square (x, y) is water, as RVA_DROWN_CHECK reads it: the terrain's water word, or a flooded square.
+static int squareIsWater(int x, int y) {
+    size_t square = (size_t)x * MAP_COLUMN_SQUARES + (size_t)y;
+    int terrain = *(short *)(squareRecordAt(x, y) + SQUARE_TERRAIN_TYPE);
+    long long terrainFlags = 0;
+    if (terrain >= 0 && terrain < TERRAIN_TABLE_MAX) memcpy(&terrainFlags, GAME_PTR(RVA_TERRAIN_TABLE) + (size_t)terrain * TERRAIN_SIZE + TERRAIN_FLAGS, sizeof terrainFlags);
+    return (terrainFlags & TERRAIN_FLAG_WATER) || (G32(RVA_SQUARE_FLAGS + square * SQUARE_SIZE) & SQUARE_FLAG_FLOODED);
+}
+
+// Whether a monster with move flags `moves` may stand there: water for the water move word, land without noland.
+static int monsterFitsSquare(unsigned long long moves, int water) {
+    return water ? (moves & MONSTER_MOVE_WATER) != 0 : !(moves & MONSTER_MOVE_NOLAND);
+}
+
 // Stocks `area` of plane p from `list`.
 static void stockPlaneArea(const CustomPlane *p, int area, const PlaneUnitList *list, const PieceTools *t) {
     const PlaneLayout *layout = &p->layout;
@@ -750,12 +764,9 @@ static void stockPlaneArea(const CustomPlane *p, int area, const PlaneUnitList *
             short apcost = terrain >= 0 && terrain < TERRAIN_TABLE_MAX ? (short)G16(RVA_TERRAIN_TABLE + (size_t)terrain * TERRAIN_SIZE + TERRAIN_APCOST) : 0;
             if ((owner >= 0 && owner != PLANE_UNITS_PLAYER) || G16(RVA_SQUARE_ARMY + square * 2) || apcost >= TERRAIN_APCOST_WALL) continue;
             squares++;
-            long long terrainFlags = 0;
-            if (terrain >= 0 && terrain < TERRAIN_TABLE_MAX) memcpy(&terrainFlags, GAME_PTR(RVA_TERRAIN_TABLE) + (size_t)terrain * TERRAIN_SIZE + TERRAIN_FLAGS, sizeof terrainFlags);
-            int water = (terrainFlags & TERRAIN_FLAG_WATER) || (G32(RVA_SQUARE_FLAGS + square * SQUARE_SIZE) & SQUARE_FLAG_FLOODED);
-            int here = 0;
+            int water = squareIsWater(x, y), here = 0;
             for (int i = 0; i < list->count; i++) {
-                if (!valid[i] || (water ? !(moves[i] & MONSTER_MOVE_WATER) : (moves[i] & MONSTER_MOVE_NOLAND) != 0)) continue;
+                if (!valid[i] || !monsterFitsSquare(moves[i], water)) continue;
                 if (t->random(100) >= list->units[i].chance) continue;
                 t->populate(x, y, list->units[i].monster, list->units[i].count * wilder, PLANE_UNITS_PLAYER, -1);
                 groups++, here++, units += list->units[i].count * wilder;

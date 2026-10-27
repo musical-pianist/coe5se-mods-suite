@@ -120,8 +120,8 @@ static int rawIncome(int slot, int resource) {
     }
 }
 static int slotIncome(int slot, int resource) {
-    int controller = G16(RVA_SLOT_CONTROLLER + (size_t)slot * 2);
-    int level = G16(RVA_SLOT_AI + (size_t)slot * PLAYER_BLOCK_SIZE);
+    int controller = (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, slot, 2));
+    int level = (*(short *)playerSlotAddress(RVA_SLOT_AI, slot, PLAYER_BLOCK_SIZE));
     int bonus = level >= 0 && level < AI_LEVEL_TABLE_MAX ? G32(RVA_AI_LEVEL_BONUS + (size_t)level * 4) : 0;
     int percent = incomePercent(controller, bonus, resource, 0);
     if (percent == 0 || !playerGathersSpecial(slot, resource)) return 0;
@@ -167,12 +167,7 @@ static int garrisonCommanderOf(int u) {
         if (G32(RVA_COMMANDERS + (size_t)c * COMMANDER_SIZE) == u) return c;
     return -1;
 }
-static int garrisonSameTeam(int a, int b) {
-    if (a < 0 || a >= PLAYER_SLOTS || b < 0 || b >= PLAYER_SLOTS) return 0;
-    if (a == b) return 1;
-    int teamA = (short)G16(RVA_SLOT_TEAM + (size_t)a * PLAYER_BLOCK_SIZE), teamB = (short)G16(RVA_SLOT_TEAM + (size_t)b * PLAYER_BLOCK_SIZE);
-    return teamA > 0 && teamA == teamB;
-}
+static int garrisonSameTeam(int a, int b) { return playerSameTeam(a, b); }
 static int garrisonSquareTerrain(int x, int y) {
     if (x < 0 || y < 0 || x >= G32(RVA_MAP_W) || y >= G32(RVA_MAP_H) || x >= MAP_COLUMNS_MAX || y >= MAP_COLUMN_SQUARES) return -1;
     return (short)G16(RVA_SQUARE_RECORDS + ((size_t)x * MAP_COLUMN_SQUARES + (size_t)y) * SQUARE_SIZE + SQUARE_TERRAIN_TYPE);
@@ -294,7 +289,7 @@ static int commanderGarrisonLeft(int c) {
     if (unit < 0 || unit >= UNIT_TABLE_MAX || G16(RVA_UNIT_HP + (size_t)unit * UNIT_SIZE) <= 0) return -1;
     int player = garrisonUnitOwner(unit);
     int x = garrisonUnitX(unit), y = garrisonUnitY(unit);
-    if (player < 0 || player >= PLAYER_SLOTS || x < 0 || y < 0) return -1;
+    if (player < 0 || player >= playerSlotCount() || x < 0 || y < 0) return -1;
     int last = G32(RVA_UNIT_COUNT);
     if (last >= UNIT_TABLE_MAX) last = UNIT_TABLE_MAX - 1;
     memset(garrisonState, GARRISON_GAME, sizeof garrisonState);
@@ -504,8 +499,8 @@ static int ritualCasterRuleMet(const RitualCaster *c, int id, int v) {
         return v == 0 || (v > 0 ? home : !home);
     }
     case RITUAL_FX_HOMECITREQ: {
-        if (v == 0 || c->player < 0 || c->player >= PLAYER_SLOTS) return 1;
-        int hx = G16(RVA_PLAYER_HOME_X + (size_t)c->player * 2), hy = G16(RVA_PLAYER_HOME_Y + (size_t)c->player * 2);
+        if (v == 0 || c->player < 0 || c->player >= playerSlotCount()) return 1;
+        int hx = (*(short *)playerSlotAddress(RVA_PLAYER_HOME_X, c->player, 2)), hy = (*(short *)playerSlotAddress(RVA_PLAYER_HOME_Y, c->player, 2));
         return v < 0 ? !(c->x == hx && c->y == hy) : c->x == hx && c->y != hy;
     }
     case RITUAL_FX_NOMONREQ: case RITUAL_FX_FEWMONREQ: case RITUAL_FX_MINMONREQ: case RITUAL_FX_MONWORLDREQ:
@@ -928,6 +923,7 @@ static const struct { const char *name; lua_Integer min, max; } GAME_VAR_RANGES[
     {"mouseButtons", 0, 7},
     {"traceLevel", 0, 3},
     {"slotTradeType", 0, 24},
+    {"squareCorpses", 0, SHRT_MAX},
 };
 
 // A slot's colour range.

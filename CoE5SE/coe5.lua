@@ -73,6 +73,9 @@
 --   Seal a portal                  coe5.onPortalCrossing(function(c) if c.portal == 1234 then return false end end)   (humans, the AI and its routes)
 --   Tint a plane's map             coe5.setPlaneTint("Inferno", 1, 0.5, 0, 0.2), coe5.clearPlaneTint("Inferno"); local r, g, b, s = coe5.get("planeTint", 4)
 --   Draw a mod terrain like a game one  coe5.setTerrainLooks{terrain = "Dungeon Wall", ground = "Cave Wall", picture = "./wall.tga"}   (at load)
+--   A battle map for a terrain     coe5.addBattleMap{file = "./maps/moria_halls.coem", terrains = {"Moria Deeps"}, weight = 20}   (at load)
+--   A terrain's battle plants      coe5.setBattleScatter{terrain = "Moria Deeps", objects = {{"Mithril Vein", 20}}}   (at load)
+--   Add an independent faction     coe5.addFaction{name = "Ash Court", like = "Inferno", home = "Ash Plane", color = {0.8, 0.3, 0}}   (at load; coe5.factionSlot("Ash Court") in the game)
 --   Add a mod command              coe5.addModCommand("mymod_gold", function(args, mod, level) ... end)   (in <ModName>_commands.lua only)
 --   Change a square as the world is built  coe5.wrap("PLAY_GAME_NEW_WORLD", function(next, mode) local r = next(mode) coe5.set("squareTerrain", x, y, t) coe5.set("squareName", x, y, "Old Tower") return r end)
 --   A commander's square           local u = coe5.get("commanderUnit", c); coe5.get("unitX", u), coe5.get("unitY", u)
@@ -93,6 +96,8 @@
 --   Keep the AI from planning a ritual  coe5.wrap("AI_RITUAL_CANDIDATE", function(next, c, ritual) if blocked(c, ritual) then return false end return next(c, ritual) end)
 --   A player's recruitment offers  for _, o in ipairs(coe5.shopOffers(p)) do coe5.log(o.name .. " " .. o.gold) end
 --   Buy for the AI yourself        coe5.wrap("AI_RECRUIT", function(next, p) local sq = coe5.recruitSquares(p, offer)[1] if sq then coe5.aiBuyOffer(p, offer, sq.x, sq.y) end end)   (skipping next skips the game's buying)
+--   Change a built-in offer        for _, o in ipairs(coe5.builtinOffers()) do if o.name == "Sage" then coe5.replaceBuiltinOffer(o.id, {gold = 20}) end end
+--   Add a monthly offer            coe5.addShopOffer{name = "Spearman", count = 10, gold = 60, chance = function(p) return coe5.guildCount(p, "Mercenaries Guild") * 10 end}
 --   Leave troops for another AI commander  coe5.wrap("AI_GATHER_TROOPS", function(next, c) if not leader(c) then next(c) end end)
 --   Keep an AI commander from being picked up  coe5.wrap("AI_PICK_UP_LONER", function(next, c, unit) if busy(unit) then return 0 end return next(c, unit) end)
 --   Split AI armies of 30 units or more  coe5.wrap("AI_SPLIT_ARMY", function(next, c, minUnits) next(c, 30) end)
@@ -110,6 +115,8 @@
 --   Change a ceremony's cost       coe5.wrap("CEREMONY_COSTS", function(next, c) next(c) coe5.set("ceremonyCost", n, 30) end)   (n: the ceremony whose ceremonyName you matched)
 --   Keep a seal from breaking      coe5.wrap("SEAL_BREAK", function(next, slot, seal) if seal ~= 3 then return next(slot, seal) end coe5.set("eventVar", 300, 1) end)
 --   A line in the map editor's toolbox  local id = coe5.addMapEditorLine{label = "Show grid", onClick = function() on = true end}
+--   A line in the commander's orders  coe5.addCommanderLine{label = "Rally", icon = 0x75, onClick = function() local c = coe5.get("selectedCommander") end}
+--   Teleport a commander's army    coe5.teleportCommander(c, x, y)   (coe5.mayEnterSquare(c, x, y): could it walk there)
 --   Draw over the map editor's map  coe5.wrap("MAP_EDITOR_DRAW", function(next) local v = coe5.mapView() coe5.ui.drawLine(v.originX, 0, v.originX, 600, 1, 1, 1, 0.3) return next() end)
 --   Replace a seal's event         coe5.wrap("SEAL_EVENT", function(next, slot, seal) if seal ~= 3 then return next(slot, seal) end coe5.set("eventVar", 300, 1) end)
 --
@@ -317,6 +324,7 @@ function require(name) end
 ---| "squareName"            # index: x 0-999, then y 0-159, string: the square's name, what a map file's squarename writes, up to 31 characters (a longer one is cut, as squarename cuts it). The square values are writable only while the world is built: inside a wrap of PLAY_GAME_NEW_WORLD (the whole world), or a plane's generator (only that plane's squares). Elsewhere coe5.set is refused (not_world_building, or outside_plane for a square outside the area being built), as is a value the game never stores there (out_of_range).
 ---| "squarePlane"           # index: x 0-999, then y 0-159, integer: the plane the square lies on (planeName takes it), -1 for none, as the game finds it. Read-only.
 ---| "commanderLastIndex"    # integer: the last commander record in use or once used; a loop runs 0 to it. Read-only.
+---| "selectedCommander"     # integer: the commander selected on the map, whose orders the commander panel shows; -1 for none. Read-only.
 ---| "commanderUnit"         # index 0-9989, integer: the commander's unit (unitOwner, unitHp, unitMonster take it), below 0 for an empty record. Read-only.
 ---| "commanderRitual"       # index: a commander 0-9989, then 0-63, integer: a ritual the commander knows (ritualName, ritualSummons take it); nil at and past the first slot below 1, the list's end. Read-only.
 ---| "commanderCostAvailable" # index: a commander 0-9989, then a cost type 0-18 (as ritualCostType), integer: what the owner of the commander's unit has of it where the unit stands, as the game counts it when a ritual is cast: 0-13 the stock, 14 humanoid corpses on the square, 15 gems, 16 the player's expendable units there, 17 all corpses there, 18 the player's goblins there; a cost is paid when this is at least its amount. Nil for a commander with no unit or a unit no player owns. Read-only.
@@ -366,6 +374,7 @@ function require(name) end
 ---| "slotHomeX"             # per slot, integer: the player's home citadel's x, -1 for none. Read-only.
 ---| "slotHomeY"             # per slot, integer: the player's home citadel's y. Read-only.
 ---| "squareGems"            # index: x 0-999, then y 0-159, then a gem kind 0-3, integer: the square's gem income of that kind; the game lets a player with a gem gatherer own a square with any above 0. Read-only.
+---| "squareCorpses"         # index: x 0-999, then y 0-159, then a corpse kind 0-7 (coe5.corpseKind), integer: the square's corpses of that kind, what Raise Dead, Raise Animals, reanimate, the ritual corpse costs and the corpse event triggers use. Set 0 to 32767.
 ---| "squareStrength"        # index: a slot (or -1 for every player), then x 0-999, then y 0-159, integer: the strength of the units on the square of that player and its teammates, now, as the game measures it for the AI: each living unit's strength as that player sees it, the sum raised by (100 + 60 x the square's fort level)% when over a tenth of the units are ranged. Sees through fog. Read-only.
 ---| "squareArmyStationary"  # index: x 0-999, then y 0-159, boolean: true when the game never moves the army on the square on the world map: every living unit there is stationary ("Cannot move on world map"), as the independents' moves check it. Also true for a square with no living unit. Sees through fog. Read-only.
 ---| "squareArmyHolds"       # index: x 0-999, then y 0-159, boolean: true when the independents' moves hold the army on the square, by the game's two hold tests before its stationary one: the square's hold flag (the event command holdit 1, a gold mine's attackers) or the hold flag on its top unit, the unit the move finds for the army's owner. False for a square with no army. Sees through fog. Read-only.
@@ -470,6 +479,15 @@ function require(name) end
 ---@field visible? fun(): boolean Shows the line while it returns true, checked every frame. In Lua, 0 counts as true: return a boolean.
 ---@field onClick fun() runs when the line, or a key bound to its id, is clicked
 
+---A line of the commander panel, for coe5.addCommanderLine.
+---@class coe5.CommanderLine
+---@field label string cut to 63 characters (logged as api_cut)
+---@field tooltip? string the hover text, cut to 255 characters
+---@field icon? integer a small icon (the panel's own: 0x75 Sentry to 0x85 Continue Moving), drawn left of the label as the game's lines have theirs; left out, none
+---@field color? number[] the label's colour, {r, g, b} or {r, g, b, alpha}, each 0 to 1 (alpha 1 when left out); left out, the game's text colour (white). Any other count of parts, or a part outside 0 to 1, refuses the line (bad_color)
+---@field visible? fun(): boolean Shows the line while it returns true, checked every frame with the commander selected (coe5.get("selectedCommander")). In Lua, 0 counts as true: return a boolean.
+---@field onClick fun() runs when the line is clicked, with that commander still selected
+
 ---A mod's plane, for coe5.addPlane.
 ---@class coe5.Plane
 ---@field name string the plane's name, 1 to 31 characters, unlike every other plane's (a game plane's full or short name included)
@@ -507,6 +525,89 @@ function require(name) end
 ---@field [1] string the monster's name, as the game names its own independents (a name several monsters share places one of them at random)
 ---@field [2] integer how many with Wilder off, 1 to 1000
 ---@field [3] integer the chance per square, 1 to 100
+
+---A mod's independent faction, for coe5.addFaction. Each field is the newfaction block word of its name (factionlike for like, factionmonumentevent for monumentEvent), takes what the word takes, and is the preset's when left out.
+---@class coe5.Faction
+---@field name string 1 to 31 characters, unlike every other faction's and the vanilla factions' names
+---@field like? "Independents"|"Special Monsters"|"Horrors"|"Hades"|"Inferno"|"Celestial"|"Empire"|"Kingdom" the vanilla faction whose rules it takes; Independents when left out
+---@field color? number[] {r, g, b}, each 0 to 1; the preset's colour when left out
+---@field home? string its home plane's name, a game plane's or a mod's
+---@field active? "always"|"never"|integer when its turn spawns: always, never, or once that many portals are open (1 to 1000)
+---@field populate? boolean whether its home's population is its own
+---@field wander? "wander"|"indwander"|"infwander"|"hadeswander"|"celwander" the wander word its commanders take
+---@field wanderGate? boolean
+---@field tithe? boolean
+---@field worldEvents? boolean
+---@field conquest? "independent"|"normal" whether its squares are conquered as the Independents' are
+---@field statue? boolean
+---@field spawnSite? "owncitadel"|"monument"|"none" where its turn spawns
+---@field spawnPlane? string with spawnSite "monument": the plane its monument stands on; Elysium when left out
+---@field fuel? string the monster its spawns use up
+---@field spawns? coe5.FactionSpawn[] its spawns, in order, replacing the preset's; {} or false for none
+---@field monument? string|false its monument monster, false for none
+---@field monumentRule? boolean whether its monument counts toward the game's rulership check, as the Monument of Hades does
+---@field monumentEvent? coe5.FactionMonumentEvent|false its monument's founding event, false for none
+---@field planeShift? coe5.FactionPlaneShift|false the units its monument shifts off its home, false for none
+---@field loyalty? string|false the monster whose units on its monument's plane become its own, false for none
+---@field gather? integer|false the ability number that makes its units carriers, 1 to 65535, false for none
+---@field gateway? coe5.FactionGateway|false the gateway its carriers restore, false for none
+---@field caravan? coe5.FactionCaravan|false its own caravan event, false for none
+---@field horrors? boolean whether it takes a share of the Horrors' spawns
+---@field avoid? coe5.FactionAvoid[]|false factions whose armies its own step onto only at a chance, replacing the preset's; false or {} for none
+---@field units? coe5.FactionUnits[] its own units, placed at each world build after the game's population on free squares (nobody's or the Independents', no army, no wall); the squares become its own
+---@field populateTerrain? coe5.FactionTerrain[] terrains whose Independents' squares and units become its own at each world build, before its units are placed
+
+---One spawn of coe5.Faction: with at least min fuel units (and the terrain), a draw below chance makes group, using use of them.
+---@class coe5.FactionSpawn
+---@field min integer 0 to 10000
+---@field use integer 0 to min
+---@field chance integer 1 to 100
+---@field group string the group, as sitepop names one
+---@field terrain? "magma"|"ice"|"waste"
+
+---@class coe5.FactionMonumentEvent
+---@field turn integer the first month it may run, 0 to 100000
+---@field chance integer in 1000 each month, 1 to 1000
+---@field plane string the plane the monument is founded on
+---@field terrain integer the terrain it is founded on, a number or a terrain group
+---@field unfinished string the monster that grows into the monument
+---@field news? string the news, with %s for the commander's name; none when left out
+
+---@class coe5.FactionPlaneShift
+---@field monster string
+---@field percent integer 1 to 100
+---@field each integer 1 to 100
+
+---@class coe5.FactionGateway
+---@field fuel integer the carriers' units it takes, 1 to 10000
+---@field ruin integer the ruined gateway's terrain
+---@field gate integer the restored gateway's terrain
+---@field exit integer the terrain at the far end
+---@field news? string the news, naming no one; none when left out
+
+---@class coe5.FactionCaravan
+---@field turn integer the first month it may run, 0 to 100000
+---@field chance integer in 350 each month, 1 to 350
+---@field plane string
+---@field terrain integer a number or a terrain group
+---@field group? string the caravan's group; the Merchants' crew when left out
+---@field news? string the news, with %s for the commander's name; none when left out
+
+---One monster of coe5.Faction's units: each free square of the terrain on the plane rolls chance percent for count of it, doubled with Wilder on as planeunits' are.
+---@class coe5.FactionUnits
+---@field monster string
+---@field count integer 1 to 1000
+---@field chance integer the chance per square, 1 to 100
+---@field terrain? integer a terrain number or a terrain group; any terrain when left out
+---@field plane? string a game plane's or a mod's plane's name; every plane when left out
+
+---@class coe5.FactionTerrain
+---@field terrain integer a terrain number or a terrain group
+---@field plane? string every plane when left out
+
+---@class coe5.FactionAvoid
+---@field name string a mod's faction or a vanilla faction
+---@field percent integer the chance to step onto its armies, 0 to 100
 
 ---The plane being built, as a recipe's steps and a generate function get it.
 ---@class coe5.PlaneBuild
@@ -595,17 +696,17 @@ function coe5.addMainMenuButton(label, onClick, afterId) end
 ---@return boolean added false when `label` is empty, `section` is an empty name, or `section` is a number that is neither (logged as api_refused)
 function coe5.addGameMenuLine(line) end
 
----Reads a game value. A per-slot value needs its slot (0-31), and a table value its index;
+---Reads a game value. A per-slot value needs its slot (0-31, a mod's faction 32-47) or a faction's name, and a table value its index;
 ---slotResource needs the slot, then the resource (0-13), and a value with more indexes takes each
 ---in the order its note gives (squareSeen: the slot, x, then y).
 ---@param name coe5.Variable
----@param slot? integer slot or index
----@param index? integer|string slotResource's resource, or a second index; for unitAbility and monsterAbility an ability's .c5m word, for monster, weapon, item, class, terrain and ritual a word of that .c5m block
+---@param slot? integer|string slot or index; a faction's name for a slot (coe5.factionSlot's names)
+---@param index? integer|string slotResource's resource, or a second index (unitVisibleTo's player, or a faction's name); for unitAbility and monsterAbility an ability's .c5m word, for monster, weapon, item, class, terrain and ritual a word of that .c5m block
 ---@param index3? integer a third index (squareSeen's y)
 ---@return any value an integer, boolean, or string, as the name's note says; nil for a frame value outside its site's wrap, an index past a list's end, or a name the game's table leaves empty
 function coe5.get(name, slot, index, index3) end
 
----Changes a game value. A per-slot value needs its slot (0-31), and a table value its index;
+---Changes a game value. A per-slot value needs its slot (0-31, a mod's faction 32-47) or a faction's name, and a table value its index;
 ---slotResource needs the slot, then the resource (0-13). A
 ---read-only value is an error. A boolean value takes only true or false: anything else, a number or
 ---nil, changes nothing and is refused (lua_refused reason=needs_boolean), because in Lua 0 is true.
@@ -618,8 +719,8 @@ function coe5.get(name, slot, index, index3) end
 ---the area being built).
 ---@param name coe5.Variable
 ---@param value integer|string|boolean
----@overload fun(name: coe5.Variable, slot: integer, value: integer|string|boolean)
----@overload fun(name: coe5.Variable, slot: integer, index: integer, value: integer|string)
+---@overload fun(name: coe5.Variable, slot: integer|string, value: integer|string|boolean)
+---@overload fun(name: coe5.Variable, slot: integer|string, index: integer, value: integer|string)
 function coe5.set(name, value) end
 
 ---Runs `fn` around a game call. `fn` gets `next` first, then the call's arguments; call `next` with
@@ -653,7 +754,7 @@ function coe5.observe(site, before, after) end
 function coe5.turn() end
 
 ---Adds a message to a player's Messages window. Only human players get messages.
----@param player integer a slot (0-31), or coe5.message.everyHuman
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names), or coe5.message.everyHuman
 ---@param title string cut to 99 characters
 ---@param text string cut to 2047 characters, the game's buffer for it
 ---@return integer index the message's index, or coe5.message.notAdded when no message was added. With coe5.message.everyHuman it is always coe5.message.notAdded, even when the message was sent. A bad slot or a network game is logged (api_refused or lua_refused).
@@ -747,7 +848,7 @@ function coe5.findMonster(name) end
 ---CoE5SE: your script picks the square. A unique monster that already has a living unit moves that
 ---unit here, as the game's own spawns do. For the variant the recruit screen would make, pass
 ---coe5.monsterVariant(monster).
----@param player integer a slot, 0-31
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names)
 ---@param monster integer a monster's index (coe5.findMonster)
 ---@param x integer below mapDepth
 ---@param y integer below mapH
@@ -756,12 +857,35 @@ function coe5.spawnUnit(player, monster, x, y) end
 
 ---Makes one commander of `monster` for `player` on square (x, y), with its unit and a name the game
 ---gives it, the way the recruit purchase makes a commander, then does what coe5.spawnUnit does after.
----@param player integer a slot, 0-31
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names)
 ---@param monster integer a monster's index
 ---@param x integer below mapDepth
 ---@param y integer below mapH
 ---@return integer|nil commander the commander's index, or nil with the reasons coe5.spawnUnit gives (no_free_slot also when no commander record is free)
 function coe5.spawnCommander(player, monster, x, y) end
+
+---Moves a commander and every living unit following him on his square to (x, y), any plane, with
+---the teleport ritual's own call. It runs a walked step's checks: onto another player's army or
+---independents at war it overruns weak defenders or sets up the battle, fought after the move with
+---the others, and a hidden army there ambushes; a free square is conquered and its surroundings seen.
+---A free square costs no action points; a square with an army at war spends them all, as walking in
+---does. The commander's stored move order is cleared. Like the game's teleport, it checks nothing of
+---the terrain: sea, a cave wall, or the Void take the army as any square does. coe5.mayEnterSquare
+---says whether the army could walk there.
+---@param commander integer 0-9989
+---@param x integer
+---@param y integer
+---@return boolean teleported false when refused (lua_refused): outside a game (reason=no_game), a commander past the table (bad_commander), one with no living unit (dead_commander), a square outside the world (off_map) or on no plane (no_plane)
+function coe5.teleportCommander(commander, x, y) end
+
+---Whether the commander's army may walk onto (x, y), by the game's own test for a move: the army's
+---move flags against the square's terrain (sea, walls, the Void, mountains for a mountain-only army),
+---whatever stands there now.
+---@param commander integer 0-9989
+---@param x integer
+---@param y integer
+---@return boolean may false also when refused, as coe5.teleportCommander refuses (lua_refused)
+function coe5.mayEnterSquare(commander, x, y) end
 
 ---The monster the recruit purchase makes for an offer of `monster`: the game's own pick, `monster` or
 ---one of the up to 9 records right after it with the same name, at random (a class's "Swordsman"
@@ -816,7 +940,7 @@ function coe5.squareUnits(x, y) end
 ---the game's sight update, which redraws the map for a human. Sight only rises within a turn, and
 ---the game lowers squares in view to seen before (1) at the player's next turn start, so they stay
 ---in view until then: terrain stays on the map after, armies show only where the player sees them.
----@param player integer a slot, 0-31
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names)
 ---@param plane? integer a plane's index (coe5.planeIndex), 0 to the last plane; left out, every plane
 ---@return boolean revealed false when refused: outside a game (reason=no_game), a player past the slots (bad_player), a plane past the last (bad_plane), each logged as lua_refused
 function coe5.revealMap(player, plane) end
@@ -894,7 +1018,7 @@ function coe5.transferFollower(unit, commander) end
 ---Recruit lists, the other citadels' terrain-bound offers included. A magic item for sale and an
 ---offer already bought (once per offer) are left out. Refused (lua_refused reason=bad_player, an
 ---empty list) for a player outside 0-31.
----@param player integer 0-31
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names)
 ---@return coe5.Offer[] offers
 function coe5.shopOffers(player) end
 
@@ -906,12 +1030,103 @@ function coe5.shopOffers(player) end
 ---@return coe5.Offer[] offers
 function coe5.classRecruits(class) end
 
+---One of the 61 offers the game's monthly shop build adds from its own code (coe5.builtinOffers):
+---the standard troops, the mercenary bands, the Hero, the hired wizards, the Assassin, the guild
+---offers, the ship guilds' offers and a magic item for sale. Its chance comes from
+---coe5.builtinOfferChance. The fields a row takes (coe5.addShopOffer) have the same names.
+---@class coe5.BuiltinOffer
+---@field id integer its number from 1, in the build's order, for builtinOfferChance and replaceBuiltinOffer
+---@field name string the monster ("Magic item" for the item for sale)
+---@field count integer units it offers; -1 the magic item
+---@field item boolean the magic item for sale: a random one each time
+---@field commander boolean the unit comes as a commander, with a name
+---@field gold integer base gold
+---@field goldDie integer a die added to gold each time the offer comes
+---@field goldDieExplodes boolean the die rolls again on its top face and adds the new roll less 1 (false only for the Captain)
+---@field iron integer
+---@field costs table<integer, integer> extra costs by cost type (the Void Ship: [15] = 100 gems)
+---@field terrain integer where it is bought: 0 anywhere, a terrain group below -1 (-93 ports, -106 the sky plane)
+---@field oncePerOffer boolean bought once, then gone
+---@field extra boolean a buy leaves the square's recruitment for the turn unused
+---@field aiImportant boolean the game's AI tries it first
+---@field aiNever boolean the game's AI never buys it
+---@field message boolean the month's Recruitment Offer message comes with it
+---@field outOf integer what the chance is out of: 100, 150 (the Hero), 500 or 1000
+---@field price string its price rule: "plain" (gold + die), "mercenary" (times mercpricemult), "hero" (5 less per Adventurers or Beastmasters guild, at most 5), "assassin", "shadow_stalker", or "item" (the item's extracost + 20 + two dice)
+
+---The 61 offers the shop build adds from its own code, in its order (coe5.BuiltinOffer). The class
+---lists and the special locations' offers come from records instead (coe5.classRecruits).
+---@return coe5.BuiltinOffer[] offers
+function coe5.builtinOffers() end
+
+---Built-in offer `id`'s chance this month for `player`, worked out as the game does (guilds, library
+---levels, town points, the class's recwizchance, recherochance, recasschance and mercboost), and
+---what it is out of. Offers the game adds every month once their need is met (the standard troops,
+---the Ship, the Galleon) give outOf when it is met and -1 when it isn't. The AI difficulty adds
+---nothing to these. Refused (lua_refused reason=bad_id or bad_player, nil).
+---@param id integer 1-61
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names)
+---@return integer? chance
+---@return integer? outOf
+function coe5.builtinOfferChance(id, player) end
+
+---The player's guilds made by the guild ritual `guild` ("Apothecaries Guild", or a mod's guild
+---ritual), counted as the shop counts them: on squares the player or a teammate holds, or with
+---`ownSquares` only the player's own (the mercenary bands' and the Hero's count). A guild in a town an
+---enemy took doesn't count, and an upgraded guild counts under its upgrade's name. Refused
+---(lua_refused reason=bad_player or not_a_guild, nil).
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names)
+---@param guild string
+---@param ownSquares? boolean
+---@return integer? count
+function coe5.guildCount(player, guild, ownSquares) end
+
+---A monthly offer's fields, for coe5.addShopOffer and coe5.replaceBuiltinOffer. Every field is
+---optional for replaceBuiltinOffer, which starts from the built-in offer's own.
+---@class coe5.ShopRow
+---@field name? string the monster (addShopOffer needs it)
+---@field count? integer units, 1-1000 (1)
+---@field commander? boolean the unit comes as a commander, with a name
+---@field gold? integer base gold (0); setting gold or goldDie on a replaced offer drops its price rule
+---@field goldDie? integer a die added to gold (0)
+---@field goldDieExplodes? boolean (true)
+---@field iron? integer
+---@field costs? table<integer, integer> one extra cost: {[type] = amount}, type 2-18
+---@field terrain? integer where it is bought: 0 anywhere (0), a terrain number, or a group below -1
+---@field oncePerOffer? boolean
+---@field extra? boolean
+---@field aiImportant? boolean
+---@field aiNever? boolean
+---@field limiter? string a "=" line: the offer upgrades those units ("=Militia")
+---@field chance? integer|fun(player: integer): integer each month's chance (0); a replaced offer keeps its own rule without one
+---@field outOf? integer what chance is out of (100)
+---@field message? boolean the Recruitment Offer message when it comes (true)
+
+---Adds an offer every player's shop rolls at each turn start, after the game's own: with `chance` in
+---`outOf`, its gold die rolled, through the game's own add and message calls. At most 50 rows from
+---all mods together; a row of a script that stopped no longer rolls. Not in network games. Refused
+---(lua_refused, false): reason=no_name, no_monster, bad_field, bad_costs, too_many_rows,
+---site_unavailable.
+---@param row coe5.ShopRow
+---@return integer|false row its number
+function coe5.addShopOffer(row) end
+
+---Turns built-in offer `id` off and adds a row in its place, built from the offer's own fields, chance
+---rule and price rule, with each field of `row` replacing that part. The game still rolls the offer,
+---so no other offer's dice change; the offer it made is emptied and its line taken out of the month's Recruitment Offer message, and the row
+---rolls after the game's offers. It counts toward the 50 rows. Two scripts replacing one offer get a
+---row each. Refused (lua_refused, false): reason=bad_id and those of addShopOffer.
+---@param id integer 1-61
+---@param row? coe5.ShopRow
+---@return integer|false row its number
+function coe5.replaceBuiltinOffer(id, row) end
+
 ---The squares where the game's AI recruiting can buy for the player: its own citadels (squares
 ---whose terrain is a citadel for its class), by y then x, at most 100, each {x, y, used}, used true
 ---when the square's recruitment is used this turn. With an offer (coe5.Offer.offer), only the
 ---squares where coe5.aiBuyOffer would buy it now. Refused (lua_refused, an empty list):
 ---reason=bad_player, bad_offer (past the player's last offer), windows_only on Mac.
----@param player integer 0-31
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names)
 ---@param offer? integer
 ---@return {x: integer, y: integer, used: boolean}[] squares
 function coe5.recruitSquares(player, offer) end
@@ -929,7 +1144,7 @@ function coe5.recruitSquares(player, offer) end
 ---offer the game's buy couldn't make (no free commander, or no unit to upgrade), with the square
 ---and the offer used all the same, as the game's own step leaves them. Each buy logs
 ---ai_offer_bought with the gold before and after.
----@param player integer 0-31, the player of the AI_RECRUIT call
+---@param player integer|string a player number (0-31, a mod's faction 32-47) or a faction's name (coe5.factionSlot's names), the player of the AI_RECRUIT call
 ---@param offer integer coe5.Offer.offer
 ---@param x integer
 ---@param y integer
@@ -944,6 +1159,17 @@ function coe5.aiBuyOffer(player, offer, x, y) end
 ---@param line coe5.MapEditorLine
 ---@return integer|false id the line's id, or false when `label` is empty, all 956 ids are taken, or the site isn't on this build (logged as api_refused)
 function coe5.addMapEditorLine(line) end
+
+---Adds a line at the end of the selected commander's orders on the map (the column with Sentry,
+---Transfer Units and Use Special Power), drawn as the game draws its own: the icon, the label beside
+---it, the hover text. The column's frame grows to hold it. The map draws the column only while a
+---commander is selected. Past 16 shown lines of all mods (fewer when the screen's bottom comes first),
+---the mods' lines go on pages: a small box under the column says "Page 1 of 2" and has Previous and
+---Next; the game's own lines show on every page, and selecting another commander goes back to the
+---first. A click on the line runs onClick and nothing else: the map doesn't take the click.
+---@param line coe5.CommanderLine
+---@return integer|false id the line's id (2000 to 9997, in the order lines are added), or false when `label` is empty, `icon` is below 0 or past the sprite numbers (bad_icon), `color` isn't 3 or 4 parts from 0 to 1 (bad_color), all 7998 ids are taken, or the site isn't on this build (logged as api_refused or lua_refused)
+function coe5.addCommanderLine(line) end
 
 ---The map view now (the map screen's or the map editor's), in UI units: x from the left, y up from
 ---the bottom, screenW x screenH. World square (x, y) is `zoom` units wide, its top left corner at
@@ -1034,6 +1260,23 @@ function coe5.setPlaneShape(monster, planeName, shapeMonster) end
 ---@return integer|nil index
 function coe5.planeIndex(name) end
 
+---The player number of the faction with that name in this game: a mod's faction (a .c5se newfaction block),
+---or a vanilla independent faction by its name ("Independents", "Special Monsters", "Horrors", "Hades",
+---"Inferno", "Celestial", "Empire"); nil when there is none. Every call that takes a player takes it, and
+---takes the name itself too (coe5.get("slotName", "Ash Court"), coe5.spawnUnit("Ash Court", m, x, y)), as .c5m
+---lines take the quoted name; a name no faction has is an error there. A mod's faction gets its number at each game's start, so ask in the game.
+---@param name string
+---@return integer|nil player
+function coe5.factionSlot(name) end
+
+---Declares an independent faction of the mod's, at script load only, as a .c5se newfaction block does:
+---the same player number, rules, save rules and checks. Each field goes through its block word's check,
+---and a field refused refuses the whole call (lua_refused field= the field), so the faction is declared
+---as asked or not at all. It stays for the session; up to 16 factions, all mods together.
+---@param faction coe5.Faction
+---@return boolean declared false when refused (lua_refused reason=not_at_load, no_name, name_too_long, unknown_field, bad_field, bad_number, bad_text, missing_value, too_long, bad_color, a block word's reason, name_taken, too_many_factions, faction_slots_not_ready, hooks_not_installed)
+function coe5.addFaction(faction) end
+
 ---Lays a colour over the map while a plane is in view, as the game lays red at 0.15 over Elysium and
 ---the Sky while a Blood Sun is up: one rectangle over the whole screen, over the ground and under the
 ---units. Any plane, the game's included, by its number or name (a game plane's full or short name,
@@ -1062,8 +1305,33 @@ function coe5.clearPlaneTint(plane) end
 ---decorations it takes, exactly; `sprites` = {[40] = "./pool.tga"} draws tree.trs sprite 40 of them
 ---as the picture (a .tga or .png), on this terrain only. Terrains by number or name.
 ---@param looks {terrain: integer|string, ground: integer|string|nil, picture: string|nil, decor: integer|string|nil, sprites: table<integer, string>|nil}
+---The ground picture also shows in battle, on the cells of the battle square's own ground.
 ---@return boolean set false when refused (lua_refused reason=not_at_load, no_terrain, unknown_terrain, not_a_mod_terrain, not_a_game_terrain, no_looks, no_decor, no_ground, looks_taken, bad_sprite, too_many_sprites, not_a_tga, size_not_power_of_two, icon_not_found, hook_not_installed)
 function coe5.setTerrainLooks(looks) end
+
+---Adds a battle map file of the game's format (made in the game's battle map editor, --batmapeditor),
+---at script load only, as a battlemap block does. Battles on a square of one of `terrains` pick from
+---the maps naming that terrain; with none, battles that would use one of the game's maps in `forts`
+---("citadel", "village", "villageupgr": its file name in the game's data/batmaps) pick from the maps
+---naming it and the game's own, which `replace` = true leaves out. `weight` (1 to 1000, default 10,
+---the game's own map's) is the map's share of its pool; every word of `when` must hold: "siege",
+---"open", "ambush", "sea", "land", "cold", "warm", "summer", "autumn", "winter", "spring"; `planes`
+---names the planes it serves (any); `noscatter` = true keeps the map free of random trees and rocks;
+---`grounds` = {[8] = "./ash.tga"} draws the map's cells of that ground (0 to 28) with the picture (a .tga,
+---sides powers of two).
+---The same square always gets the same map. Terrains by number or name.
+---@param map {file: string, terrains: (integer|string)[]|nil, forts: string[]|nil, replace: boolean|nil, weight: integer|nil, when: string[]|nil, planes: string[]|nil, noscatter: boolean|nil, grounds: table<integer, string>|nil}
+---@return boolean added false when refused (lua_refused reason=not_at_load, no_file, bad_file, file_not_found, file_wrong_case, file_link, path_too_long, not_a_battle_map, bad_weight, bad_list, bad_terrain, unknown_terrain, too_many_terrains, unknown_battle_map, too_many_forts, unknown_condition, no_name, too_many_planes, bad_ground, not_a_tga, size_not_power_of_two, icon_not_found, icon_wrong_case, no_place, replace_without_fort, conditions_never_met, hook_not_installed, out_of_memory)
+function coe5.addBattleMap(map) end
+
+---Gives a terrain its own random plants and rocks in battle, in place of the game's trees, bushes,
+---rocks and rock pillars, at script load only, as a battlescatter block does: `objects` lists
+---{monster name, chance in 1000 cells} pairs, tried in order, one object a cell at most; none, or no
+---`objects`, for no scatter. The same square always gets the same scatter. One per terrain across
+---all mods. Terrain by number or name.
+---@param scatter {terrain: integer|string, objects: {[1]: string, [2]: integer}[]|nil}
+---@return boolean set false when refused (lua_refused reason=not_at_load, no_terrain, unknown_terrain, bad_terrain, bad_list, no_name, bad_chance, too_many_objects, scatter_taken, hook_not_installed, out_of_memory)
+function coe5.setBattleScatter(scatter) end
 
 ---Adds a mod command, as a DLL's addModCommand does, and only from your <ModName>_commands.lua while
 ---it loads. A line whose first word is `name`, exactly, capitals included, goes to `handler` instead
@@ -1648,11 +1916,36 @@ coe5.controller = {
 ---roll reads the first four.
 ---@class coe5.classAbility
 coe5.classAbility = {
-  aiClass = 203,          -- aiclass: -1 an AI's random roll never gets the class, 1 only an AI's does
+  aiClass = 203,          -- aiclass: who may play the class (coe5.aiClassValue)
   randomSkip = 204,       -- a percent: the random roll skips the class that often
   aiLevelMin = 210,       -- an AI below this difficulty level never rolls the class; 0 no bound
   aiLevelMax = 211,       -- an AI above this difficulty level never rolls the class; 0 no bound
   standardTroops = 222,   -- stdtroops: 1 when the class also recruits the standard troops
+}
+
+---An aiclass value, what classAbility gives for coe5.classAbility.aiClass (C: AI_CLASS_*): who may play
+---the class.
+---@class coe5.aiClassValue
+coe5.aiClassValue = {
+  humanOnly = -1,   -- an AI's random roll never gets the class
+  any = 0,
+  aiOnly = 1,       -- only an AI's random roll gets it, and Choose Class doesn't list it
+  neither = 2,      -- no player gets it, by roll or by Choose Class
+}
+
+---A corpse kind, squareCorpses' third index (C: CORPSE_KIND_*), in the game's order. The humanoid kinds
+---(Raise Dead's) are small, human, giant, vanara and bandar; the animal kinds (Raise Animals') smallAnimal,
+---largeAnimal and markata.
+---@class coe5.corpseKind
+coe5.corpseKind = {
+  small = 0,        -- a humanoid with small (Goblins, Hoburgs, Bakemono)
+  human = 1,        -- any other humanoid of battle size 1
+  giant = 2,        -- a humanoid of battle size 2 or 3
+  smallAnimal = 3,  -- an animal with under 20 hp
+  largeAnimal = 4,  -- an animal with 20 hp or more
+  markata = 5,      -- ape 1
+  vanara = 6,       -- ape 2
+  bandar = 7,       -- ape 3
 }
 
 ---GAME_OVER_WAIT's mode (C: GAME_OVER_MODE_*).

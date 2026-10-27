@@ -139,6 +139,7 @@ typedef struct {
 // What the files' sections so far leave open.
 typedef struct {
     const char *mod;
+    const char *dir;
     int sidecar;
     int sidecarBlocks;
     int order;

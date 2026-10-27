@@ -36,7 +36,7 @@ static void nameApiCaller(void *caller, char *out, size_t size) {
 // The human players in the game: slots whose controller is CONTROLLER_HUMAN.
 static int humanPlayerCount(void) {
     int humans = 0;
-    for (int i = 0; i < PLAYER_SLOTS; i++) humans += G16(RVA_SLOT_CONTROLLER + 2 * i) == CONTROLLER_HUMAN;
+    for (int i = 0; i < PLAYER_SLOTS; i++) humans += PG16(RVA_SLOT_CONTROLLER + 2 * i) == CONTROLLER_HUMAN;
     return humans;
 }
 
@@ -446,6 +446,7 @@ static int boundUnitListWait(int a, int b) {
     return id;
 }
 
+static int dispatchCommanderLineClick(int id);
 static int (*nextMapScreenWait)(int, int);
 static int boundMapScreenWait(int a, int b) {
     siteResultMod[SITE_MAP_SCREEN_WAIT] = NULL;
@@ -456,6 +457,7 @@ static int boundMapScreenWait(int a, int b) {
         refuseLuaCall(mod ? mod : "?", "MAP_SCREEN_WAIT", "commander_past_table", "id=%d last=%d", id, last);
         return 0;
     }
+    if (dispatchCommanderLineClick(id)) return 0;   // Logged by dispatchCommanderLineClick
     if (!id) showLuaNotices();
     return id;
 }

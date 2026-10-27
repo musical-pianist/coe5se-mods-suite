@@ -69,7 +69,7 @@ static int planeFileMapsize(const char *path, int *w, int *h) {
 // ---- The newplane block ---------------------------------------------------------------------------
 static struct {
     int open, refused, mod, line;
-    int sidecar;
+    unsigned int fileId;
     char name[PLANE_NAME_SIZE];
     int w, h, hasSize, fill, hasFill, recipe, populate, populateSet;
     int swapCount;
@@ -130,7 +130,7 @@ static void newplaneLine(const char *args, int mod, int level) {
     finishPlaneBlock();
     clearParserCurrentRecords();
     memset(&planeBlock, 0, sizeof planeBlock);
-    planeBlock.open = 1, planeBlock.mod = mod, planeBlock.line = G32(RVA_MOD_LINE), planeBlock.sidecar = readingSidecarNow();
+    planeBlock.open = 1, planeBlock.mod = mod, planeBlock.line = G32(RVA_MOD_LINE), planeBlock.fileId = modFileNow();
     planeBlock.recipe = planeBlock.populate = -1;
     snprintf(planeBlock.layout.source, sizeof planeBlock.layout.source, "%s", (const char *)GAME_PTR(RVA_EVENT_FILE));
     const char *p = args;
@@ -609,7 +609,7 @@ static void popupMissingPlanes(void) {
 // Every .c5m and .c5se line outside events comes here after nameListLineHook (modCommandHook).
 static const char *planeWordLineHook(const char *line, size_t len, int mod, int level) {
     if (level != 2) return line;
-    if (planeBlock.open && (planeBlock.mod != mod || planeBlock.sidecar != readingSidecarNow())) finishPlaneBlock();
+    if (planeBlock.open && (planeBlock.mod != mod || planeBlock.fileId != modFileNow())) finishPlaneBlock();
     const char *args = line + len;
     while (*args == ' ' || *args == '\t') args++;
     if (planeBlock.open) {

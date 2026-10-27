@@ -160,12 +160,25 @@ static const char *planeNameEventLine(const char *line, int level, const char *m
 static int declinedPlaneEventLine(const char *line);
 static void planeWordsBeforePass(int level);
 static void planeWordsAfterPass(int level);
+static const char *factionWordLineHook(const char *line, size_t len, int mod, int level);
+static void factionWordsBeforePass(int level);
+static void factionWordsAfterPass(int level);
 static void applyLoadedSavePlanes(int level);
+static void applyLoadedSaveFactions(int level);
+static const char *factionNameLineHook(const char *line, size_t len, int mod, int level);
+static const char *factionNameEventLine(const char *line, int level, const char *mod);
+static int declinedFactionNameLine(const char *line, size_t len);
+static void factionNamesBeforePass(int level);
+static void resolveFactionNames(int level);
 static void clearLuaPlaneTints(int level);
 static const char *terrainLooksLineHook(const char *line, size_t len, int mod, int level);
 static int declinedTerrainLooksLine(const char *line, size_t len, int mod, int level);
 static void terrainLooksBeforePass(int level);
 static void terrainLooksAfterPass(int level);
+static const char *battleMapLineHook(const char *line, size_t len, int mod, int level);
+static int declinedBattleMapLine(const char *line, size_t len, int mod, int level);
+static void battleMapsBeforePass(int level);
+static void battleMapsAfterPass(int level);
 static void popupMissingPlanes(void);
 static int settingLineHook(const char *line, size_t len, int mod, int level);
 static int eventLogicLine(const char *line, int level);
@@ -177,9 +190,23 @@ static int flagOffLineHook(const char *line, size_t len, int mod, int level);
 static int weaponTraitLineHook(const char *line, size_t len, int level);
 static void weaponTraitsBeforePass(int level);
 static void ritualWordsAfterPass(int level);
+static const char *corpseWordLineHook(const char *line, size_t len, int mod, int level);
+static int corpseEventLine(const char *line, int level);
+static void corpseWordsBeforePass(int level);
+static void corpseWordsAfterPass(int level);
 static void noExplodeLineHook(const char *line, size_t len, int mod, int level);
+static void aiClassLineHook(const char *line, size_t len, int mod, int level);
+static void aiClassBeforePass(int level);
+static void aiClassAfterPass(int level);
+static void aiClassInit(void);
+static const char *classNameLineHook(const char *line, size_t len, int mod, int level);
 static void noExplodeAfterPass(int level);
 static void noExplodeBeforePass(int level);
+static void recBonusLineHook(const char *line, size_t len, int mod, int level);
+static void recBonusBeforePass(int level);
+static int recBonusOfferCopy(int player, const unsigned char *record, unsigned char *copy);
+static struct RecBonusRoll { const unsigned char *record, *rolled; int unitsTried, unitsHooked; } recBonusRoll;
+static void recBonusAfterRoll(int player, const unsigned char *record, const unsigned char *copy, int entryBefore);
 static int declinedFlagOffLine(const char *line);
 static void finishSpellBlock(void);
 static unsigned int spellPassCount(void);
@@ -450,6 +477,9 @@ static void drawMenuColumn(MenuColumn *col) {
 }
 
 // The end of CoE5SE's startup, once a launch, after the game has read its mods.
+#ifdef __APPLE__
+static long paddingLeft(void);
+#endif
 static void finishStartup(void) {
     if (startupFinished) return;
     takeCodeModSnapshot();
@@ -458,6 +488,9 @@ static void finishStartup(void) {
     loadLuaCommandsFiles();
     loadLuaScripts();
     logAllWrapOrders();
+#ifdef __APPLE__
+    writeLog("header_padding_left", "bytes=%ld", paddingLeft());
+#endif
     logHeaderEnd();
     startupFinished = 1;
 }
@@ -527,6 +560,7 @@ static int menuWaitHook(int a, int b) {
 // The catalog of sites, with both builds' addresses, is in game_addresses.h.
 #define GAME_ADDRESSES_SITE_TABLE
 #include "game_addresses.h"
+#include "player_slots.h"
 
 // 1 when the game's code section hashed to its known build's (checkGameCode): every patch of the
 static int gameCodeMatches;
@@ -536,6 +570,8 @@ static int isInlinedButtonRowSite(CallSite site) {
     return site == SITE_PARTICIPANTS_BUTTON_ROW || site == SITE_SQUARE_INFO_BUTTON_ROW;
 }
 
+#include "x86_code.h"
+
 #ifndef __aarch64__
 // Each site's stub is 0x40 bytes of code, and all of them share two read-execute pages near the game's
 typedef struct {
@@ -544,7 +580,6 @@ typedef struct {
     float xmm12;
     float xmm13;
 } StubData;
-#define STUB_SIZE  0x40
 #define STUB_PAGES_BYTES 0x2000
 #define STUB_DATA_BYTES  0x1000
 _Static_assert(SITE_COUNT * STUB_SIZE <= STUB_PAGES_BYTES, "every site's stub must fit the pages allocNearBytes gives");
@@ -558,14 +593,6 @@ static StubData *siteStubData(CallSite site) { return (StubData *)(stubPage + ST
 
 // The caller's rsp at the site's call, as on Mac.
 static uintptr_t siteCallerSp(CallSite site) { return siteStubData(site)->rsp + 8; }
-
-// Writes `opcode` and a 32-bit displacement to `slot`, and moves *p past it.
-static void emitRipStore(unsigned char **p, const unsigned char *opcode, int opcodeLen, const void *slot, const unsigned char *runsAt) {
-    memcpy(*p, opcode, opcodeLen);
-    int disp = (int)((const unsigned char *)slot - (runsAt + opcodeLen + 4));
-    memcpy(*p + opcodeLen, &disp, 4);
-    *p += opcodeLen + 4;
-}
 
 // The stubs' pages: code read-execute, data read-write, within 2 GB of `target`; NULL when there is no room.
 static unsigned char *allocStubPages(unsigned char *target) {
@@ -614,7 +641,6 @@ static int isSiteCall(const unsigned char *call, const unsigned char *target, co
 // Builds the site's stub and points every call of the site at it.
 static int installSite(CallSite site) {
     const SiteInfo *info = &SITES[site];
-    int rel;
     if (!prepareSiteCode(site)) {
         writeLog("site_skipped", "site=%s reason=not_the_expected_code", info->name);
         return 0;
@@ -638,39 +664,28 @@ static int installSite(CallSite site) {
         writeLog("site_skipped", "site=%s reason=no_near_page", info->name);
         return 0;
     }
-    unsigned char *stub = siteStub(site), code[STUB_SIZE], *p = code;
+    unsigned char *stub = siteStub(site), code[STUB_SIZE];
     StubData *data = siteStubData(site);
-    static const unsigned char MOVSS_XMM12[] = {0xf3, 0x44, 0x0f, 0x11, 0x25};
-    static const unsigned char MOVSS_XMM13[] = {0xf3, 0x44, 0x0f, 0x11, 0x2d};
-    static const unsigned char MOV_RSP[] = {0x48, 0x89, 0x25};
-    static const unsigned char JMP_INDIRECT[] = {0xff, 0x25};
-    static const unsigned char MOV_ECX[] = {0x8b, 0x0d};
-#define STUB_RUNS_AT (stub + (p - code))
-    if (info->captureMenuFade) {
-        emitRipStore(&p, MOVSS_XMM12, 5, &data->xmm12, STUB_RUNS_AT);
-        emitRipStore(&p, MOVSS_XMM13, 5, &data->xmm13, STUB_RUNS_AT);
-    }
-    if (site == SITE_AI_TURN) emitRipStore(&p, MOV_ECX, 2, GAME_PTR(RVA_ACTIVE_PLAYER), STUB_RUNS_AT);
-    if (site == SITE_GAME_START) {
-        static const unsigned char ZERO_ECX_EDX[] = {0x31, 0xc9, 0x31, 0xd2};
-        memcpy(p, ZERO_ECX_EDX, sizeof ZERO_ECX_EDX);
-        p += sizeof ZERO_ECX_EDX;
-    }
-    emitRipStore(&p, MOV_RSP, 3, &data->rsp, STUB_RUNS_AT);
-    emitRipStore(&p, JMP_INDIRECT, 2, &data->head, STUB_RUNS_AT);
-#undef STUB_RUNS_AT
+    SiteStubSlots slots = {
+        .xmm12 = info->captureMenuFade ? &data->xmm12 : NULL,
+        .xmm13 = info->captureMenuFade ? &data->xmm13 : NULL,
+        .ecxFrom = site == SITE_AI_TURN ? GAME_PTR(RVA_ACTIVE_PLAYER) : NULL,
+        .zeroEcxEdx = site == SITE_GAME_START,
+        .rsp = &data->rsp,
+        .head = &data->head,
+    };
+    size_t codeSize = buildSiteStub(code, stub, &slots);
     data->head = site == SITE_GAME_START ? (void *)gameStartPrepOnce : target;
-    if (!writeGameCode(stub, code, (size_t)(p - code))) {
+    if (!writeGameCode(stub, code, codeSize)) {
         writeLog("site_skipped", "site=%s reason=code_unwritable", info->name);
         return 0;
     }
 
     unsigned char saved[MAX_SITE_CALLS + 1][6];
     for (int i = 0; siteCallAt(site, i); i++) {
-        unsigned char *call = siteCallAt(site, i), callCode[6] = {0xe8, 0, 0, 0, 0, 0x90};
+        unsigned char *call = siteCallAt(site, i), callCode[6];
         size_t size = slot ? 6 : 5;
-        rel = (int)(stub - (call + 5));
-        memcpy(callCode + 1, &rel, 4);
+        buildSiteCall(callCode, call, stub);
         memcpy(saved[i], call, size);
         if (writeGameCode(call, callCode, size)) continue;
         while (--i >= 0) writeGameCode(siteCallAt(site, i), saved[i], size);
@@ -690,7 +705,6 @@ static int setupIsAutomated;
 // ---- Multiplayer gate -----------------------------------------------------------------------
 // No plugin runs in network games.
 #ifndef __aarch64__
-#define GATE_SIZE       0x50
 #define GATE_PAGE_SIZE  0x10000
 #define GATES_PER_PAGE  (GATE_PAGE_SIZE / GATE_SIZE)
 #define GATE_DATA_BYTES 0x4000
@@ -751,24 +765,9 @@ static HMODULE callingPlugin(void *returnAddress) {
 #ifndef __aarch64__
 // Writes a gate's code at `gate`, in a block that is still writable.
 static void writeGateCode(unsigned char *gate) {
-    unsigned char *p = gate, *fixups[3];
-    const struct { unsigned int rva; unsigned char jcc; } checks[3] = {
-        {RVA_NET_CLIENT, 0x7f}, {RVA_NET_SERVER, 0x75}, {RVA_NET_LOBBY, 0x75},
-    };
-    for (int i = 0; i < 3; i++) {
-        uintptr_t flag = (uintptr_t)(gameBase + checks[i].rva);
-        *p++ = 0x48; *p++ = 0xb8; memcpy(p, &flag, 8); p += 8;
-        *p++ = 0x83; *p++ = 0x38; *p++ = 0x00;
-        *p++ = checks[i].jcc; fixups[i] = p++;
-    }
-    uintptr_t self = (uintptr_t)gate, entered = (uintptr_t)&enteredGateAddress;
-    *p++ = 0x48; *p++ = 0xb8; memcpy(p, &self, 8); p += 8;
-    *p++ = 0x48; *p++ = 0xa3; memcpy(p, &entered, 8); p += 8;
+    const void *flags[3] = {GAME_PTR(RVA_NET_CLIENT), GAME_PTR(RVA_NET_SERVER), GAME_PTR(RVA_NET_LOBBY)};
     GateData *data = gateData(gate);
-    emitRipStore(&p, (const unsigned char[]){0xff, 0x25}, 2, &data->hook, p);
-    unsigned char *skip = p;
-    emitRipStore(&p, (const unsigned char[]){0xff, 0x25}, 2, &data->next, p);
-    for (int i = 0; i < 3; i++) *fixups[i] = (unsigned char)(skip - (fixups[i] + 1));
+    buildGateCode(gate, gate, flags, (const void *)&enteredGateAddress, &data->hook, &data->next);
 }
 
 // Builds a gate that jumps to `next` in a network game and to `hook` otherwise.
@@ -1638,6 +1637,9 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #define VANILLA_SPELL_COUNT 1029
 #include "spell_table_move.h"
 #include "plane_table_move.h"
+#include "player_table_move.h"
+#include "factions.h"
+#include "mac_site_stubs.h"
 #include "table_move.h"
 #include "spell_table.h"
 #include "spell_paths.h"
@@ -1651,6 +1653,7 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "missing_mods.h"
 #include "plane_layout.h"
 #include "custom_planes.h"
+#include "faction_sight.h"
 #include "plane_shapes.h"
 #include "plane_ground.h"
 #include "custom_plane_view.h"
@@ -1658,29 +1661,43 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "mod_versions.h"
 #include "spells_changed.h"
 #include "code_check.h"
+#include "corpse_kinds.h"
 #include "weapon_traits.h"
 #include "no_explode.h"
 #include "trace_filter.h"
+#include "trace_log_file.h"
 #include "seal_events.h"
 #include "data_area_max.h"
 #include "map_editor.h"
+#include "commander_lines.h"
 #include "lua_scripts.h"
 #include "lua_game_data.h"
 #include "lua_get_set.h"
+#include "strength_index.h"
 #include "lua_sites.h"
 #include "lua_split_chain.h"
 #include "lua_coe5_table.h"
 #include "portal_crossing.h"
 #include "lua_ai.h"
+#include "shop_offers.h"
+#include "rec_bonus.h"
 #include "lua_units.h"
 #include "lua_data_files.h"
 #include "lua_ui.h"
 #include "lua_loading.h"
 #include "plane_words.h"
+#include "class_names.h"
+#include "ai_class.h"
 #include "plane_pieces.h"
 #include "terrain_looks.h"
+#include "battle_maps.h"
 #include "event_finders.h"
+#include "battle_snapshot.h"
 #include "fanpatch/fanpatch_host.h"
+#include "faction_words.h"
+#include "faction_movers.h"
+#include "faction_saves.h"
+#include "faction_names.h"
 
 // Ends the launch's header in the log at the end of startup (finishStartup).
 static void logHeaderEnd(void) {
@@ -1739,7 +1756,10 @@ static void startCoe5se(const char *via) {
     }
     checkNameBoxCode();
     eventFindersInit();
+    battleSnapshotInit();
+    strengthIndexInit();
 #ifndef __APPLE__
+    traceLogFileInit();
     installStackCookieHook();
 #endif
     installMenuHook();
@@ -1761,6 +1781,7 @@ static void startCoe5se(const char *via) {
     installWaitIdBounds();
     installInlinedButtonRows();
     installMapEditorHooks();
+    installCommanderLineHooks();
 #ifndef __aarch64__
     gameSaveInit();
 #endif
@@ -1778,12 +1799,16 @@ static void startCoe5se(const char *via) {
     spellWordsInit();
     spellPathWordsInit();
     planeWordsInit();
+    factionWordsInit();
     terrainLooksWordsInit();
+    battleMapWordsInit();
     monsterFlagWordsInit();
     ritualWordsInit();
+    corpseKindsInit();
     weaponTraitsInit();
     noExplodeInit();
     nameListsInit();
+    aiClassInit();
     maxdataWordInit();
     sidecarInit();
     pluginStartInit();

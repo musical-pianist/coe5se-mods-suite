@@ -87,6 +87,56 @@ static int lAddMapEditorLine(lua_State *L) {
     return 1;
 }
 
+// coe5.addCommanderLine{label=, tooltip=, icon=, color=, visible=, onClick=}: a line in the commander panel; its id or false.
+static int lAddCommanderLine(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+    lua_settop(L, 1);
+    lua_getfield(L, 1, "label");
+    lua_getfield(L, 1, "tooltip");
+    lua_getfield(L, 1, "onClick");
+    lua_getfield(L, 1, "visible");
+    lua_getfield(L, 1, "icon");
+    lua_getfield(L, 1, "color");
+    const char *label = luaL_checkstring(L, 2);
+    lua_Integer icon = luaL_optinteger(L, 6, COMMANDER_LINE_NO_ICON);
+    float colour[4] = {0, 0, 0, 1};
+    int colourParts = 0;
+    if (!lua_isnil(L, 7)) {
+        luaL_checktype(L, 7, LUA_TTABLE);
+        colourParts = (int)lua_rawlen(L, 7);
+        for (int c = 0; c < colourParts && c < 4; c++) {
+            if (lua_rawgeti(L, 7, c + 1) != LUA_TNUMBER) return luaL_error(L, "color: part %d is not a number", c + 1);
+            colour[c] = (float)lua_tonumber(L, -1);
+            lua_pop(L, 1);
+        }
+    }
+    if (refuseFromDeadLuaScript(L, "coe5.addCommanderLine")) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    if (icon != COMMANDER_LINE_NO_ICON && (icon < 0 || icon >= SPRITES_PER_KIND)) {
+        refuseLuaCall(runningLuaMod(), "coe5.addCommanderLine", "bad_icon", "label=%s icon=%lld", label, (long long)icon);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    if (!lua_isnil(L, 7) && colourParts != 3 && colourParts != 4) {
+        refuseLuaCall(runningLuaMod(), "coe5.addCommanderLine", "bad_color", "label=%s parts=%d", label, colourParts);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    int callback = newLuaCallback(L, 4, 5);
+    if (callback < 0) {
+        refuseLuaCall(runningLuaMod(), "coe5.addCommanderLine", "out_of_memory", "label=%s", label);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    int id = addCommanderLineFor((void *)lAddCommanderLine, label, lua_tostring(L, 3), (int)icon,
+                                 lua_isnil(L, 7) ? NULL : colour, callback);
+    if (id < 0) lua_pushboolean(L, 0);
+    else lua_pushinteger(L, id);
+    return 1;
+}
+
 static int luaScriptsLoading;
 static int luaCommandsLoading;
 
@@ -258,6 +308,10 @@ static int lSetPlaneShape(lua_State *L) {
 }
 
 static int lSetTerrainLooks(lua_State *L);
+static int lAddBattleMap(lua_State *L);
+static int lSetBattleScatter(lua_State *L);
+static int lFactionSlot(lua_State *L);
+static int lAddFaction(lua_State *L);
 
 // coe5.planeIndex(name): the index of the named plane in this world, or nil.
 static int lPlaneIndex(lua_State *L) {
@@ -372,7 +426,7 @@ static int lSendMessage(lua_State *L) {
         lua_pushinteger(L, -1);
         return 1;
     }
-    lua_Integer player = luaL_checkinteger(L, 1);
+    lua_Integer player = luaCheckPlayer(L, 1);
     const char *title = luaL_checkstring(L, 2), *text = luaL_checkstring(L, 3);
     if (player < INT_MIN || player > INT_MAX) {
         refuseLuaCall(runningLuaMod(), "coe5.sendMessage", "bad_player", "player=%lld title=%s", (long long)player, title);
@@ -535,10 +589,10 @@ static int lSquareUnits(lua_State *L) {
 // coe5.revealMap(player[, plane]): every plane's squares, the mods' included, or one plane's, in view for the player.
 #define SIGHT_REDRAW_CONTROLLERS 0x109
 static int lRevealMap(lua_State *L) {
-    lua_Integer player = luaL_checkinteger(L, 1), plane = luaL_optinteger(L, 2, -1);
+    lua_Integer player = luaCheckPlayer(L, 1), plane = luaL_optinteger(L, 2, -1);
     const char *problem = NULL;
     if (G32(RVA_ACTIVE_PLAYER) < 0) problem = "no_game";
-    else if (player < 0 || player >= PLAYER_SLOTS) problem = "bad_player";
+    else if (player < 0 || player >= playerSlotCount()) problem = "bad_player";
     else if (plane < -1 || plane > G32(RVA_LAST_PLANE) || plane >= planeTableRecords()) problem = "bad_plane";
     if (problem) {
         refuseLuaCall(runningLuaMod(), "coe5.revealMap", problem, "player=%lld plane=%lld", (long long)player, (long long)plane);
@@ -546,7 +600,7 @@ static int lRevealMap(lua_State *L) {
         return 1;
     }
     GAME_FN(void (*)(int, int), RVA_REVEAL_MAP_FOR)((int)player, (int)plane);
-    int controller = G16(RVA_SLOT_CONTROLLER + (size_t)player * 2);
+    int controller = (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, player, 2));
     if (controller >= -3 && controller < 29 && (SIGHT_REDRAW_CONTROLLERS >> (controller + 3) & 1))
         for (int index = PLANE_ELYSIUM2 + 1; index <= lastCustomPlaneIndex(); index++)
             if (plane < 0 || plane == index) GAME_FN(int (*)(int, int), RVA_MAP_BG_MARK)(index, (int)player);
@@ -560,7 +614,7 @@ static void setIntField(lua_State *L, const char *key, lua_Integer value);
 static int lArmies(lua_State *L) {
     int withViewer = !lua_isnoneornil(L, 1);
     lua_Integer viewer = withViewer ? luaL_checkinteger(L, 1) : -1;
-    if (withViewer && (viewer < 0 || viewer >= PLAYER_SLOTS)) {
+    if (withViewer && (viewer < 0 || viewer >= playerSlotCount())) {
         LuaScript *s = luaScriptOf(L);
         refuseLuaCall(s ? s->mod : "?", "coe5.armies", "bad_player", "viewer=%lld", (long long)viewer);
         lua_createtable(L, 0, 0);

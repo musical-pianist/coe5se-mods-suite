@@ -623,16 +623,28 @@ static void modsRunHook(int level) {
     unsigned int spellPasses = spellPassCount();
     clearLuaPlaneTints(level);
     planeWordsBeforePass(level);
+    factionWordsBeforePass(level);
+    factionNamesBeforePass(level);
     terrainLooksBeforePass(level);
+    battleMapsBeforePass(level);
     weaponTraitsBeforePass(level);
     noExplodeBeforePass(level);
+    recBonusBeforePass(level);
+    corpseWordsBeforePass(level);
+    aiClassBeforePass(level);
     nextModsRun(level);
     finishReading();
     spellsAfterPass(level, spellPasses);
     applyLoadedSavePlanes(level);
     planeWordsAfterPass(level);
+    factionWordsAfterPass(level);
+    applyLoadedSaveFactions(level);
+    resolveFactionNames(level);
     ritualWordsAfterPass(level);
+    corpseWordsAfterPass(level);
+    aiClassAfterPass(level);
     noExplodeAfterPass(level);
     terrainLooksAfterPass(level);
+    battleMapsAfterPass(level);
     if (level != 3) popupSettingErrors();
 }

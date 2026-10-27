@@ -136,6 +136,7 @@ static void clearTerrainLooksFields(TerrainLooksFields *f) {
 static int installTerrainGroundHook(void);
 static int installTerrainDecorHook(void);
 static int installTerrainCompositeHook(void);
+static int installBattleBackgroundHook(void);
 static void rebuildTerrainLooks(void);
 
 // The declaration for terrain `terrain` that the running pass or a script made, or NULL.
@@ -154,7 +155,7 @@ static const char *declareTerrainLooks(const char *mod, const TerrainLooksFields
     if (f->ground < 0 && f->decor < 0) return "no_looks";
     if (findTerrainLooks(f->terrain)) return "looks_taken";
     if (f->ground >= 0 && !installTerrainGroundHook()) return "hook_not_installed";
-    if (f->groundPicture >= 0 && !installTerrainCompositeHook()) return "hook_not_installed";
+    if (f->groundPicture >= 0 && (!installTerrainCompositeHook() || !installBattleBackgroundHook())) return "hook_not_installed";
     if (f->decor >= 0 && !installTerrainDecorHook()) return "hook_not_installed";
     int again = -1;
     for (int i = 0; i < terrainLooksCount && again < 0; i++)
@@ -190,7 +191,8 @@ static void rebuildTerrainLooks(void) {
 
 // ---- The terrainlooks block --------------------------------------------------------------------
 static struct {
-    int open, refused, mod, line, sidecar;
+    int open, refused, mod, line;
+    unsigned int fileId;
     char file[MAX_PATH];
     TerrainLooksFields f;
 } looksBlock;
@@ -239,7 +241,7 @@ static void terrainlooksLine(const char *args, int mod, int level) {
     clearParserCurrentRecords();
     memset(&looksBlock, 0, sizeof looksBlock);
     clearTerrainLooksFields(&looksBlock.f);
-    looksBlock.open = 1, looksBlock.mod = mod, looksBlock.line = G32(RVA_MOD_LINE), looksBlock.sidecar = readingSidecarNow();
+    looksBlock.open = 1, looksBlock.mod = mod, looksBlock.line = G32(RVA_MOD_LINE), looksBlock.fileId = modFileNow();
     snprintf(looksBlock.file, sizeof looksBlock.file, "%s", (const char *)GAME_PTR(RVA_EVENT_FILE));
     const char *p = args, *why = NULL;
     looksBlock.f.terrain = readPlaneTerrain(&p, &why);
@@ -319,7 +321,7 @@ static void terrainspriteLine(const char *args, int mod, int level) {
 // Reads a terrainlooks block's lines; returns the line to go on with, or NULL when it took it.
 static const char *terrainLooksLineHook(const char *line, size_t len, int mod, int level) {
     if (level != 2 || !looksBlock.open) return line;
-    if (looksBlock.mod != mod || looksBlock.sidecar != readingSidecarNow()) {
+    if (looksBlock.mod != mod || looksBlock.fileId != modFileNow()) {
         finishLooksBlock();
         return line;
     }

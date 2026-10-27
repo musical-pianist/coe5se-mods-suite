@@ -34,6 +34,8 @@ static const struct { const char *reason, *error; } LUA_STOPS[LUA_STOP_KINDS] = 
 enum { LUA_NOTICE_STOPPED = 1, LUA_NOTICE_STORAGE = 2 };
 // Calls into scripts whose code runs now.
 static int luaCodeRunning;
+// Raised wherever a unit may have changed since: strength_index.h's lists hold only within one value.
+static unsigned unitsChangeEpoch = 1;
 
 typedef struct {
     char mod[MOD_NAME_MAX], path[MAX_PATH];
@@ -74,6 +76,20 @@ static PRINTF_FORMAT(4, 5) void refuseLuaCall(const char *mod, const char *call,
     va_start(ap, fmt);
     logRefusal("lua_refused", call, "mod", mod ? mod : "?", reason, fmt, ap);
     va_end(ap);
+}
+
+static int playerOfFactionName(const char *name);
+
+// Argument `arg` as a player: a number, or a faction's name, which becomes its number in place on the stack.
+static lua_Integer luaCheckPlayer(lua_State *L, int arg) {
+    if (lua_type(L, arg) == LUA_TSTRING && !lua_isnumber(L, arg)) {
+        const char *name = lua_tostring(L, arg);
+        int slot = playerOfFactionName(name);
+        if (slot < 0) luaL_error(L, "no faction called '%s'", name);
+        lua_pushinteger(L, slot);
+        lua_replace(L, arg);
+    }
+    return luaL_checkinteger(L, arg);
 }
 
 // The registry key of each stop's error text.
@@ -249,7 +265,9 @@ static int callLuaProtected(LuaScript *s, LuaPushFn push, void *ctx, int nresult
     luaCodeRunning++;
     lua_pushcfunction(s->L, runLuaProtectedCall);
     lua_pushlightuserdata(s->L, &call);
+    unitsChangeEpoch++;
     int rc = lua_pcall(s->L, 1, nresults, 0);
+    unitsChangeEpoch++;
     luaCodeRunning--;
     luaRunning = outer;
     s->depth--;

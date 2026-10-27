@@ -86,7 +86,7 @@ static int lScrapRitualPlan(lua_State *L) {
         int unit = G32(RVA_COMMANDERS + (size_t)commander * COMMANDER_SIZE);
         if (unit >= 0 && unit < UNIT_TABLE_MAX && G16(RVA_UNIT_HP + (size_t)unit * UNIT_SIZE) > 0) {
             int player = G16(RVA_UNIT_PLAYER + (size_t)unit * UNIT_SIZE);
-            if (player >= 0 && player < PLAYER_SLOTS) owner = player, controller = G16(RVA_SLOT_CONTROLLER + (size_t)player * 2);
+            if (player >= 0 && player < playerSlotCount()) owner = player, controller = (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, player, 2));
         }
         plan = G16(RVA_COMMANDER_AI_PLAN + (size_t)commander * COMMANDER_SIZE);
     }
@@ -124,7 +124,7 @@ static int lReleaseFollower(lua_State *L) {
     int owner = -1, controller = CONTROLLER_REMOVED, leader = -1;
     if (unit >= 0 && unit < UNIT_TABLE_MAX && G16(RVA_UNIT_HP + (size_t)unit * UNIT_SIZE) > 0) {
         int player = G16(RVA_UNIT_PLAYER + (size_t)unit * UNIT_SIZE);
-        if (player >= 0 && player < PLAYER_SLOTS) owner = player, controller = G16(RVA_SLOT_CONTROLLER + (size_t)player * 2);
+        if (player >= 0 && player < playerSlotCount()) owner = player, controller = (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, player, 2));
         leader = G32(RVA_UNITS + (size_t)unit * UNIT_SIZE + UNIT_COMMANDER);
     }
     int active = G32(RVA_ACTIVE_PLAYER);
@@ -220,7 +220,7 @@ static int lTransferFollower(lua_State *L) {
     int owner = -1, controller = CONTROLLER_REMOVED, leader = -1, ux = -1, uy = -1;
     if (unit >= 0 && unit < UNIT_TABLE_MAX && G16(RVA_UNIT_HP + (size_t)unit * UNIT_SIZE) > 0) {
         int player = G16(RVA_UNIT_PLAYER + (size_t)unit * UNIT_SIZE);
-        if (player >= 0 && player < PLAYER_SLOTS) owner = player, controller = G16(RVA_SLOT_CONTROLLER + (size_t)player * 2);
+        if (player >= 0 && player < playerSlotCount()) owner = player, controller = (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, player, 2));
         leader = G32(RVA_UNITS + (size_t)unit * UNIT_SIZE + UNIT_COMMANDER);
         ux = G32(RVA_UNIT_X + (size_t)unit * UNIT_SIZE), uy = G32(RVA_UNIT_X + (size_t)unit * UNIT_SIZE + 4);
     }
@@ -229,7 +229,7 @@ static int lTransferFollower(lua_State *L) {
         commanderUnit = G32(RVA_COMMANDERS + (size_t)commander * COMMANDER_SIZE);
         if (commanderUnit >= 0 && commanderUnit < UNIT_TABLE_MAX && G16(RVA_UNIT_HP + (size_t)commanderUnit * UNIT_SIZE) > 0) {
             int player = G16(RVA_UNIT_PLAYER + (size_t)commanderUnit * UNIT_SIZE);
-            if (player >= 0 && player < PLAYER_SLOTS) commanderOwner = player;
+            if (player >= 0 && player < playerSlotCount()) commanderOwner = player;
             cx = G32(RVA_UNIT_X + (size_t)commanderUnit * UNIT_SIZE), cy = G32(RVA_UNIT_X + (size_t)commanderUnit * UNIT_SIZE + 4);
         }
     }
@@ -335,12 +335,12 @@ static void freeAiSpawnboosters(int player, int x, int y, int ability) {
 }
 // Pays an offer's first AI_PAID_COSTS costs, `sign` -1 to take them and 1 to add them.
 static void payAiOffer(int player, int offer, int sign) {
-    const int *costs = (const int *)GAME_PTR(RVA_SHOP_COSTS + (size_t)player * PLAYER_BLOCK_SIZE + (size_t)offer * SHOP_COST_COUNT * 4);
+    const int *costs = (const int *)playerTableAddress(RVA_SHOP_COSTS + (size_t)player * PLAYER_BLOCK_SIZE + (size_t)offer * SHOP_COST_COUNT * 4);
     for (int i = 0; i < AI_PAID_COSTS; i++) GAME_FN(void (*)(int, int, int, int, int), RVA_PAY_RESOURCE_AT)(player, i, sign * costs[i], -1, -1);
 }
 // The offer's "=" limiter, the unit name an upgrade starts from ("" for none).
 static void aiOfferLimiter(int player, int offer, char out[SHOP_OFFER_TEXT_SIZE + 1]) {
-    memcpy(out, GAME_PTR(RVA_SHOP_OFFER_LIMITS + (size_t)player * PLAYER_BLOCK_SIZE + (size_t)offer * SHOP_OFFER_TEXT_SIZE), SHOP_OFFER_TEXT_SIZE);
+    memcpy(out, playerTableAddress(RVA_SHOP_OFFER_LIMITS + (size_t)player * PLAYER_BLOCK_SIZE + (size_t)offer * SHOP_OFFER_TEXT_SIZE), SHOP_OFFER_TEXT_SIZE);
     out[SHOP_OFFER_TEXT_SIZE] = 0;
 }
 // Turns unit `u` into `monster`, keeping its wounds; with `free`, it follows no commander after.
@@ -370,7 +370,7 @@ static const char *commanderTheName(int commander) {
 static void buyAiTroops(int player, int offer, int x, int y) {
     if (x < 0 || y < 0 || player < 0) return;   // No log: the game's own buy does nothing either
     size_t block = (size_t)player * PLAYER_BLOCK_SIZE;
-    int monster = G32(RVA_SHOP_OFFERS + block + (size_t)offer * 4), count = G32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4);
+    int monster = PG32(RVA_SHOP_OFFERS + block + (size_t)offer * 4), count = PG32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4);
     char limiter[SHOP_OFFER_TEXT_SIZE + 1];
     aiOfferLimiter(player, offer, limiter);
     int terrain = buyTerrainAt(x, y);
@@ -379,7 +379,7 @@ static void buyAiTroops(int player, int offer, int x, int y) {
     const unsigned char *t = GAME_PTR(RVA_TERRAIN_TABLE + (size_t)terrain * TERRAIN_SIZE);
     int gold = *(const short *)(t + TERRAIN_GOLD), trade = *(const short *)(t + TERRAIN_TRADE), fort = (parts & FORT_PART_FORT) != 0;
     int worth;
-    if (x == (short)G16(RVA_PLAYER_HOME_X + (size_t)player * 2) && y == (short)G16(RVA_PLAYER_HOME_Y + (size_t)player * 2)) worth = fort + 1;
+    if (x == (short)(*(short *)playerSlotAddress(RVA_PLAYER_HOME_X, player, 2)) && y == (short)(*(short *)playerSlotAddress(RVA_PLAYER_HOME_Y, player, 2))) worth = fort + 1;
     else if (gold >= 4 && trade >= 1 && fort) worth = 1;
     else worth = gold > 1 && fort && (parts & FORT_PART_CITADEL_WALLS);
     if (GAME_FN(int (*)(int, int, int), RVA_AI_REFORMS_HERE)(player, x, y) > 0) worth++;
@@ -413,14 +413,14 @@ static void buyAiTroops(int player, int offer, int x, int y) {
         }
     }
     payAiOffer(player, offer, -1);
-    GAME_FN(void (*)(int, int), RVA_REBUILD_SQUARE_ARMY)(x, y);
+    rebuildSquareArmyHook(x, y);
 }
 
 // The commander buy at (x, y): returns the commander, -1 for none.
 static int buyAiCommander(int player, int offer, int x, int y) {
     if (x < 0 || y < 0 || player < 0) return -1;   // No log: the game's own buy does nothing either
     size_t block = (size_t)player * PLAYER_BLOCK_SIZE;
-    int monster = G32(RVA_SHOP_OFFERS + block + (size_t)offer * 4), commander = -1, upgraded = -1;
+    int monster = PG32(RVA_SHOP_OFFERS + block + (size_t)offer * 4), commander = -1, upgraded = -1;
     char limiter[SHOP_OFFER_TEXT_SIZE + 1];
     aiOfferLimiter(player, offer, limiter);
     if (limiter[0]) {
@@ -434,7 +434,7 @@ static int buyAiCommander(int player, int offer, int x, int y) {
         commander = GAME_FN(int (*)(int, int, int, int), RVA_NEW_COMMANDER)(x, y, player, monster);
         if (commander >= 0 && commander < COMMANDER_TABLE_MAX) {
             char *name = (char *)GAME_PTR(RVA_COMMANDER_NAMES + (size_t)commander * COMMANDER_SIZE);
-            const char *offered = (const char *)GAME_PTR(RVA_SHOP_OFFER_NAMES + block + (size_t)offer * SHOP_OFFER_TEXT_SIZE);
+            const char *offered = (const char *)playerTableAddress(RVA_SHOP_OFFER_NAMES + block + (size_t)offer * SHOP_OFFER_TEXT_SIZE);
             size_t n = 0;
             while (n < COMMANDER_NAME_SIZE - 1 && offered[n]) name[n] = offered[n], n++;
             name[n] = 0;
@@ -453,7 +453,7 @@ static int buyAiCommander(int player, int offer, int x, int y) {
         }
     }
     payAiOffer(player, offer, 1);
-    GAME_FN(void (*)(int, int), RVA_REBUILD_SQUARE_ARMY)(x, y);
+    rebuildSquareArmyHook(x, y);
     return commander;
 }
 
@@ -578,23 +578,23 @@ static void setOfferCosts(lua_State *L, const int *costs) {
 
 // coe5.shopOffers(player): the player's recruitment offers this turn.
 static int lShopOffers(lua_State *L) {
-    lua_Integer player = luaL_checkinteger(L, 1);
+    lua_Integer player = luaCheckPlayer(L, 1);
     lua_createtable(L, 0, 0);
-    if (player < 0 || player >= PLAYER_SLOTS) {
+    if (player < 0 || player >= playerSlotCount()) {
         LuaScript *s = luaScriptOf(L);
         refuseLuaCall(s ? s->mod : "?", "coe5.shopOffers", "bad_player", "player=%lld", (long long)player);
         return 1;
     }
     size_t block = (size_t)player * PLAYER_BLOCK_SIZE;
-    int last = G32(RVA_SHOP_LAST + block), n = 0;
+    int last = PG32(RVA_SHOP_LAST + block), n = 0;
     for (int i = 0; i <= last && i < SHOP_OFFERS_MAX; i++) {
-        int count = G32(RVA_SHOP_OFFER_COUNTS + block + (size_t)i * 4);
+        int count = PG32(RVA_SHOP_OFFER_COUNTS + block + (size_t)i * 4);
         if (count <= 0) continue;
-        int monster = G32(RVA_SHOP_OFFERS + block + (size_t)i * 4);
-        int flags = G32(RVA_SHOP_OFFER_FLAGS + block + (size_t)i * 4);
-        const int *costs = (const int *)(gameBase + RVA_SHOP_COSTS + block + (size_t)i * SHOP_COST_COUNT * 4);
-        const char *named = (const char *)(gameBase + RVA_SHOP_OFFER_NAMES + block + (size_t)i * SHOP_OFFER_TEXT_SIZE);
-        const char *limiter = (const char *)(gameBase + RVA_SHOP_OFFER_LIMITS + block + (size_t)i * SHOP_OFFER_TEXT_SIZE);
+        int monster = PG32(RVA_SHOP_OFFERS + block + (size_t)i * 4);
+        int flags = PG32(RVA_SHOP_OFFER_FLAGS + block + (size_t)i * 4);
+        const int *costs = (const int *)(playerTableAddress(RVA_SHOP_COSTS) + block + (size_t)i * SHOP_COST_COUNT * 4);
+        const char *named = (const char *)(playerTableAddress(RVA_SHOP_OFFER_NAMES) + block + (size_t)i * SHOP_OFFER_TEXT_SIZE);
+        const char *limiter = (const char *)(playerTableAddress(RVA_SHOP_OFFER_LIMITS) + block + (size_t)i * SHOP_OFFER_TEXT_SIZE);
         if (!monsterRecord(monster)) continue;
         lua_createtable(L, 0, 16);
         setIntField(L, "offer", i);
@@ -608,7 +608,7 @@ static int lShopOffers(lua_State *L) {
         setBoolField(L, "oncePerOffer", (flags & SHOP_FLAG_ONCE) != 0);
         setBoolField(L, "extra", (flags & SHOP_FLAG_EXTRA) != 0);
         setBoolField(L, "aiNever", (flags & SHOP_FLAG_AI_NEVER) != 0);
-        setIntField(L, "terrain", G32(RVA_SHOP_OFFER_TERRAIN + block + (size_t)i * 4));
+        setIntField(L, "terrain", PG32(RVA_SHOP_OFFER_TERRAIN + block + (size_t)i * 4));
         if (limiter[0]) {
             pushRecordText(L, limiter, SHOP_OFFER_TEXT_SIZE);
             lua_setfield(L, -2, "limiter");
@@ -681,9 +681,9 @@ static int recruitSquaresOf(const AiRecruitCalls *g, int player, int *xs, int *y
 // Why the game's AI recruiting wouldn't buy `player`'s offer on square (x, y), or NULL.
 static const char *aiOfferSquareRefusal(const AiRecruitCalls *g, int player, int offer, int x, int y) {
     size_t block = (size_t)player * PLAYER_BLOCK_SIZE;
-    int count = G32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4);
-    int flags = G32(RVA_SHOP_OFFER_FLAGS + block + (size_t)offer * 4);
-    int monster = G32(RVA_SHOP_OFFERS + block + (size_t)offer * 4);
+    int count = PG32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4);
+    int flags = PG32(RVA_SHOP_OFFER_FLAGS + block + (size_t)offer * 4);
+    int monster = PG32(RVA_SHOP_OFFERS + block + (size_t)offer * 4);
     if (count < 0) return "item";
     if (count == 0) return "sold_out";
     if (flags & SHOP_FLAG_AI_NEVER) return "not_for_ai";
@@ -712,7 +712,7 @@ static int aiRecruitPlayer(void) {
 // Why coe5.aiBuyOffer refuses its arguments, or NULL.
 static const char *aiBuyRefusal(int sitePlayer, int humanTurn, lua_Integer player, int controller, lua_Integer offer, int shopLast) {
     if (sitePlayer < 0) return "outside_ai_recruit";
-    if (player < 0 || player >= PLAYER_SLOTS) return "bad_player";
+    if (player < 0 || player >= playerSlotCount()) return "bad_player";
     if (player != sitePlayer) return "other_player";
     if (!humanTurn && controller != CONTROLLER_AI) return "not_ai";
     if (offer < 0 || offer > shopLast || offer >= SHOP_OFFERS_MAX) return "bad_offer";
@@ -721,13 +721,13 @@ static const char *aiBuyRefusal(int sitePlayer, int humanTurn, lua_Integer playe
 
 // coe5.recruitSquares(player[, offer]): where the game's AI recruiting can buy for the player.
 static int lRecruitSquares(lua_State *L) {
-    lua_Integer player = luaL_checkinteger(L, 1);
+    lua_Integer player = luaCheckPlayer(L, 1);
     int withOffer = !lua_isnoneornil(L, 2);
     lua_Integer offer = withOffer ? luaL_checkinteger(L, 2) : -1;
     lua_createtable(L, 0, 0);
     const AiRecruitCalls *g = aiRecruitGame();
-    const char *reason = player < 0 || player >= PLAYER_SLOTS ? "bad_player" : NULL;
-    if (!reason && withOffer && (offer < 0 || offer >= SHOP_OFFERS_MAX || offer > G32(RVA_SHOP_LAST + (size_t)player * PLAYER_BLOCK_SIZE)))
+    const char *reason = player < 0 || player >= playerSlotCount() ? "bad_player" : NULL;
+    if (!reason && withOffer && (offer < 0 || offer >= SHOP_OFFERS_MAX || offer > PG32(RVA_SHOP_LAST + (size_t)player * PLAYER_BLOCK_SIZE)))
         reason = "bad_offer";
     if (!reason && !g) reason = "windows_only";
     if (reason) {
@@ -752,13 +752,13 @@ static int lRecruitSquares(lua_State *L) {
 typedef const char *(*AiBuySquareRule)(const AiRecruitCalls *g, int player, int offer, int x, int y);
 typedef void (*AiBuyAfter)(int player, int x, int y);
 static int lAiBuyOffer(lua_State *L) {
-    lua_Integer player = luaL_checkinteger(L, 1), offer = luaL_checkinteger(L, 2);
+    lua_Integer player = luaCheckPlayer(L, 1), offer = luaL_checkinteger(L, 2);
     lua_Integer x = luaL_checkinteger(L, 3), y = luaL_checkinteger(L, 4);
     LuaScript *s = luaScriptOf(L);
     const char *mod = s ? s->mod : "?";
-    int inRange = player >= 0 && player < PLAYER_SLOTS;
-    int controller = inRange ? G16(RVA_SLOT_CONTROLLER + (size_t)player * 2) : CONTROLLER_REMOVED;
-    int shopLast = inRange ? G32(RVA_SHOP_LAST + (size_t)player * PLAYER_BLOCK_SIZE) : -1;
+    int inRange = player >= 0 && player < playerSlotCount();
+    int controller = inRange ? (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, player, 2)) : CONTROLLER_REMOVED;
+    int shopLast = inRange ? PG32(RVA_SHOP_LAST + (size_t)player * PLAYER_BLOCK_SIZE) : -1;
     const AiRecruitCalls *g = aiRecruitGame();
     int sitePlayer = aiRecruitPlayer(), humanTurn = 0, onlyX = -1, onlyY = -1;
     AiBuySquareRule humanRule = NULL;
@@ -786,11 +786,11 @@ static int lAiBuyOffer(lua_State *L) {
         return 2;
     }
     size_t block = (size_t)player * PLAYER_BLOCK_SIZE;
-    int flags = G32(RVA_SHOP_OFFER_FLAGS + block + (size_t)offer * 4);
-    int monster = G32(RVA_SHOP_OFFERS + block + (size_t)offer * 4);
-    int count = G32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4);
-    int commander = *(const char *)(gameBase + RVA_SHOP_OFFER_NAMES + block + (size_t)offer * SHOP_OFFER_TEXT_SIZE) != 0;
-    int goldBefore = G32(RVA_PLAYER_INTS + block), made = -1;
+    int flags = PG32(RVA_SHOP_OFFER_FLAGS + block + (size_t)offer * 4);
+    int monster = PG32(RVA_SHOP_OFFERS + block + (size_t)offer * 4);
+    int count = PG32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4);
+    int commander = *(const char *)(playerTableAddress(RVA_SHOP_OFFER_NAMES) + block + (size_t)offer * SHOP_OFFER_TEXT_SIZE) != 0;
+    int goldBefore = PG32(RVA_PLAYER_INTS + block), made = -1;
     if (commander) {
         made = g->buyCommander((int)player, (int)offer, (int)x, (int)y);
         g->makeSpawnbooster(made);
@@ -799,11 +799,11 @@ static int lAiBuyOffer(lua_State *L) {
     }
     size_t square = ((size_t)x * MAP_COLUMN_SQUARES + (size_t)y) * SQUARE_SIZE;
     if (!(flags & SHOP_FLAG_EXTRA)) G32(RVA_SQUARE_FLAGS + square) |= SQUARE_FLAG_RECRUITED;
-    if (flags & SHOP_FLAG_ONCE) G32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4) = 0;
+    if (flags & SHOP_FLAG_ONCE) PG32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4) = 0;
     if (humanTurn && humanAfter) humanAfter((int)player, (int)x, (int)y);
     writeLog("ai_offer_bought", "mod=%s player=%lld offer=%lld monster=%d count=%d commander=%d new_commander=%d x=%lld y=%lld "
              "gold_before=%d gold_after=%d flags=0x%x", mod, (long long)player, (long long)offer, monster, count, commander, made,
-             (long long)x, (long long)y, goldBefore, G32(RVA_PLAYER_INTS + block), flags);
+             (long long)x, (long long)y, goldBefore, PG32(RVA_PLAYER_INTS + block), flags);
     lua_pushboolean(L, !commander || made >= 0);
     return 1;
 }
@@ -825,7 +825,7 @@ static int lPlanRitual(lua_State *L) {
         int unit = G32(RVA_COMMANDERS + (size_t)commander * COMMANDER_SIZE);
         if (unit >= 0 && unit < UNIT_TABLE_MAX && G16(RVA_UNIT_HP + (size_t)unit * UNIT_SIZE) > 0) {
             int player = G16(RVA_UNIT_PLAYER + (size_t)unit * UNIT_SIZE);
-            if (player >= 0 && player < PLAYER_SLOTS) owner = player, controller = G16(RVA_SLOT_CONTROLLER + (size_t)player * 2);
+            if (player >= 0 && player < playerSlotCount()) owner = player, controller = (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, player, 2));
         }
         plan = G16(RVA_COMMANDER_AI_PLAN + (size_t)commander * COMMANDER_SIZE);
         for (int i = 0; i < COMMANDER_KNOWN_RITUALS_MAX && ritual > 0; i++) {

@@ -1,7 +1,7 @@
 // Saves that name a mod no longer installed.
 
 #define SAVE_MODC_VERSION      1
-#define SAVE_MODH_VERSION      1
+#define SAVE_MODH_VERSION      2
 #define MOD_ADDED_NO_CONTENT   1
 #define MOD_LINE_MAX           50000
 
@@ -9,7 +9,7 @@
 // The first words of the lines a content-free mod may have.
 static const char *const CONTENT_FREE_WORDS[] = {
     "icon", "description", "coeversion", "modversion", "modprio", "requires",
-    "needs_glu32.dll_and_CoE5SE_enabled_at_launch",
+    "needs_script_extender", "needs_coe5se", "needs_glu32.dll_and_CoE5SE_enabled_at_launch",
 };
 
 static int isContentFreeWord(const char *word) {
@@ -30,7 +30,7 @@ static int firstModWord(const char *line, char *word, size_t size) {
 }
 
 // The content hash: FNV-1a 64 over the mod's content lines, normalized.
-static const char *const UNHASHED_WORDS[] = {"icon", "description", "needs_glu32.dll_and_CoE5SE_enabled_at_launch"};
+static const char *const UNHASHED_WORDS[] = {"icon", "description", "needs_script_extender", "needs_coe5se", "needs_glu32.dll_and_CoE5SE_enabled_at_launch"};
 #define CONTENT_HASH_START  0xcbf29ce484222325ULL
 #define CONTENT_HASH_PRIME  0x100000001b3ULL
 
@@ -89,7 +89,10 @@ static void scanModLine(const char *line, ModFileScan *scan) {
 }
 
 // Reads the file at `path` into `scan`.
-static int scanModFile(const char *path, ModFileScan *scan, int c5m) {
+#define SCAN_SIDECAR  0
+#define SCAN_C5M      1
+#define SCAN_INCLUDED 2
+static int scanModFile(int mod, const char *path, ModFileScan *scan, int kind) {
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
     static char line[MOD_LINE_MAX + 2];
@@ -104,8 +107,15 @@ static int scanModFile(const char *path, ModFileScan *scan, int c5m) {
             hashContentLine(line, &scan->hash);
             scan->longLine = !ends;
         } else {
-            const char *own = c5m ? sidecarLineText(line) : NULL;
-            scanModLine(own ? own : line, scan);
+            const char *own = kind == SCAN_C5M ? sidecarLineText(line) : NULL, *text = own ? own : line;
+            char file[INCLUDE_FILE_MAX + 2], included[MAX_PATH];
+            if ((own || kind == SCAN_SIDECAR) && readIncludeLine(text, file, sizeof file) > 0) {
+                hashContentLine(text, &scan->hash);
+                scan->settingsOpen = 0;
+                if (!findIncludedFile(mod, file, included, sizeof included)) scanModFile(mod, included, scan, SCAN_INCLUDED);
+                continue;
+            }
+            scanModLine(text, scan);
         }
     }
     fclose(f);
@@ -117,7 +127,7 @@ static int scanModFile(const char *path, ModFileScan *scan, int c5m) {
 static int scanMod(int mod, ModFileScan *scan) {
     *scan = (ModFileScan){.contentFree = 1, .hash = CONTENT_HASH_START};
     char path[MAX_PATH];
-    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s" MOD_FILE_SUFFIX, modFolder(mod), modName(mod)) || !scanModFile(path, scan, 1)) {
+    if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s" MOD_FILE_SUFFIX, modFolder(mod), modName(mod)) || !scanModFile(mod, path, scan, SCAN_C5M)) {
         scan->contentFree = 0;
         return 0;
     }
@@ -125,7 +135,7 @@ static int scanMod(int mod, ModFileScan *scan) {
         scan->contentFree = 0;
         return 0;
     }
-    scanModFile(path, scan, 0);
+    scanModFile(mod, path, scan, SCAN_SIDECAR);
     return 1;
 }
 
@@ -448,6 +458,7 @@ static int isSkippableMissingMod(const char *name) {
 }
 
 static void readLoadedSavePlanes(const char *path);
+static void readLoadedSaveFactions(const char *path);
 
 // The save's fopen in load_game.
 static void *openLoadedSave(const char *path, void *file) {
@@ -458,6 +469,7 @@ static void *openLoadedSave(const char *path, void *file) {
         writeLog("save_mod_record_read", "result=%s mods=%d", savedMods.result, savedMods.count);
         writeLog("save_mod_hashes_read", "result=%s mods=%d", savedModHashes.result, savedModHashes.count);
         readLoadedSavePlanes(path);
+        readLoadedSaveFactions(path);
     }
     return file;
 }

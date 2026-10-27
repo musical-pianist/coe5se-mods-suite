@@ -136,6 +136,13 @@ local function findClassByName(name)
   return nil
 end
 
+-- Note 27b: Whether no player may have class c: a class with `aiclass 2`, which CoE5SE keeps off Choose
+-- Class and out of every random roll. Under a CoE5SE without coe5.aiClassValue, no class is.
+local AI_CLASS_NEITHER = coe5.aiClassValue and coe5.aiClassValue.neither
+local function classForNoPlayer(c)
+  return AI_CLASS_NEITHER ~= nil and coe5.get("classAbility", c, coe5.classAbility.aiClass) == AI_CLASS_NEITHER
+end
+
 -- ---- Presets ------------------------------------------------------------------------------------
 
 -- Note 28: Reads the live settings into a preset. It is called from the participants screen (its Ok
@@ -300,6 +307,9 @@ local function loadPreset(name)
       if not s.cls then
         log("preset_class_missing preset=%s player=%d class=%s", name, i, className)
         s.cls = 0   -- Note 48: Random
+      elseif classForNoPlayer(s.cls) then
+        log("preset_class_for_no_player preset=%s player=%d class=%s", name, i, className)
+        s.cls = 0   -- Note 48b: Random, as for a missing class: no player may have this one now (Note 27b)
       end
     elseif s.cls > 0 then
       log("preset_class_unnamed preset=%s player=%d class=%d", name, i, s.cls)
@@ -540,8 +550,8 @@ end)   -- Note 91: `end)` closes the function and then coe5.wrap's round bracket
 
 -- Note 92: The game's default single-player participants; once next has set them, the preset's
 -- players are written over them (Note 52). next returns nothing here, so neither does the function.
--- This site is Windows only; on Mac the fallback in setupWait puts the players in and has the
--- screen laid out again before its first frame shows (Note 113).
+-- Where the site can't go in (a game whose code CoE5SE doesn't know), the fallback in setupWait puts
+-- the players in and has the screen laid out again before its first frame shows (Note 113).
 local initWrapped = coe5.wrap("NEW_WORLD_INIT_PARTICIPANTS", function(next, arg)
   next(arg)
   applySlots()
@@ -676,13 +686,12 @@ local function setupWait(screen, next, block, mode)
   -- input, so calling next here still runs the game's own frame.
   --
   -- Note 113: A fallback only: the NEW_WORLD_INIT_PARTICIPANTS wrap normally applies the slots before
-  -- the first draw. On Mac, which has no such site (Note 92), this call is the one that puts the
-  -- preset's players in. Once applied, applySlots returns at once (Note 56). The game laid this frame
+  -- the first draw. Without that site (Note 92), this call is the one that puts the preset's
+  -- players in. Once applied, applySlots returns at once (Note 56). The game laid this frame
   -- out with its default players, so when the players went in here the script returns 0 without
   -- calling next: the frame is never shown, and the game lays the screen out again with the
   -- preset's players before it draws one (0 is no button's id, so the game does nothing else with
   -- it, as with Note 118).
-  -- @platform-split new_world_init_participants: on Mac this wait puts the preset's players in
   local applied = screen == "participants" and applySlots()
   logSetupChanges(screen)
   if applied then return 0 end
@@ -916,14 +925,14 @@ local NAMES_IN_TOOLTIP = 8         -- Note 144: the line's hover text names at m
 local HAS_CLASS_ABILITY = coe5.classAbility ~= nil and pcall(coe5.get, "classAbility", 1, coe5.classAbility.aiClass)
 
 -- Note 146: The classes the checklist lists, in the class table's order: every class with a name
--- except those the game never gives an AI by random choice (aiclass -1, such as a test class), since
--- unchecking one of those would change nothing. Each item is a small table with the class's index
+-- except those the game never gives an AI by random choice (aiclass -1, such as a test class, or
+-- aiclass 2, Note 27b), since unchecking one of those would change nothing. Each item is a small table with the class's index
 -- and its name, cut to 63 characters as presets store it (Note 37).
 local function listedClasses()
   local list = {}
   for c = 1, coe5.get("classLastIndex") do
     local name = coe5.get("className", c)
-    if name and name ~= "" and coe5.get("classAbility", c, coe5.classAbility.aiClass) >= 0 then
+    if name and name ~= "" and coe5.get("classAbility", c, coe5.classAbility.aiClass) >= 0 and not classForNoPlayer(c) then
       list[#list + 1] = {index = c, name = name:sub(1, CLASS_NAME_MAX)}
     end
   end
@@ -935,9 +944,10 @@ end
 -- only an AI may roll it and below 0 only a human; aiLevelMin and aiLevelMax bound the AI's
 -- difficulty, 0 meaning no bound. With "unique random players" on, a class another human or AI
 -- player already has is out too. Only AI slots come here, so the human-only test is all aiClass
--- needs. `levels` false skips the difficulty bounds (Note 148).
+-- needs, with a class no player may have (Note 27b) out in every try. `levels` false skips the
+-- difficulty bounds (Note 148).
 local function gameAllows(c, slot, unique, levels)
-  if coe5.get("classAbility", c, coe5.classAbility.aiClass) < 0 then return false end
+  if coe5.get("classAbility", c, coe5.classAbility.aiClass) < 0 or classForNoPlayer(c) then return false end
   local level = coe5.get("slotAi", slot)
   local min = coe5.get("classAbility", c, coe5.classAbility.aiLevelMin)
   local max = coe5.get("classAbility", c, coe5.classAbility.aiLevelMax)

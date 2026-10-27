@@ -276,7 +276,7 @@ static const char *messageBoxRefusal(int network, int planning, int inAiSite, in
 static int lShowMessageBox(lua_State *L) {
     const char *title = luaL_checkstring(L, 1), *text = luaL_checkstring(L, 2);
     int active = G32(RVA_ACTIVE_PLAYER);
-    int controller = active >= 0 && active < PLAYER_SLOTS ? G16(RVA_SLOT_CONTROLLER + (size_t)active * 2) : CONTROLLER_HUMAN;
+    int controller = active >= 0 && active < playerSlotCount() ? (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, active, 2)) : CONTROLLER_HUMAN;
     const char *reason =
         messageBoxRefusal(isNetworkGame(), portalHandlerRunning && portalHandlerPlanning, aiSiteRunning(), active, controller);
     if (reason) {

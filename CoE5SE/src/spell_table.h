@@ -96,7 +96,7 @@ static PRINTF_FORMAT(3, 4) void noteSpellProblem(int mod, int line, const char *
     SpellProblem *p = &spellProblems[spellProblemCount++];
     snprintf(p->mod, sizeof p->mod, "%s", spellModName(mod));
     p->line = line;
-    p->file = readingSidecarOf(mod) ? SPELL_FILE_SIDECAR : SPELL_FILE_C5M;
+    p->file = !readingSidecarOf(mod) ? SPELL_FILE_C5M : includedLabelNow() >= 0 ? includeLabelText(includedLabelNow()) : SPELL_FILE_SIDECAR;
     p->slotRun = 0;
     p->spell[0] = '\0';
     va_list ap;

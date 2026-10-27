@@ -90,7 +90,7 @@ static int planeDiscovered(int index) { return (planeField(index, PLANE_FLAGS) &
 static void markCustomPlanesDiscovered(void) {
     int last = lastCustomPlaneIndex(), mapW = G32(RVA_MAP_W), mapH = G32(RVA_MAP_H);
     const unsigned char *squares = GAME_PTR(RVA_SQUARE_RECORDS);
-    const short *controllers = (const short *)GAME_PTR(RVA_SLOT_CONTROLLER);
+    const short *controllers = (const short *)playerTableAddress(RVA_SLOT_CONTROLLER);
     for (int index = PLANE_ELYSIUM2 + 1; index <= last; index++) {
         if (planeDiscovered(index)) continue;
         int x0 = planeField(index, PLANE_X), y0 = planeField(index, PLANE_Y), w = planeField(index, PLANE_W), h = planeField(index, PLANE_H);

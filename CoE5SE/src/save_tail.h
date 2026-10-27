@@ -131,6 +131,10 @@ static void setCustomPlaneCameras(void);
 #define SAVE_TAG_MODC SAVE_TAG('M', 'O', 'D', 'C')
 #define SAVE_TAG_MODH SAVE_TAG('M', 'O', 'D', 'H')
 #define SAVE_TAG_PLNS SAVE_TAG('P', 'L', 'N', 'S')
+#define SAVE_TAG_FCTN SAVE_TAG('F', 'C', 'T', 'N')
+#define SAVE_TAG_FCDT SAVE_TAG('F', 'C', 'D', 'T')
+static void addFactionChunks(SaveList *list);
+static void useFactionDataChunks(const SaveList *list);
 
 // The GAME chunk's last slot of the game's own content for kind `kind`.
 static int saveVanillaLastIndex(int kind) {
@@ -150,6 +154,7 @@ static void buildSaveList(SaveList *list, SaveNamesWritten *written) {
     for (int k = 0; k < SAVE_GAME_KINDS; k++) saveBufferInt(&game, saveVanillaLastIndex(k));
     saveListAdd(list, SAVE_TAG_GAME, &game);
     addSaveNameChunks(list, written);
+    addFactionChunks(list);
     addCustomPlanesChunk(list);
     addModContentChunk(list);
 }
@@ -262,10 +267,12 @@ static void readSaveTail(void *file, int onlyPlayer, SaveFile kind) {
             for (int i = 0; i < list.count; i++) {
                 if (list.chunks[i].tag == SAVE_TAG_GAME) readSaveGameChunk(&list.chunks[i], read);
                 else if (!isSaveNameTag(list.chunks[i].tag) && list.chunks[i].tag != SAVE_TAG_MODC && list.chunks[i].tag != SAVE_TAG_MODH &&
-                         list.chunks[i].tag != SAVE_TAG_PLNS)
+                         list.chunks[i].tag != SAVE_TAG_PLNS && list.chunks[i].tag != SAVE_TAG_FCTN &&
+                         list.chunks[i].tag != SAVE_TAG_FCDT)
                     read->unknown++;
             }
             read->result = useSaveNameChunks(&list, kind);
+            if (kind == SAVE_FILE_SAVE) useFactionDataChunks(&list);
         }
     }
     writeLog("save_names_read", "file=%s result=%s reason=%s skipped=%s written_on=%s chunks=%d unknown=%d", SAVE_FILE_NAMES[kind],

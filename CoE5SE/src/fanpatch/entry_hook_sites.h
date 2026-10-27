@@ -1,7 +1,7 @@
 // The game functions CoE5SE's fan patch fixes hook at their start: how many bytes each hook replaces.
 #pragma once
 
-#define ENTRY_HOOK_COUNT 7
+#define ENTRY_HOOK_COUNT 26
 #ifndef __APPLE__
 static const EntryHookSite ENTRY_HOOK_SITES[ENTRY_HOOK_COUNT] = {
     {"find_all_mods", 0x1c9d20, 5, 0, {{0, 0}}},
@@ -11,6 +11,25 @@ static const EntryHookSite ENTRY_HOOK_SITES[ENTRY_HOOK_COUNT] = {
     {"rebuild_spells", 0x2e6850, 7, 0, {{0, 0}}},
     {"unit_card", 0x1d4990, 5, 0, {{0, 0}}},
     {"draw_sprite", 0x0651a0, 7, 0, {{0, 0}}},
+    {"reset_game_state", 0x31cd00, 5, 0, {{0, 0}}},
+    {"rebuild_square_army", 0x18fb30, 8, 1, {{4, 0x18ff9d}}},
+    {"square_strongest_owner", 0x104ab0, 10, 0, {{0, 0}}},
+    {"reveal_portal_exits", 0x251b00, 6, 0, {{0, 0}}},
+    {"update_sight", 0x19ac80, 5, 0, {{0, 0}}},
+    {"sight_rays", 0x19c330, 10, 1, {{6, 0x19c60c}}},
+    {"sight_box", 0x1ae190, 9, 1, {{5, 0x1ae2f1}}},
+    {"plane_seen", 0x2543f0, 6, 0, {{0, 0}}},
+    {"reset_squares", 0x3030d0, 6, 0, {{0, 0}}},
+    {"illusion_terrain", 0x1b3460, 5, 0, {{0, 0}}},
+    {"unit_visible_to", 0x1183d0, 8, 0, {{0, 0}}},
+    {"share_team_sight", 0x1afa30, 5, 0, {{0, 0}}},
+    {"set_seen_disc", 0x2db1b0, 6, 0, {{0, 0}}},
+    {"reveal_disc", 0x2dd920, 8, 1, {{4, 0x2dde67}}},
+    {"auto_recruit", 0x166e00, 6, 0, {{0, 0}}},
+    {"move_all_independents", 0x17af90, 10, 0, {{0, 0}}},
+    {"turn_unit_upkeep", 0x144150, 8, 1, {{4, 0x147ce2}}},
+    {"wanderer_pick_target", 0x16a270, 7, 0, {{0, 0}}},
+    {"rulership_check", 0x10d910, 6, 0, {{0, 0}}},
 };
 #else
 static const EntryHookSite ENTRY_HOOK_SITES[ENTRY_HOOK_COUNT] = {
@@ -21,5 +40,24 @@ static const EntryHookSite ENTRY_HOOK_SITES[ENTRY_HOOK_COUNT] = {
     {"rebuild_spells", 0x4bd880, 16, 0, {{0, 0}}},
     {"unit_card", 0x52113c, 16, 0, {{0, 0}}},
     {"draw_sprite", 0x34f5c4, 16, 0, {{0, 0}}},
+    {"reset_game_state", 0x585bac, 16, 0, {{0, 0}}},
+    {"rebuild_square_army", 0x000000, 0, 0, {{0, 0}}},
+    {"square_strongest_owner", 0x465d70, 16, 0, {{0, 0}}},
+    {"reveal_portal_exits", 0x000000, 0, 0, {{0, 0}}},
+    {"update_sight", 0x000000, 0, 0, {{0, 0}}},
+    {"sight_rays", 0x000000, 0, 0, {{0, 0}}},
+    {"sight_box", 0x000000, 0, 0, {{0, 0}}},
+    {"plane_seen", 0x000000, 0, 0, {{0, 0}}},
+    {"reset_squares", 0x000000, 0, 0, {{0, 0}}},
+    {"illusion_terrain", 0x000000, 0, 0, {{0, 0}}},
+    {"unit_visible_to", 0x000000, 0, 0, {{0, 0}}},
+    {"share_team_sight", 0x000000, 0, 0, {{0, 0}}},
+    {"set_seen_disc", 0x000000, 0, 0, {{0, 0}}},
+    {"reveal_disc", 0x000000, 0, 0, {{0, 0}}},
+    {"auto_recruit", 0x000000, 0, 0, {{0, 0}}},
+    {"move_all_independents", 0x000000, 0, 0, {{0, 0}}},
+    {"turn_unit_upkeep", 0x000000, 0, 0, {{0, 0}}},
+    {"wanderer_pick_target", 0x000000, 0, 0, {{0, 0}}},
+    {"rulership_check", 0x000000, 0, 0, {{0, 0}}},
 };
 #endif

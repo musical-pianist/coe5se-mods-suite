@@ -46,16 +46,27 @@ static void modCommandHook(const char *line, int mod, int level) {
     if (!line) return;
     line = nameListLineHook(line, len, mod, level);
     if (!line) return;
+    line = classNameLineHook(line, len, mod, level);
     len = strcspn(line, " \t");
     line = planeWordLineHook(line, len, mod, level);
     if (!line) return;
     len = strcspn(line, " \t");
+    line = factionWordLineHook(line, len, mod, level);
+    line = factionNameLineHook(line, len, mod, level);
+    if (!line) return;
+    len = strcspn(line, " \t");
     line = terrainLooksLineHook(line, len, mod, level);
+    if (!line) return;
+    line = battleMapLineHook(line, len, mod, level);
+    if (!line) return;
+    line = corpseWordLineHook(line, len, mod, level);
     if (!line) return;
     if (settingLineHook(line, len, mod, level)) return;
     if (flagOffLineHook(line, len, mod, level)) return;
     weaponTraitLineHook(line, len, level);
     noExplodeLineHook(line, len, mod, level);
+    recBonusLineHook(line, len, mod, level);
+    aiClassLineHook(line, len, mod, level);
     for (int i = 0; i < modCommandCount; i++) {
         if (strlen(modCommands[i].name) != len || strncmp(modCommands[i].name, line, len)) continue;
         const char *args = line + len;
@@ -85,8 +96,8 @@ static void declinedModCommandHook(const char *line, int mod, int level) {
     size_t len = strcspn(line, " \t");
     snprintf(word, sizeof word, "%.*s", (int)(len < sizeof word ? len : sizeof word - 1), line);
     int pathName = declinedSpellPathLine(word, mod, level);
-    int planeLine = declinedPlaneLine(line, len, mod, level) | declinedTerrainLooksLine(line, len, mod, level);
-    if (word[0] && (!isGameWord(word) || declinedSpellLine(word, mod, level) || pathName || planeLine || declinedOffsetNameLine(line, len, level) || declinedNameListLine(line, len, level) || declinedFlagOffLine(line))) {
+    int planeLine = declinedPlaneLine(line, len, mod, level) | declinedTerrainLooksLine(line, len, mod, level) | declinedBattleMapLine(line, len, mod, level);
+    if (word[0] && (!isGameWord(word) || declinedSpellLine(word, mod, level) || pathName || planeLine || declinedOffsetNameLine(line, len, level) || declinedNameListLine(line, len, level) || declinedFlagOffLine(line) || declinedFactionNameLine(line, len))) {
         writeLog("mod_command_skipped", "word=%s mod=%d level=%d reason=plugins_declined", word, mod, level);
         return;
     }
@@ -129,7 +140,10 @@ static void needsCoe5seLine(const char *args, int mod, int level) {
     (void)args; (void)mod; (void)level;
 }
 
+// Adds the needs words: needs_script_extender, needs_coe5se, and the long one they stand for.
 static void needsCoe5seInit(void) {
-    int ok = apiAddModCommand("needs_glu32.dll_and_CoE5SE_enabled_at_launch", needsCoe5seLine);
+    int ok = apiAddModCommand("needs_script_extender", needsCoe5seLine);
+    ok &= apiAddModCommand("needs_coe5se", needsCoe5seLine);
+    ok &= apiAddModCommand("needs_glu32.dll_and_CoE5SE_enabled_at_launch", needsCoe5seLine);
     writeLog("needs_coe5se_word_installed", "ok=%d", ok);
 }

@@ -92,6 +92,20 @@
 #define CLASS_ABILITY_ID_AI_LEVEL_MIN  210
 #define CLASS_ABILITY_ID_AI_LEVEL_MAX  211
 #define CLASS_ABILITY_ID_STDTROOPS     222
+// An aiclass value.
+#define AI_CLASS_HUMAN_ONLY        (-1)
+#define AI_CLASS_ANY               0
+#define AI_CLASS_AI_ONLY           1
+#define AI_CLASS_NEITHER           2
+// A corpse kind.
+#define CORPSE_KIND_SMALL          0
+#define CORPSE_KIND_HUMAN          1
+#define CORPSE_KIND_GIANT          2
+#define CORPSE_KIND_SMALL_ANIMAL   3
+#define CORPSE_KIND_LARGE_ANIMAL   4
+#define CORPSE_KIND_MARKATA        5
+#define CORPSE_KIND_VANARA         6
+#define CORPSE_KIND_BANDAR         7
 // A screen wait's mode.
 #define GAME_OVER_MODE_PLAIN       4
 #define GAME_OVER_MODE_FOG         9

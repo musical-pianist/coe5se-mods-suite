@@ -28,6 +28,46 @@ static char *readSettingsFileText(const char *mod, const char *path, int in) {
     return text;
 }
 
+// ---- The files a reading included -----------------------------------------------------------------
+// The files each mod's last reading of its settings files included, by path, for that reading's stamp.
+typedef struct { char mod[MOD_NAME_MAX], path[MAX_PATH]; } SettingsInclude;
+static SettingsInclude *settingsIncludes;
+static int settingsIncludeCount, settingsIncludeCapacity;
+
+static void forgetSettingsIncludes(const char *mod) {
+    int kept = 0;
+    for (int i = 0; i < settingsIncludeCount; i++)
+        if (_stricmp(settingsIncludes[i].mod, mod)) settingsIncludes[kept++] = settingsIncludes[i];
+    settingsIncludeCount = kept;
+}
+
+// 1 if `mod`'s reading read the file at `path` already.
+static int settingsIncludeRead(const char *mod, const char *path) {
+    for (int i = 0; i < settingsIncludeCount; i++)
+        if (!_stricmp(settingsIncludes[i].mod, mod) && !strcmp(settingsIncludes[i].path, path)) return 1;
+    return 0;
+}
+
+static void noteSettingsInclude(const char *mod, const char *path) {
+    if (!growList((void **)&settingsIncludes, &settingsIncludeCapacity, settingsIncludeCount + 1, sizeof *settingsIncludes))
+        return;
+    SettingsInclude *e = &settingsIncludes[settingsIncludeCount++];
+    snprintf(e->mod, sizeof e->mod, "%s", mod);
+    snprintf(e->path, sizeof e->path, "%s", path);
+}
+
+// One number for the stamps of the files `mod`'s last reading included.
+static u64 settingsIncludeStamp(const char *mod) {
+    u64 hash = 14695981039346656037ull;
+    for (int i = 0; i < settingsIncludeCount; i++) {
+        if (_stricmp(settingsIncludes[i].mod, mod)) continue;
+        FileStamp stamp;
+        fileStampOf(settingsIncludes[i].path, &stamp);
+        for (size_t k = 0; k < sizeof stamp; k++) hash = (hash ^ ((const unsigned char *)&stamp)[k]) * 1099511628211ull;
+    }
+    return hash;
+}
+
 // Reads `mod`'s settings files in its folder `dir`.
 static void logIgnoredIni(const char *mod, ...) {
     va_list ap;
@@ -43,6 +83,8 @@ static void readSettingsIn(const char *mod, const char *dir) {
     noteSettingsIniNow();
     IniParse r;
     startSettingsReading(&r, mod);
+    r.dir = dir;
+    forgetSettingsIncludes(mod);
     char path[MAX_PATH], *text;
     static const struct { const char *suffix; int in; } files[] = {{MOD_FILE_SUFFIX, SETTINGS_IN_C5M}, {SIDECAR_SUFFIX, SETTINGS_IN_C5SE}};
     for (size_t i = 0; i < sizeof files / sizeof files[0]; i++) {
@@ -75,6 +117,7 @@ typedef struct {
     char mod[MOD_NAME_MAX];
     char dir[MAX_PATH];
     FileStamp c5m, sidecar, ini;
+    u64 includes;
     unsigned int picks;
     int pageLines;
     int fileBadLines;
@@ -113,6 +156,7 @@ static int settingsReadNow(const char *mod, SettingsRead *now) {
     fileStampOf(path, &now->sidecar);
     if (!buildPath(path, sizeof path, __func__, "%s" PATH_SEP "%s.ini", now->dir, now->mod)) return 0;
     fileStampOf(path, &now->ini);
+    now->includes = settingsIncludeStamp(now->mod);
     noteSettingsIniNow();
     now->picks = savedPicks.generation;
     now->pageLines = pluginPageLines(now->mod);
@@ -123,7 +167,7 @@ static int settingsReadNow(const char *mod, SettingsRead *now) {
 static int keepSettingsRead(const SettingsRead *now) {
     SettingsRead *e = settingsReadOf(now->mod);
     if (!e || !e->valid || strcmp(e->dir, now->dir) || !sameFileStamp(&e->c5m, &now->c5m) || !sameFileStamp(&e->sidecar, &now->sidecar) ||
-        !sameFileStamp(&e->ini, &now->ini) || e->picks != now->picks || e->pageLines != now->pageLines)
+        !sameFileStamp(&e->ini, &now->ini) || e->includes != now->includes || e->picks != now->picks || e->pageLines != now->pageLines)
         return 0;
     BadLine *mine = NULL;
     if (e->fileBadLines && !(mine = malloc((size_t)e->fileBadLines * sizeof *mine))) return 0;
@@ -171,18 +215,20 @@ static void rememberSettingsRead(const SettingsRead *now) {
 // Settings block lines the game's reader passes to the .c5m line site.
 static struct {
     int open;
-    int mod, level, inSidecar, line;
+    int mod, level, line;
+    unsigned int fileId;
 } gameSettingBlock;
 
 // Returns 1 when it took the line, a line of a settings block of mod `mod`, read at `level`.
 static int settingLineHook(const char *line, size_t len, int mod, int level) {
     int number = G32(RVA_MOD_LINE), inSidecar = readingSidecarNow();
-    if (mod != gameSettingBlock.mod || level != gameSettingBlock.level || inSidecar != gameSettingBlock.inSidecar ||
+    unsigned int fileId = modFileNow();
+    if (mod != gameSettingBlock.mod || level != gameSettingBlock.level || fileId != gameSettingBlock.fileId ||
         number <= gameSettingBlock.line)
         gameSettingBlock.open = 0;
     gameSettingBlock.mod = mod;
     gameSettingBlock.level = level;
-    gameSettingBlock.inSidecar = inSidecar;
+    gameSettingBlock.fileId = fileId;
     gameSettingBlock.line = number;
     char word[24];
     snprintf(word, sizeof word, "%.*s", (int)(len < sizeof word ? len : sizeof word - 1), line);
@@ -234,7 +280,10 @@ static void startReading(const char *mod) {
     resetModSettings(mod);
     if (reading.disabled) return;
     readSettingsFile(mod);
-    if (known) rememberSettingsRead(&now);
+    if (known) {
+        now.includes = settingsIncludeStamp(now.mod);
+        rememberSettingsRead(&now);
+    }
 }
 
 // Ends the current reading: each +setting line must name one of the mod's settings.

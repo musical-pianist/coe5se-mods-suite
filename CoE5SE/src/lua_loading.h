@@ -20,9 +20,13 @@ static const luaL_Reg LUA_COE5[] = {
     {"scrapRitualPlan", lScrapRitualPlan}, {"planRitual", lPlanRitual}, {"terrainMatch", lTerrainMatch},
     {"releaseFollower", lReleaseFollower}, {"transferFollower", lTransferFollower},
     {"shopOffers", lShopOffers}, {"classRecruits", lClassRecruits}, {"recruitSquares", lRecruitSquares},
+    {"builtinOffers", lBuiltinOffers}, {"builtinOfferChance", lBuiltinOfferChance}, {"replaceBuiltinOffer", lReplaceBuiltinOffer},
+    {"addShopOffer", lAddShopOffer}, {"guildCount", lGuildCount},
     {"aiBuyOffer", lAiBuyOffer}, {"addMapEditorLine", lAddMapEditorLine}, {"mapView", lMapView},
-    {"keepTraceLines", lKeepTraceLines}, {"addPlane", lAddPlane}, {"setPlaneShape", lSetPlaneShape}, {"planeIndex", lPlaneIndex},
+    {"addCommanderLine", lAddCommanderLine}, {"teleportCommander", lTeleportCommander}, {"mayEnterSquare", lMayEnterSquare},
+    {"keepTraceLines", lKeepTraceLines}, {"addPlane", lAddPlane}, {"setPlaneShape", lSetPlaneShape}, {"planeIndex", lPlaneIndex}, {"factionSlot", lFactionSlot}, {"addFaction", lAddFaction},
     {"setPlaneTint", lSetPlaneTint}, {"clearPlaneTint", lClearPlaneTint}, {"setTerrainLooks", lSetTerrainLooks},
+    {"addBattleMap", lAddBattleMap}, {"setBattleScatter", lSetBattleScatter},
     {"addModCommand", lAddModCommand}, COE5SE_EXTRA_LUA_FUNCTIONS {NULL, NULL},
 };
 static const luaL_Reg LUA_UI[] = {
@@ -58,6 +62,12 @@ static const struct { const char *table, *name; int value; } GAME_NUMBERS[] = {
     {"classAbility", "aiClass", CLASS_ABILITY_ID_AI_CLASS}, {"classAbility", "randomSkip", CLASS_ABILITY_ID_RANDOM_SKIP},
     {"classAbility", "aiLevelMin", CLASS_ABILITY_ID_AI_LEVEL_MIN}, {"classAbility", "aiLevelMax", CLASS_ABILITY_ID_AI_LEVEL_MAX},
     {"classAbility", "standardTroops", CLASS_ABILITY_ID_STDTROOPS},
+    {"aiClassValue", "humanOnly", AI_CLASS_HUMAN_ONLY}, {"aiClassValue", "any", AI_CLASS_ANY},
+    {"aiClassValue", "aiOnly", AI_CLASS_AI_ONLY}, {"aiClassValue", "neither", AI_CLASS_NEITHER},
+    {"corpseKind", "small", CORPSE_KIND_SMALL}, {"corpseKind", "human", CORPSE_KIND_HUMAN},
+    {"corpseKind", "giant", CORPSE_KIND_GIANT}, {"corpseKind", "smallAnimal", CORPSE_KIND_SMALL_ANIMAL},
+    {"corpseKind", "largeAnimal", CORPSE_KIND_LARGE_ANIMAL}, {"corpseKind", "markata", CORPSE_KIND_MARKATA},
+    {"corpseKind", "vanara", CORPSE_KIND_VANARA}, {"corpseKind", "bandar", CORPSE_KIND_BANDAR},
     {"gameOverMode", "plain", GAME_OVER_MODE_PLAIN}, {"gameOverMode", "fog", GAME_OVER_MODE_FOG},
     {"newGame", "normal", NEW_WORLD_NORMAL}, {"newGame", "network", NEW_WORLD_NETWORK},
     {"newGame", "skipParticipants", NEW_WORLD_SKIP_PARTICIPANTS}, {"newGame", "mapScreenOk", MAP_SCREEN_OK},
@@ -161,7 +171,10 @@ static int luaGate(lua_State *L) {
                        : !s || s != luaRunning ? "not_running"
                        : luaCommandsLoading && !luaCommandsFileCall(fn) ? "commands_file"
                        : NULL;
-    if (!reason) return fn->func(L);
+    if (!reason) {
+        if (fn->func != lGet) unitsChangeEpoch++;
+        return fn->func(L);
+    }
     refuseLuaCall(s ? s->mod : "?", lua_tostring(L, lua_upvalueindex(2)), reason, "running=%s", luaRunning ? luaRunning->mod : "none");
     return 0;
 }

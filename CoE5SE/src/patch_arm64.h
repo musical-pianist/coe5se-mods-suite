@@ -70,23 +70,30 @@ static uint32_t blTo(const unsigned char *at, const unsigned char *target) {
     return 0x94000000u | ((uint32_t)((target - at) >> 2) & 0x3ffffffu);
 }
 
+static unsigned char *paddingNext, *paddingEnd;
+
 // The next free spot of the header padding, or NULL when there is no room.
 static unsigned char *takePadding(size_t size) {
-    static unsigned char *next, *end;
-    if (!next) {
+    if (!paddingNext) {
         const struct mach_header_64 *mh = (const struct mach_header_64 *)gameBase;
-        next = gameBase + ((sizeof *mh + mh->sizeofcmds + 15) & ~(size_t)15);
+        paddingNext = gameBase + ((sizeof *mh + mh->sizeofcmds + 15) & ~(size_t)15);
         unsigned long textSize;
         unsigned char *text = getsectiondata(mh, "__TEXT", "__text", &textSize);
-        end = text ? text : next;
+        paddingEnd = text ? text : paddingNext;
     }
     size = (size + 15) & ~(size_t)15;
-    if (next + size > end) return NULL;
+    if (paddingNext + size > paddingEnd) return NULL;
     for (size_t i = 0; i < size; i++)
-        if (next[i]) return NULL;
-    unsigned char *spot = next;
-    next += size;
+        if (paddingNext[i]) return NULL;
+    unsigned char *spot = paddingNext;
+    paddingNext += size;
     return spot;
+}
+
+// The header padding's bytes no spot has taken yet, logged at the end of startup.
+static long paddingLeft(void) {
+    if (!paddingNext) takePadding(0);
+    return (long)(paddingEnd - paddingNext);
 }
 
 // Writes a 16-byte trampoline to `target` into the header padding.
@@ -490,20 +497,20 @@ static int installSealEventMac(void) {
 // @platform-split participants_init_mac: Mac copies init_participants into new_world, so CoE5SE branches over the copy
 static void initParticipantsMac(int mode) {
     int width = G32(RVA_MAP_W), slots = width > 75 ? 9 : width > 67 ? 7 : width > 57 ? 5 : 3;
-    G16(RVA_SLOT_CONTROLLER) = 0;
-    G16(RVA_SLOT_CLASS) = -1;
+    PG16(RVA_SLOT_CONTROLLER) = 0;
+    PG16(RVA_SLOT_CLASS) = -1;
     for (int i = 1; i <= slots; i++) {
-        G16(RVA_SLOT_CLASS + (size_t)i * 2) = -1;
-        G16(RVA_SLOT_CONTROLLER + (size_t)i * 2) = G16(RVA_INIT_PARTICIPANTS_CONTROLLERS + (size_t)(i - 1) * 2);
+        PG16(RVA_SLOT_CLASS + (size_t)i * 2) = -1;
+        PG16(RVA_SLOT_CONTROLLER + (size_t)i * 2) = G16(RVA_INIT_PARTICIPANTS_CONTROLLERS + (size_t)(i - 1) * 2);
     }
     for (int i = 1; i <= slots; i++) {
-        G16(RVA_SLOT_TEAM + (size_t)i * PLAYER_BLOCK_SIZE) = -1;
-        G16(RVA_SLOT_AI + (size_t)i * PLAYER_BLOCK_SIZE) = 2;
+        PG16(RVA_SLOT_TEAM + (size_t)i * PLAYER_BLOCK_SIZE) = -1;
+        PG16(RVA_SLOT_AI + (size_t)i * PLAYER_BLOCK_SIZE) = 2;
     }
-    if (mode) G32(RVA_SLOT_CONTROLLER) = (int)0xfffefffe;
+    if (mode) PG32(RVA_SLOT_CONTROLLER) = (int)0xfffefffe;
     if (*(const unsigned char *)GAME_PTR(RVA_TWO_PLAYER_TEAMS) == 1) {
         static const short TEAMS[8] = {1, 1, 2, 2, 3, 3, 4, 4};
-        for (int i = 0; i < 8; i++) G16(RVA_SLOT_TEAM + (size_t)i * PLAYER_BLOCK_SIZE) = TEAMS[i];
+        for (int i = 0; i < 8; i++) PG16(RVA_SLOT_TEAM + (size_t)i * PLAYER_BLOCK_SIZE) = TEAMS[i];
     }
 }
 
