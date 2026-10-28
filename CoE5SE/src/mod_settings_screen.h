@@ -618,8 +618,11 @@ static void popupSettingErrors(void) {
 
 // Wraps each mod pass.
 static void (*nextModsRun)(int);
+static void syncLuaScriptsBeforePass(int level);
+static void syncLuaScriptsAfterPass(int level);
 static void modsRunHook(int level) {
     loadLuaCommandsFiles();
+    syncLuaScriptsBeforePass(level);
     unsigned int spellPasses = spellPassCount();
     clearLuaPlaneTints(level);
     planeWordsBeforePass(level);
@@ -646,5 +649,6 @@ static void modsRunHook(int level) {
     noExplodeAfterPass(level);
     terrainLooksAfterPass(level);
     battleMapsAfterPass(level);
+    syncLuaScriptsAfterPass(level);
     if (level != 3) popupSettingErrors();
 }

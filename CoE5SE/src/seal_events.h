@@ -92,7 +92,9 @@ static unsigned char *generatedSiteTarget(CallSite site) {
 // installSite's step before it checks a site's calls.
 static int checkSplitMinUnitsCode(void);
 static int checkGameStartOnceCode(void);
+static int installTopBarIncomeDraws(void);
 static int prepareSiteCode(CallSite site) {
+    if (site == SITE_TOP_BAR_INCOME) return installTopBarIncomeDraws();
     if (site == SITE_GAME_SAVE) return hookSaveFileOpens();
     if (site == SITE_GAME_START) return checkGameStartOnceCode();
     if (site == SITE_AI_SPLIT_ARMY) return checkSplitMinUnitsCode();

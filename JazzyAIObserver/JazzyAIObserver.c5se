@@ -1,0 +1,4 @@
+# AI Inspector's data area size. CoE5SE reads this file right after JazzyAIObserver.c5m.
+
+# The records (coe5se_data\JazzyAIObserver\game_NNNN\) are never deleted: one file a turn for each AI.
+maxdata 100

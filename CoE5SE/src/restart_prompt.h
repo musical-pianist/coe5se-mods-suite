@@ -1,7 +1,7 @@
-// Mods' folders and code, and the restart prompt after the Mods screen when a mod with a DLL or a script changed.
+// Mods' folders and code, and the restart prompt after the Mods screen when a mod with a DLL changed.
 
 // ---- Restart prompt after the Mods screen -----------------------------------------------------
-// Turning a mod with a DLL or a script on or off takes effect after a restart.
+// Turning a mod with a DLL on or off takes effect after a restart.
 static struct CodeMod { char folder[MAX_PATH]; int enabled; } *codeMods;
 static int codeModCount, codeModCapacity, codeModSnapshotFailed;
 static u64 (*nextModsScreen)(u64, u64, u64, u64);
@@ -98,14 +98,11 @@ static int modHasFile(int mod, const char *suffix) {
     return f != NULL;
 }
 
-// Whether mod `mod` has a script: <folder>/<name>.lua, or its commands file <folder>/<name>_commands.lua.
+// A mod's commands file: <folder>/<name>_commands.lua, lua_scripts.h's to run.
 #define LUA_COMMANDS_SUFFIX "_commands.lua"
-static int modHasScript(int mod) {
-    return modHasFile(mod, ".lua") || modHasFile(mod, LUA_COMMANDS_SUFFIX);
-}
 
 static int modHasCode(int mod) {
-    return folderHasPlugin(modFolder(mod)) || modHasScript(mod);
+    return folderHasPlugin(modFolder(mod));
 }
 
 static void takeCodeModSnapshot(void) {
@@ -193,7 +190,7 @@ static void relaunchGame(const char *reason) {
 }
 #endif
 
-// Runs after the Mods screen, and offers a restart when a mod with a DLL or a script changed.
+// Runs after the Mods screen, and offers a restart when a mod with a DLL changed.
 static u64 modsScreenWrapper(u64 a1, u64 a2, u64 a3, u64 a4) {
     unsigned int readingsBefore = settingsPassCount(), spellPassesBefore = spellPassCount();
     u64 result = nextModsScreen(a1, a2, a3, a4);
@@ -201,7 +198,7 @@ static u64 modsScreenWrapper(u64 a1, u64 a2, u64 a3, u64 a4) {
     spellsAfterModsScreen(spellPassesBefore);
     if (!codeModsChanged()) return result;
     writeLog("mods_with_code_changed", "count=%d", codeModCount);
-    if (messageBox("CoE5SE: Restart needed", "Mod with DLL or script turned on or off.\nRestart required. Restart now?",
+    if (messageBox("CoE5SE: Restart needed", "Mod with DLL turned on or off.\nRestart required. Restart now?",
                    "Yes", "No", 0, 0, 0) == 1)
         relaunchGame("mods_with_code_changed");
     takeCodeModSnapshot();

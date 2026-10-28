@@ -609,6 +609,66 @@ static int lRevealMap(lua_State *L) {
     return 1;
 }
 
+// Why coe5.centerMap refuses square (x, y), or NULL.
+static const char *centerMapRefusal(int activePlayer, lua_Integer x, lua_Integer y, int mapW, int mapH, int plane, int windows) {
+    if (!windows) return "windows_only";
+    if (activePlayer < 0) return "no_game";
+    if (x < 0 || y < 0 || x >= mapW || y >= mapH || x >= MAP_COLUMNS_MAX || y >= MAP_COLUMN_SQUARES) return "off_map";
+    if (plane < 0) return "no_plane";
+    return NULL;
+}
+
+// coe5.centerMap(x, y): the map view centred on world square (x, y), on the plane that holds it.
+static int lCenterMap(lua_State *L) {
+    lua_Integer x = luaL_checkinteger(L, 1), y = luaL_checkinteger(L, 2);
+#ifdef __APPLE__
+    int windows = 0;
+#else
+    int windows = 1;
+#endif
+    int mapW = G32(RVA_MAP_W), mapH = G32(RVA_MAP_H), plane = -1;
+    if (windows && x >= 0 && y >= 0 && x < mapW && y < mapH && x < MAP_COLUMNS_MAX && y < MAP_COLUMN_SQUARES)
+        plane = GAME_FN(int (*)(int, int), RVA_PLANE_AT)((int)x, (int)y);
+    const char *reason = centerMapRefusal(G32(RVA_ACTIVE_PLAYER), x, y, mapW, mapH, plane, windows);
+    if (reason) {
+        refuseLuaCall(runningLuaMod(), "coe5.centerMap", reason, "x=%lld y=%lld", (long long)x, (long long)y);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+#ifndef __APPLE__
+    GAME_FN(void (*)(int, int), RVA_CENTER_MAP_ON)((int)x, (int)y);
+#endif
+    writeLog("lua_map_centered", "mod=%s x=%lld y=%lld plane=%d", runningLuaMod(), (long long)x, (long long)y, plane);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// coe5.viewArmy(x, y): the game's view of the army on world square (x, y), as a right click on it shows it.
+static int lViewArmy(lua_State *L) {
+    lua_Integer x = luaL_checkinteger(L, 1), y = luaL_checkinteger(L, 2);
+    const char *reason = NULL;
+#ifdef __APPLE__
+    reason = "windows_only";
+#endif
+    int active = G32(RVA_ACTIVE_PLAYER), mapW = G32(RVA_MAP_W), mapH = G32(RVA_MAP_H);
+    if (!reason && active < 0) reason = "no_game";
+    if (!reason && (x < 0 || y < 0 || x >= mapW || y >= mapH || x >= MAP_COLUMNS_MAX || y >= MAP_COLUMN_SQUARES)) reason = "off_map";
+    if (!reason && !G16(RVA_SQUARE_ARMY + ((size_t)x * MAP_COLUMN_SQUARES + (size_t)y) * 2)) reason = "no_army";
+    if (reason) {
+        refuseLuaCall(runningLuaMod(), "coe5.viewArmy", reason, "x=%lld y=%lld", (long long)x, (long long)y);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+#ifndef __APPLE__
+    int randomIndex = G32(RVA_RANDOM_INDEX), randomShift = G32(RVA_RANDOM_SHIFT), randomXor = G32(RVA_RANDOM_XOR);
+    GAME_FN(int (*)(int, int, int, int), RVA_VIEW_ARMY_SCREEN)(active, (int)x, (int)y, 0);
+    G32(RVA_RANDOM_INDEX) = randomIndex, G32(RVA_RANDOM_SHIFT) = randomShift, G32(RVA_RANDOM_XOR) = randomXor;
+#endif
+    writeLog("lua_army_viewed", "mod=%s x=%lld y=%lld", runningLuaMod(), (long long)x, (long long)y);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 // coe5.armies([viewer]): every army on the world map.
 static void setIntField(lua_State *L, const char *key, lua_Integer value);
 static int lArmies(lua_State *L) {

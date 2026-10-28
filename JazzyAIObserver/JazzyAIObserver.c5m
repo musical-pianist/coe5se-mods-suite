@@ -1,0 +1,44 @@
+icon "banner.tga"
+description "For all-AI games with the Observer seat: the AI Inspector, what each AI player did on its last turn and why, and Play as AI. The Observer sees the whole map in its own turns, or one AI's view at a time. The AIs play as they would without it. Needs CoE5SE."
+needs_script_extender
+
+selectterr 990
+spr "observer/post.tga"
+name "Observer Post"
+apcost 99
+citadel
+water
+nevercold
+
+newmonster "Observer"
+descr "Watches the game. Takes no part in it."
+spr1 "observer/blank.tga"
+spr2 "observer/blank.tga"
+rank 1
+hp 1
+mr 1
+mor 1
+str 1
+immortal
+reformloc -1
+invisible
+ethereal
+nocombat
+teleport
+float
+water
+spiritsight
+
+newclass
+setclassname "Observer"
+classdescr "Watches the game. Takes no part in it. For AI test games."
+classabdescr "An immortal leader on a citadel no army can enter."
+hometerr 990
+clearstartterr
+aiclass -1
+setmaincom "Observer"
+nostdtroops
+recwizchance -1000
+recherochance -1000
+recasschance -1000
+otherplanar

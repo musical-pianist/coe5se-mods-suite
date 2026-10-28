@@ -46,6 +46,7 @@ typedef struct {
     int dataBytesKnown;
     lua_State *L;
     int dead;
+    int retired;
     int commandsTried;
     int mainTried;
     int stopLogged;

@@ -56,10 +56,34 @@ typedef struct {
 } LuaArgs;
 
 // One running call of a Lua wrap.
-typedef struct LuaFrame { struct LuaFrame *up; LuaWrap *wrap; const LuaArgs *args; int nextCalled; u64 result; lua_Integer serial; } LuaFrame;
+typedef struct LuaFrame {
+    struct LuaFrame *up;
+    LuaWrap *wrap;
+    const LuaArgs *args;
+    int nextCalled;
+    u64 result;
+    lua_Integer serial;
+    int changesFrom, changesTo, argsChanged, changesAtEntry;
+} LuaFrame;
 static LuaFrame *luaFrames;
 static lua_Integer luaFrameSerial;
 static int lNextCall(lua_State *L);
+
+// ---- coe5.changedBy: which scripts' wraps changed a site's answer ----------------------------------
+// One script wrap that changed what its next() gave it: the answer it returned, the arguments it passed on, or both.
+#define LUA_CHANGES_MAX 64
+typedef struct { CallSite site; const char *mod; int priority, answer, arguments; } LuaChange;
+static LuaChange luaChanges[LUA_CHANGES_MAX];
+static int luaChangeCount, luaChangesDropped;
+
+static void noteLuaChange(CallSite site, const LuaWrap *w, int answer, int arguments) {
+    if (!answer && !arguments) return;
+    if (luaChangeCount >= LUA_CHANGES_MAX) {
+        luaChangesDropped++;
+        return;   // No log: coe5.changedBy reports the cut (dropped=).
+    }
+    luaChanges[luaChangeCount++] = (LuaChange){site, w->s ? w->s->mod : "?", w->priority, answer, arguments};
+}
 
 // The sites a script can wrap or observe, by the name coe5.wrap and coe5.observe take.
 static const LuaSite luaSites[] = {
@@ -113,6 +137,11 @@ static const LuaSite luaSites[] = {
     {"SEAL_EVENT",                    SITE_SEAL_EVENT,                    K_SEAL_EVENT, "i:ii"},
     {"MAP_EDITOR",                    SITE_MAP_EDITOR,                    K_CALL,    "v:"},
     {"MAP_EDITOR_DRAW",               SITE_MAP_EDITOR_DRAW,               K_CALL,    "v:"},
+    {"MAP_DRAW",                      SITE_MAP_DRAW,                      K_CALL,    "v:"},
+    {"TOP_BAR_INCOME",                SITE_TOP_BAR_INCOME,                K_CALL,    "i:iii"},
+    {"MESSAGES_WAIT",                 SITE_MESSAGES_WAIT,                 K_CALL,    "i:ii"},
+    {"WARN_WAIT",                     SITE_WARN_WAIT,                     K_CALL,    "i:ii"},
+    {"MESSAGE_BOX_WAIT",              SITE_MESSAGE_BOX_WAIT,              K_CALL,    "i:ii"},
     {"RITUAL_SCREEN_LOCATION_CHECK",  SITE_RITUAL_SCREEN_LOCATION_CHECK,  K_OBSERVE, "i:iiii"},
     {"RITUAL_SCREEN_CAN_CAST",        SITE_RITUAL_SCREEN_CAN_CAST,        K_OBSERVE, "i:ii"},
     {"GAME_START",                    SITE_GAME_START,                    K_OBSERVE, "v:ii"},
@@ -529,28 +558,39 @@ static u64 runLuaWrap(LuaWrap *w, const LuaArgs *a) {
     const LuaSite *ls = &luaSites[w->site];
     LuaScript *s = w->s;
     if (!s || s->dead) return callLuaNext(ls, w->next, a);
-    LuaFrame f = {luaFrames, w, a, 0, 0, ++luaFrameSerial};
+    LuaFrame f = {luaFrames, w, a, 0, 0, ++luaFrameSerial, 0, 0, 0, luaChangeCount};
     luaFrames = &f;
     int results = ls->kind == K_TARGET_SQUARE ? 3 : 1;
     int ok = callLuaProtected(s, pushLuaWrapCall, &f, results);
     u64 result = 0;
     int vetoNext = 0;
+    int squareChanged = 0;
     if (ok) {
-        if (ls->kind == K_TARGET_SQUARE) result = takeTargetSquare(s->L, ls, a, &f, s->mod);
+        if (ls->kind == K_TARGET_SQUARE) {
+            int nextX = *(const int *)(uintptr_t)a->a[2], nextY = *(const int *)(uintptr_t)a->a[3];
+            result = takeTargetSquare(s->L, ls, a, &f, s->mod);
+            squareChanged = f.nextCalled && (*(const int *)(uintptr_t)a->a[2] != nextX || *(const int *)(uintptr_t)a->a[3] != nextY);
+        }
         else if (ls->kind == K_VETO) result = takeVeto(s->L, ls, a, &f, s->mod, &vetoNext);
         else if (ls->site == SITE_AI_MOVE_COMSTR) result = takeComstr(s->L, ls, a, &f, s->mod, &vetoNext);
         else if (ls->kind == K_SEAL_EVENT) result = f.nextCalled ? f.result : 0;
         else result = lua_isinteger(s->L, -1) ? (u64)lua_tointeger(s->L, -1) : f.result;
         lua_pop(s->L, results);
         closeDeadLuaScript(s);
-        if (!vetoNext && (!f.nextCalled || (siteResult(ls) == 'i' ? (int)result != (int)f.result : result != f.result)))
-            siteResultMod[luaSites[w->site].site] = s->mod;
+        int answerChanged = !vetoNext && (!f.nextCalled || (siteResult(ls) == 'i' ? (int)result != (int)f.result : result != f.result));
+        if (answerChanged) siteResultMod[luaSites[w->site].site] = s->mod;
+        if (siteResult(ls) == 'v' && ls->kind != K_SEAL_EVENT) answerChanged = !vetoNext && !f.nextCalled;
+        noteLuaChange(ls->site, w, answerChanged || squareChanged, f.argsChanged);
         if (!f.nextCalled && !vetoNext && !w->noNextLogged) {
             w->noNextLogged = 1;
             writeLog("lua_wrap_no_next", "mod=%s site=%s priority=%d result=%lld", s->mod, ls->name, w->priority, (long long)result);
         }
     }
     luaFrames = f.up;
+    if (!luaFrames || luaFrames->wrap->site != w->site) {
+        luaChangeCount = f.changesAtEntry;
+        if (luaChangeCount < LUA_CHANGES_MAX) luaChangesDropped = 0;
+    }
     if (!ok) result = f.nextCalled ? f.result : callLuaNext(ls, w->next, a);
     else if (vetoNext) result = callLuaNext(ls, w->next, a);
     return result;
@@ -577,10 +617,13 @@ static int lNextCall(lua_State *L) {
         a.changed = lua_tostring(L, -1);
     }
     f->nextCalled = 1;
+    f->argsChanged = memcmp(a.a, f->args->a, sizeof a.a) != 0 || memcmp(a.f, f->args->f, sizeof a.f) != 0 || a.changed != NULL;
     unsigned long frames = gameFrames;
+    f->changesFrom = luaChangeCount;
     luaCodeRunning--;
     f->result = callLuaNext(ls, f->wrap->next, &a);
     luaCodeRunning++;
+    f->changesTo = luaChangeCount;
     if (gameFrames != frames) resetLuaSteps(L);
     return pushLuaResult(L, ls, &a, f->result);
 }
@@ -760,6 +803,39 @@ static const LuaSite *luaSiteNamed(lua_State *L) {
         if (!strcmp(luaSites[i].name, name)) return &luaSites[i];
     luaL_error(L, "no site named '%s' that a script can wrap or observe", name);
     return NULL;
+}
+
+// coe5.changedBy(): inside a wrap, after its next(), the script wraps inside that next() that changed the site's answer.
+static int lChangedBy(lua_State *L) {
+    LuaScript *s = luaScriptOf(L);
+    const LuaFrame *f = luaFrames;
+    while (f && (!f->wrap || f->wrap->s != s)) f = f->up;
+    lua_createtable(L, 0, 0);
+    const char *reason = !f ? "outside_wrap" : !f->nextCalled ? "next_not_called" : NULL;
+    if (reason) {
+        refuseLuaCall(s ? s->mod : "?", "coe5.changedBy", reason, "frames=%d", luaFrames != NULL);
+        return 1;
+    }
+    CallSite site = luaSites[f->wrap->site].site;
+    int n = 0;
+    for (int i = f->changesFrom; i < f->changesTo && i < LUA_CHANGES_MAX; i++) {
+        const LuaChange *c = &luaChanges[i];
+        if (c->site != site) continue;
+        lua_createtable(L, 0, 4);
+        lua_pushstring(L, c->mod);
+        lua_setfield(L, -2, "mod");
+        lua_pushinteger(L, c->priority);
+        lua_setfield(L, -2, "priority");
+        lua_pushboolean(L, c->answer);
+        lua_setfield(L, -2, "answer");
+        lua_pushboolean(L, c->arguments);
+        lua_setfield(L, -2, "arguments");
+        lua_rawseti(L, -2, ++n);
+    }
+    if (f->changesTo >= LUA_CHANGES_MAX && luaChangesDropped)
+        writeLog("lua_changed_by_cut", "mod=%s site=%s listed=%d dropped=%d", s ? s->mod : "?", luaSites[f->wrap->site].name, n,
+                 luaChangesDropped);
+    return 1;
 }
 
 // coe5.wrap(siteName, fn[, priority]).

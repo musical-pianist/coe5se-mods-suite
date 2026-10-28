@@ -261,8 +261,10 @@ static const char *pluginRefusalFor(void *caller) {
 static const CallSite NEW_WORLD_FRAME_SITES[] = {SITE_NEW_WORLD_MAP_SCREEN, SITE_NEW_WORLD_INIT_PARTICIPANTS,
                                                  SITE_NEW_WORLD_CREATING_WORLD, SITE_PARTICIPANTS_WAIT,
                                                  SITE_PARTICIPANTS_BUTTON_ROW};
+static const CallSite MESSAGE_BOX_FRAME_SITES[] = {SITE_MESSAGE_BOX_WAIT};
 static const struct { const char *prefix; const CallSite *sites; size_t count; } FRAME_SITES[] = {
     {"FRAME_NEW_WORLD_", NEW_WORLD_FRAME_SITES, sizeof NEW_WORLD_FRAME_SITES / sizeof NEW_WORLD_FRAME_SITES[0]},
+    {"FRAME_MESSAGE_BOX_", MESSAGE_BOX_FRAME_SITES, 1},
 };
 
 // PluginApi.frameVariable.

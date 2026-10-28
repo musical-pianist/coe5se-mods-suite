@@ -2,7 +2,9 @@
 
 // coe5.ui: the game's widgets, the same calls as the API's ui table.
 static int monsterRowIndex;
+static void closeLuaRow(lua_State *L, const char *call);
 static int lScreenBegin(lua_State *L) {
+    closeLuaRow(L, "coe5.ui.screenBegin");
     monsterRowIndex = 0;
     luaApi->ui->screenBegin(luaL_checkstring(L, 1));
     return 0;
@@ -68,6 +70,7 @@ static int lBindKey(lua_State *L) {
 // A screen loop is one long call into the script, so the step count starts again every frame.
 static int lWait(lua_State *L) {
     checkLuaMainThread(L, "coe5.ui.wait");
+    closeLuaRow(L, "coe5.ui.wait");
     luaCodeRunning--;
     int id = luaApi->ui->wait();
     luaCodeRunning++;
@@ -121,11 +124,77 @@ static int luaDrawFloats(lua_State *L, const char *call, int first, int last, fl
     return 1;
 }
 
-// Whether a draw call may draw now: only inside MAP_EDITOR_DRAW's chain.
-static int luaMayDraw(lua_State *L, const char *call) {
-    if (mapEditorDrawing > 0) return 1;
+// ---- coe5.ui.rowBegin and rowEnd: a row of texts side by side, with a background colour ----------
+// A script's open row: 1 between coe5.ui.rowBegin and rowEnd.
+static int luaRowOpen;
+
+// Closes a row the script left open, with lua_refused reason=row_open for `call`.
+static void closeLuaRow(lua_State *L, const char *call) {
+    if (!luaRowOpen) return;   // No log: no row open.
     LuaScript *s = luaScriptOf(L);
-    refuseLuaCall(s ? s->mod : "?", call, "not_drawing", "site=MAP_EDITOR_DRAW");
+    refuseLuaCall(s ? s->mod : "?", call, "row_open", "closed=1");
+#ifndef __APPLE__
+    GAME_FN(void (*)(int), RVA_ROW_BEGIN)(1);
+#endif
+    luaRowOpen = 0;
+}
+
+// Why coe5.ui.rowBegin refuses its arguments, or NULL.
+static const char *luaRowRefusal(int open, lua_Integer id, float width, const float colour[4], int windows) {
+    if (!windows) return "windows_only";
+    if (open) return "row_open";
+    if (!fitsInt(id) || width <= 0) return "out_of_range";
+    for (int i = 0; i < 4; i++)
+        if (colour[i] < 0 || colour[i] > 1) return "out_of_range";
+    return NULL;
+}
+
+// coe5.ui.rowBegin(id, width[, r, g, b, alpha]): opens a row `width` wide, all of it clicked as `id`.
+static int lRowBegin(lua_State *L) {
+    lua_Integer id = luaL_checkinteger(L, 1);
+    float width, colour[4] = {0, 0, 0, 0};
+    if (!luaDrawFloats(L, "coe5.ui.rowBegin", 2, 2, &width)) return 0;
+    if (!lua_isnoneornil(L, 3) && !luaDrawFloats(L, "coe5.ui.rowBegin", 3, 6, colour)) return 0;
+#ifdef __APPLE__
+    int windows = 0;
+#else
+    int windows = 1;
+#endif
+    const char *reason = luaRowRefusal(luaRowOpen, id, width, colour, windows);
+    if (reason) {
+        LuaScript *s = luaScriptOf(L);
+        refuseLuaCall(s ? s->mod : "?", "coe5.ui.rowBegin", reason, "id=%lld width=%g alpha=%g", (long long)id, (double)width,
+                      (double)colour[3]);
+        return 0;
+    }
+#ifndef __APPLE__
+    GAME_FN(void (*)(int), RVA_ROW_BEGIN)(0);
+    GAME_FN(void (*)(int, float, float, float, float, float), RVA_ROW_AREA)((int)id, width, colour[0], colour[1], colour[2], colour[3]);
+    GAME_FN(void (*)(float), RVA_COLUMN_X)(0.0f);
+#endif
+    luaRowOpen = 1;
+    return 0;
+}
+
+// coe5.ui.rowEnd(): closes the row coe5.ui.rowBegin opened.
+static int lRowEnd(lua_State *L) {
+    if (!luaRowOpen) {
+        LuaScript *s = luaScriptOf(L);
+        refuseLuaCall(s ? s->mod : "?", "coe5.ui.rowEnd", "no_row", "open=0");
+        return 0;
+    }
+#ifndef __APPLE__
+    GAME_FN(void (*)(int), RVA_ROW_BEGIN)(1);
+#endif
+    luaRowOpen = 0;
+    return 0;
+}
+
+// Whether a draw call may draw now: only inside MAP_EDITOR_DRAW's or MAP_DRAW's chain.
+static int luaMayDraw(lua_State *L, const char *call) {
+    if (mapEditorDrawing > 0 || mapDrawing > 0) return 1;
+    LuaScript *s = luaScriptOf(L);
+    refuseLuaCall(s ? s->mod : "?", call, "not_drawing", "sites=MAP_EDITOR_DRAW,MAP_DRAW");
     return 0;
 }
 
@@ -142,6 +211,20 @@ static int lDrawLine(lua_State *L) {
     }
     if (!luaMayDraw(L, "coe5.ui.drawLine")) return 0;
     drawUiLine(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8]);
+    return 0;
+}
+
+// coe5.ui.drawRect(x, y, width, height, r, g, b, alpha): a filled rectangle at UI coordinates.
+static int lDrawRect(lua_State *L) {
+    float f[8];
+    if (!luaDrawFloats(L, "coe5.ui.drawRect", 1, 8, f)) return 0;
+    if (f[2] <= 0 || f[3] <= 0) {
+        LuaScript *s = luaScriptOf(L);
+        refuseLuaCall(s ? s->mod : "?", "coe5.ui.drawRect", "out_of_range", "width=%g height=%g", (double)f[2], (double)f[3]);
+        return 0;
+    }
+    if (!luaMayDraw(L, "coe5.ui.drawRect")) return 0;
+    drawUiRect(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7]);
     return 0;
 }
 

@@ -9,7 +9,7 @@
 // The first words of the lines a content-free mod may have.
 static const char *const CONTENT_FREE_WORDS[] = {
     "icon", "description", "coeversion", "modversion", "modprio", "requires",
-    "needs_script_extender", "needs_coe5se", "needs_glu32.dll_and_CoE5SE_enabled_at_launch",
+    "needs_script_extender", "needs_coe5se", "needs_glu32.dll_and_CoE5SE_enabled_at_launch", "maxdata",
 };
 
 static int isContentFreeWord(const char *word) {

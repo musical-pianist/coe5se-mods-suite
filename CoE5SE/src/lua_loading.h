@@ -16,13 +16,13 @@ static const luaL_Reg LUA_COE5[] = {
     {"addActionKey", lAddActionKey}, {"actionKey", lActionKey}, {"findMonster", lFindMonster},
     {"dataFolder", lDataFolder}, {"readIni", lReadIni}, {"writeIni", lWriteIni}, {"listIni", lListIni},
     {"deleteIni", lDeleteIni}, {"spawnUnit", lSpawnUnit}, {"spawnCommander", lSpawnCommander},
-    {"monsterVariant", lMonsterVariant}, {"portalExits", lPortalExits}, {"onPortalCrossing", lOnPortalCrossing}, {"squareUnits", lSquareUnits}, {"revealMap", lRevealMap}, {"armies", lArmies}, {"route", lRoute},
+    {"monsterVariant", lMonsterVariant}, {"portalExits", lPortalExits}, {"onPortalCrossing", lOnPortalCrossing}, {"squareUnits", lSquareUnits}, {"revealMap", lRevealMap}, {"centerMap", lCenterMap}, {"viewArmy", lViewArmy}, {"armies", lArmies}, {"route", lRoute},
     {"scrapRitualPlan", lScrapRitualPlan}, {"planRitual", lPlanRitual}, {"terrainMatch", lTerrainMatch},
     {"releaseFollower", lReleaseFollower}, {"transferFollower", lTransferFollower},
     {"shopOffers", lShopOffers}, {"classRecruits", lClassRecruits}, {"recruitSquares", lRecruitSquares},
     {"builtinOffers", lBuiltinOffers}, {"builtinOfferChance", lBuiltinOfferChance}, {"replaceBuiltinOffer", lReplaceBuiltinOffer},
     {"addShopOffer", lAddShopOffer}, {"guildCount", lGuildCount},
-    {"aiBuyOffer", lAiBuyOffer}, {"addMapEditorLine", lAddMapEditorLine}, {"mapView", lMapView},
+    {"aiBuyOffer", lAiBuyOffer}, {"aiActions", lAiActions}, {"runAiTurn", lRunAiTurn}, {"recruitScreen", lRecruitScreen}, {"showSight", lShowSight}, {"restoreSight", lRestoreSight}, {"reportBattlesTo", lReportBattlesTo}, {"changedBy", lChangedBy}, {"addMapEditorLine", lAddMapEditorLine}, {"mapView", lMapView},
     {"addCommanderLine", lAddCommanderLine}, {"teleportCommander", lTeleportCommander}, {"mayEnterSquare", lMayEnterSquare},
     {"keepTraceLines", lKeepTraceLines}, {"addPlane", lAddPlane}, {"setPlaneShape", lSetPlaneShape}, {"planeIndex", lPlaneIndex}, {"factionSlot", lFactionSlot}, {"addFaction", lAddFaction},
     {"setPlaneTint", lSetPlaneTint}, {"clearPlaneTint", lClearPlaneTint}, {"setTerrainLooks", lSetTerrainLooks},
@@ -35,7 +35,7 @@ static const luaL_Reg LUA_UI[] = {
     {"listBegin", lListBegin}, {"listRow", lListRow}, {"listEnd", lListEnd}, {"bindEscape", lBindEscape},
     {"bindKey", lBindKey}, {"wait", lWait}, {"sectionHeader", lSectionHeader}, {"screenWidth", lScreenWidth},
     {"setupScreenWidth", lSetupScreenWidth}, {"screenMusic", lScreenMusic}, {"columnX", lColumnX},
-    {"nameBox", lNameBox}, {"monsterRow", lMonsterRow}, {"drawLine", lDrawLine}, {"drawText", lDrawText}, {NULL, NULL},
+    {"nameBox", lNameBox}, {"monsterRow", lMonsterRow}, {"drawLine", lDrawLine}, {"drawText", lDrawText}, {"drawRect", lDrawRect}, {"rowBegin", lRowBegin}, {"rowEnd", lRowEnd}, {NULL, NULL},
 };
 
 // The game numbers, as coe5.<table>.<name>.
@@ -47,7 +47,10 @@ static const struct { const char *table, *name; int value; } GAME_NUMBERS[] = {
     {"gameMenu", "stay", GAME_MENU_STAY}, {"gameMenu", "close", GAME_MENU_CLOSE}, {"gameMenu", "resign", GAME_MENU_RESIGN},
     {"gameMenuSection", "saving", GAME_MENU_SECTION_SAVING}, {"gameMenuSection", "settings", GAME_MENU_SECTION_SETTINGS},
     {"mapAction", "specialPower", MAP_ACTION_SPECIAL_POWER}, {"mapAction", "gameMenu", MAP_ACTION_GAME_MENU},
-    {"mapAction", "squareInfo", MAP_ACTION_SQUARE_INFO}, {"mapEditor", "hideToolbox", MAP_EDITOR_HIDE_TOOLBOX},
+    {"mapAction", "squareInfo", MAP_ACTION_SQUARE_INFO}, {"mapAction", "endTurn", MAP_ACTION_END_TURN},
+    {"box", "messagesOk", BOX_MESSAGES_OK}, {"box", "warnOk", BOX_WARN_OK}, {"box", "firstButton", BOX_FIRST_BUTTON},
+    {"box", "secondButton", BOX_SECOND_BUTTON}, {"box", "cancel", BOX_CANCEL},
+    {"mapEditor", "hideToolbox", MAP_EDITOR_HIDE_TOOLBOX},
     {"key", "none", KEY_NONE}, {"key", "backspace", KEY_BACKSPACE}, {"key", "tab", KEY_TAB},
     {"key", "enter", KEY_ENTER}, {"key", "esc", KEY_ESC}, {"key", "space", KEY_SPACE}, {"key", "delete", KEY_DELETE},
     {"key", "f1", KEY_F1}, {"key", "f2", KEY_F2}, {"key", "f3", KEY_F3}, {"key", "f4", KEY_F4},
@@ -455,7 +458,7 @@ static int luaFileExists(const char *path) {
 // The script of mod `mod` in folder `folder`, or NULL when it has none yet.
 static LuaScript *findLuaScript(const char *mod, const char *folder) {
     for (int i = 0; i < luaScriptCount; i++)
-        if (!strcmp(luaScripts[i]->mod, mod) && !strcmp(luaScripts[i]->folder, folder)) return luaScripts[i];
+        if (!luaScripts[i]->retired && !strcmp(luaScripts[i]->mod, mod) && !strcmp(luaScripts[i]->folder, folder)) return luaScripts[i];
     return NULL;
 }
 
@@ -573,6 +576,73 @@ static void loadLuaScripts(void) {
     luaScriptsLoading = 0;
     moveOldDataFolders();
     writeLog("lua_scripts_done", "count=%d lua=%s", luaScriptCount, LUA_RELEASE);
+}
+
+// ---- Mod set changes: the scripts follow the enabled mods ---------------------------------------
+// Scripts start and stop as their mods are turned on and off, with no restart.
+
+// Whether mod `mod` in folder `folder` is enabled in the game now.
+static int luaModEnabledNow(const char *mod, const char *folder) {
+    for (int m = 0; m <= G32(RVA_MOD_LAST_INDEX); m++)
+        if (modEnabled(m) && !strcmp(modName(m), mod) && !strcmp(modFolder(m), folder)) return 1;
+    return 0;
+}
+
+// Turns off script s, whose mod was turned off.
+static void retireLuaScript(LuaScript *s) {
+    s->retired = 1;
+    if (!s->stopping) {
+        s->stopping = LUA_STOP_CLOSED;
+        if (s->L) lua_sethook(s->L, luaStepHook, LUA_MASKCOUNT, 1);
+    }
+    s->dead = 1;
+    s->stopLogged = 1;
+    int kept = 0;
+    for (int i = 0; i < modCommandCount; i++) {
+        int lua = modCommands[i].lua;
+        if (lua >= 0 && lua < luaCallbackCount && luaCallbacks[lua].s == s) continue;
+        modCommands[kept++] = modCommands[i];
+    }
+    modCommandCount = kept;
+    writeLog("lua_script_turned_off", "mod=%s reason=mod_disabled", s->mod);
+    closeDeadLuaScript(s);
+}
+
+// Before a mod pass at `level`: stops the scripts of mods turned off, and loads newly enabled mods' commands files.
+static void syncLuaScriptsBeforePass(int level) {
+    if (!startupFinished || level != 2) return;
+    int stopped = 0, started = 0;
+    for (int i = 0; i < luaScriptCount; i++) {
+        LuaScript *s = luaScripts[i];
+        if (s->retired || luaModEnabledNow(s->mod, s->folder)) continue;
+        retireLuaScript(s);
+        stopped++;
+    }
+    if (!isNetworkGame()) {
+        readLoadOrder(0);
+        for (int k = 0; k < orderedModCount; k++) {
+            const ModInfo *m = &orderedMods[loadOrder[k]];
+            started += loadLuaCommandsFile(m->name, modFolder(m->tag)) > 0;
+        }
+    }
+    if (stopped || started) writeLog("lua_scripts_synced", "when=before_pass stopped=%d commands_files=%d network=%d", stopped, started, isNetworkGame());
+}
+
+// After a mod pass at `level`: loads the <ModName>.lua of each enabled mod whose script hasn't run.
+static void syncLuaScriptsAfterPass(int level) {
+    if (!startupFinished || level != 2 || isNetworkGame()) return;
+    int started = 0;
+    luaScriptsLoading = 1;
+    for (int k = 0; k < orderedModCount; k++) {
+        const ModInfo *m = &orderedMods[loadOrder[k]];
+        const LuaScript *s = findLuaScript(m->name, modFolder(m->tag));
+        if (s && s->mainTried) continue;
+        loadLuaScript(m->name, modFolder(m->tag));
+        s = findLuaScript(m->name, modFolder(m->tag));
+        started += s && s->mainTried && !s->dead;
+    }
+    luaScriptsLoading = 0;
+    if (started) writeLog("lua_scripts_synced", "when=after_pass started=%d", started);
 }
 
 // ---- Boxes for the player ---------------------------------------------------------------------

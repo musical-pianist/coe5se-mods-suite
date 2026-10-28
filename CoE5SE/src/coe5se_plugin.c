@@ -620,9 +620,12 @@ static unsigned char *siteCallAt(CallSite site, int i) {
     if (generated) return i == 0 ? generated : NULL;
     return i < MAX_SITE_CALLS && SITES[site].rvas[i] ? gameBase + SITES[site].rvas[i] : NULL;
 }
+static int topBarIncomeAsGame(int player, int resource, int income);
 static unsigned char *siteCallTarget(CallSite site) {
     unsigned char *generated = generatedSiteTarget(site);
     if (generated) return generated;
+    if (site == SITE_TOP_BAR_INCOME) return (unsigned char *)topBarIncomeAsGame;
+    if (!SITES[site].targetRva) return NULL;
     unsigned char *target = gameBase + SITES[site].targetRva;
     return siteThroughSlot[site] ? *(unsigned char **)target : target;
 }
@@ -638,6 +641,9 @@ static int isSiteCall(const unsigned char *call, const unsigned char *target, co
     return call[0] == 0xe8 && call + 5 + rel == target;
 }
 
+// Whether CoE5SE runs the site's chain itself, from its own code, with no game call of the site's.
+static int siteRunByCoe5se(CallSite site) { return site == SITE_MAP_DRAW || site == SITE_TOP_BAR_INCOME; }
+
 // Builds the site's stub and points every call of the site at it.
 static int installSite(CallSite site) {
     const SiteInfo *info = &SITES[site];
@@ -645,14 +651,15 @@ static int installSite(CallSite site) {
         writeLog("site_skipped", "site=%s reason=not_the_expected_code", info->name);
         return 0;
     }
-    unsigned char *first = siteCallAt(site, 0);
+    int ownCall = siteRunByCoe5se(site);
+    unsigned char *first = ownCall ? siteCallTarget(site) : siteCallAt(site, 0);
     if (!first) {
         writeLog("site_skipped", "site=%s reason=not_on_this_build", info->name);
         return 0;
     }
-    unsigned char *slot = !generatedSiteCall(site) && first[0] == 0xff && first[1] == 0x15 ? gameBase + info->targetRva : NULL;
+    unsigned char *slot = !ownCall && !generatedSiteCall(site) && first[0] == 0xff && first[1] == 0x15 ? gameBase + info->targetRva : NULL;
     unsigned char *target = slot ? *(unsigned char **)slot : siteCallTarget(site);
-    for (int i = 0; siteCallAt(site, i); i++) {
+    for (int i = 0; !ownCall && siteCallAt(site, i); i++) {
         unsigned char *call = siteCallAt(site, i);
         if (!isSiteCall(call, target, slot) || !target) {
             writeLog("site_skipped", "site=%s reason=not_the_expected_call address=%p", info->name, call);
@@ -660,7 +667,7 @@ static int installSite(CallSite site) {
         }
     }
     siteThroughSlot[site] = slot != NULL;
-    if (!stubPage && !(stubPage = allocStubPages(first))) {
+    if (!stubPage && !(stubPage = allocStubPages(ownCall ? gameBase : first))) {
         writeLog("site_skipped", "site=%s reason=no_near_page", info->name);
         return 0;
     }
@@ -682,7 +689,7 @@ static int installSite(CallSite site) {
     }
 
     unsigned char saved[MAX_SITE_CALLS + 1][6];
-    for (int i = 0; siteCallAt(site, i); i++) {
+    for (int i = 0; !ownCall && siteCallAt(site, i); i++) {
         unsigned char *call = siteCallAt(site, i), callCode[6];
         size_t size = slot ? 6 : 5;
         buildSiteCall(callCode, call, stub);
@@ -803,8 +810,9 @@ static int isInternalSite(CallSite site) {
            site == SITE_UNIT_LIST_SHEET || site == SITE_POLL_EVENT || site == SITE_KEY_TEXT_BAR ||
            site == SITE_KEY_HELP_TEXT || site == SITE_KEY_TEXT_BUTTON || site == SITE_RUN_ONE_MOD ||
            site == SITE_RUN_ONE_MOD_PATH || site == SITE_GAME_MENU_SETTINGS_SECTION_END || site == SITE_ELIMINATED_WARN ||
-           site == SITE_WARN_WAIT || site == SITE_TURN_MESSAGES || site == SITE_MESSAGES_WAIT ||
-           site == SITE_MAP_EDITOR_TOOLBOX_LINE || site == SITE_RUN_ONE_MOD_LINE_READ;
+           site == SITE_TURN_MESSAGES ||
+           site == SITE_MAP_EDITOR_TOOLBOX_LINE || site == SITE_RUN_ONE_MOD_LINE_READ || site == SITE_TOP_BAR ||
+           site == SITE_TOP_BAR_INCOME_DRAW;
 }
 
 static int isObserveOnlySite(CallSite site) {
@@ -1669,6 +1677,7 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "seal_events.h"
 #include "data_area_max.h"
 #include "map_editor.h"
+#include "top_bar_income.h"
 #include "commander_lines.h"
 #include "lua_scripts.h"
 #include "lua_game_data.h"
@@ -1679,6 +1688,9 @@ static u64 modErrorDialogWrapper(u64 title, u64 text, u64 a3, u64 a4, u64 a5, u6
 #include "lua_coe5_table.h"
 #include "portal_crossing.h"
 #include "lua_ai.h"
+#include "lua_play_as.h"
+#include "lua_seat_sight.h"
+#include "battle_report_seat.h"
 #include "shop_offers.h"
 #include "rec_bonus.h"
 #include "lua_units.h"

@@ -23,6 +23,7 @@ static int restartPhase;
 static int restartAsked;
 static char restartAskedBy[64];
 static int playGameEntries;
+static unsigned playGameSerial;
 static u64 (*nextPlayGame)(int);
 
 // Names the plugin DLL or script that made an API call.
@@ -233,8 +234,11 @@ static u64 playGameHook(int arg) {
 }
 
 // CoE5SE's innermost play_game wrapper.
+static void clearBattleReportSeat(void);
 static u64 (*nextPlayGameInner)(int);
 static u64 playGameInnermost(int arg) {
+    playGameSerial++;
+    clearBattleReportSeat();
     if (playGameEntries++) loadedTurn = -1;
     if (playGameEntries > 1 && restartPhase != RESTART_NONE) {
         writeLog("restart_game", "phase=cancelled reason=play_game_reentered");

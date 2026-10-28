@@ -119,8 +119,10 @@ static int rawIncome(int slot, int resource) {
     default: return GAME_FN(int (*)(int, int), RVA_PLAYER_GEM_INCOME)(resource - 7, slot);
     }
 }
-static int slotIncome(int slot, int resource) {
+// What player `slot` gets of `resource` at its next turn start; with `asAi`, what it would get as an AI.
+static int slotIncomeAs(int slot, int resource, int asAi) {
     int controller = (*(short *)playerSlotAddress(RVA_SLOT_CONTROLLER, slot, 2));
+    if (asAi && controller == CONTROLLER_HUMAN) controller = CONTROLLER_AI;
     int level = (*(short *)playerSlotAddress(RVA_SLOT_AI, slot, PLAYER_BLOCK_SIZE));
     int bonus = level >= 0 && level < AI_LEVEL_TABLE_MAX ? G32(RVA_AI_LEVEL_BONUS + (size_t)level * 4) : 0;
     int percent = incomePercent(controller, bonus, resource, 0);
@@ -133,6 +135,73 @@ static int slotIncome(int slot, int resource) {
         percent = incomePercent(controller, bonus, resource, anySpecial);
     }
     return scaledIncome(rawIncome(slot, resource), percent);
+}
+static int slotIncome(int slot, int resource) { return slotIncomeAs(slot, resource, 0); }
+
+// ---- The trade step of the turn start: slotAiTrade ----------------------------------------------
+// What a player's trade type buys or sells, and its rate in tenths of a gold piece per unit.
+#define TRADE_TYPE_RANDOM_GEM 23
+#define TRADE_TYPE_SELL_GEMS  24
+static const struct { signed char resource, rate; } TRADE_GOODS[TRADE_TYPE_SELL_GEMS + 1] = {
+    {-1, 1}, {1, 10}, {1, 10}, {4, 20}, {4, 20}, {5, 30}, {5, 30}, {2, 5}, {2, 5}, {3, 5}, {3, 5}, {6, 20}, {6, 20},
+    {7, 20}, {7, 20}, {8, 20}, {8, 20}, {9, 20}, {9, 20}, {10, 20}, {10, 20}, {12, 30}, {12, 30}, {-1, 20}, {-1, 20},
+};
+
+// What the trade step changes of each resource, into change[RESOURCE_COUNT]; the trade points' own fall included.
+static int tradeStepChange(int type, int mode, int points, const int stocks[RESOURCE_COUNT], int faction,
+                           int change[RESOURCE_COUNT], int *randomGem) {
+    memset(change, 0, RESOURCE_COUNT * sizeof change[0]);
+    *randomGem = 0;
+    if (points <= 0 || type < 1 || type > TRADE_TYPE_SELL_GEMS) return 0;
+    int rate = TRADE_GOODS[type].rate, odd = type & 1;
+    if (mode > 1) points = odd ? points * 2 : points * 4;
+    int left = rate > 1 ? points * 10 % rate : 0, drawAdds = left != 0;
+    int units = points * 10 / (rate < 1 ? 1 : rate) + (2 * left > rate);
+    if (mode > 1) rate = odd ? rate * 2 : rate / 2;
+    if (faction && type <= 5) {
+        if (type == 5) change[11] = -(units < stocks[0] * 10 / rate ? units : stocks[0] * 10 / rate);
+        return drawAdds;
+    }
+    if (type == TRADE_TYPE_SELL_GEMS) {
+        for (int gem = 7; gem <= 10 && units > 0; gem++) {
+            int n = units < stocks[gem] ? units : stocks[gem];
+            if (n < 0) n = 0;
+            change[0] += n * rate / 10, change[gem] -= n, change[11] -= n, units -= n;
+        }
+        return drawAdds;
+    }
+    int good = TRADE_GOODS[type].resource, n;
+    if (odd) {
+        int afford = stocks[0] * 10 / rate;
+        n = units < afford ? units : afford;
+        change[0] = -(n * rate / 10);
+        if (good >= 0) change[good] = n;
+        else *randomGem = n;
+    } else {
+        n = units < stocks[good] ? units : stocks[good];
+        if (n < 0) n = 0;
+        change[0] = n * rate / 10;
+        change[good] = -n;
+    }
+    change[11] = -n;
+    return drawAdds;
+}
+
+// What the trade step of player `slot`'s next turn start changes of `resource`, as the turn start pays it as an AI.
+static int slotAiTrade(int slot, int resource) {
+    if (resource < 0 || resource >= RESOURCE_COUNT) return 0;
+    int type = (*(short *)playerSlotAddress(RVA_PLAYER_TRADE_TYPE, slot, PLAYER_BLOCK_SIZE));
+    int mode = (*(short *)playerSlotAddress(RVA_PLAYER_TRADE_MODE, slot, PLAYER_BLOCK_SIZE));
+    if (type < 1 || type > TRADE_TYPE_SELL_GEMS) return 0;
+    int stocks[RESOURCE_COUNT] = {0}, change[RESOURCE_COUNT], randomGem;
+    int good = TRADE_GOODS[type].resource;
+    for (int r = 0; r < RESOURCE_COUNT; r++) {
+        if (r != 0 && r != good && !(type == TRADE_TYPE_SELL_GEMS && r >= 7 && r <= 10)) continue;
+        int stock = *(int *)playerSlotAddress(RVA_PLAYER_INTS + (size_t)r * 4, slot, PLAYER_BLOCK_SIZE) + slotIncomeAs(slot, r, 1);
+        stocks[r] = stock > 0 ? stock : 0;
+    }
+    tradeStepChange(type, mode, slotIncomeAs(slot, 11, 1), stocks, slot >= PLAYER_SLOTS, change, &randomGem);
+    return change[resource];
 }
 
 // ---- What stays home: commanderGarrisonLeft --------------------------------------------------------
@@ -770,6 +839,8 @@ static int lGet(lua_State *L) {
         break;
     }
     case T_SLOT_INCOME: lua_pushinteger(L, slotIncome((int)lua_tointeger(L, 2), (int)lua_tointeger(L, 3))); break;
+    case T_SLOT_AI_INCOME: lua_pushinteger(L, slotIncomeAs((int)lua_tointeger(L, 2), (int)lua_tointeger(L, 3), 1)); break;
+    case T_SLOT_AI_TRADE: lua_pushinteger(L, slotAiTrade((int)lua_tointeger(L, 2), (int)lua_tointeger(L, 3))); break;
     case T_TERRAIN_INCOME: {
         int field = terrainIncomeField((int)lua_tointeger(L, 3));
         if (field < 0) lua_pushnil(L);
@@ -894,7 +965,7 @@ static int lGet(lua_State *L) {
     case T_FLAG_I16: lua_pushboolean(L, *(short *)p != 0); break;
     case T_FLAG_TWO: lua_pushboolean(L, *(int *)p == 2); break;
     case T_F32: lua_pushnumber(L, *(float *)p); break;
-    case T_STR: lua_pushlstring(L, (const char *)p, strnlen((const char *)p, v->size)); break;
+    case T_STR: case T_FRAME_STR: lua_pushlstring(L, (const char *)p, strnlen((const char *)p, v->size)); break;
     case T_PTR_STR: {
         const char *s = *(const char *const *)p;
         if (s) lua_pushlstring(L, s, strnlen(s, v->size));

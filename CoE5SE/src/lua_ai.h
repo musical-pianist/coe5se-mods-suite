@@ -79,6 +79,8 @@ static const char *ritualPlanScrapRefusal(int inAiSite, lua_Integer commander, i
 }
 
 // coe5.scrapRitualPlan(commander): drops an AI commander's planned ritual.
+enum { AI_ACTION_BUY, AI_ACTION_PLAN, AI_ACTION_SCRAP };
+static void noteAiAction(int player, const char *mod, int call, int a, int b, int c, int d, int e, int f);
 static int lScrapRitualPlan(lua_State *L) {
     lua_Integer commander = luaL_checkinteger(L, 1);
     int owner = -1, controller = CONTROLLER_REMOVED, plan = 0;
@@ -100,6 +102,7 @@ static int lScrapRitualPlan(lua_State *L) {
     }
     if (plan > 0) {
         G16(RVA_COMMANDER_AI_PLAN + (size_t)commander * COMMANDER_SIZE) = 0;
+        noteAiAction(owner, s ? s->mod : "?", AI_ACTION_SCRAP, (int)commander, plan, 0, 0, 0, 0);
         writeLog("ai_plan_scrapped", "mod=%s commander=%lld player=%d ritual=%d", s ? s->mod : "?", (long long)commander, owner, plan);
     }
     lua_pushboolean(L, 1);
@@ -709,6 +712,60 @@ static int aiRecruitPlayer(void) {
     return -1;
 }
 
+// ---- coe5.aiActions: which mod bought or planned for an AI ---------------------------------------
+// One call a script made for an AI player this turn: its mod, the call, and what it did.
+#define AI_ACTIONS_MAX 64
+typedef struct {
+    const char *mod;
+    int call;
+    int a, b, c, d, e, f;
+} AiAction;
+static struct { AiAction list[AI_ACTIONS_MAX]; int count, dropped, turn; } aiActions[PLAYER_SLOTS_MOVED];
+
+static void noteAiAction(int player, const char *mod, int call, int a, int b, int c, int d, int e, int f) {
+    if (player < 0 || player >= PLAYER_SLOTS_MOVED) return;   // No log: the callers refused any other player already.
+    int turn = G32(RVA_TURN);
+    if (aiActions[player].turn != turn) aiActions[player].count = aiActions[player].dropped = 0, aiActions[player].turn = turn;
+    if (aiActions[player].count >= AI_ACTIONS_MAX) {
+        aiActions[player].dropped++;
+        return;   // No log: coe5.aiActions reports the cut (dropped).
+    }
+    aiActions[player].list[aiActions[player].count++] = (AiAction){mod, call, a, b, c, d, e, f};
+}
+
+// coe5.aiActions(player): this turn's buys and ritual plans scripts made for the player, in order, with each one's mod.
+static int lAiActions(lua_State *L) {
+    lua_Integer player = luaCheckPlayer(L, 1);
+    lua_createtable(L, 0, 0);
+    if (player < 0 || player >= PLAYER_SLOTS_MOVED || aiActions[player].turn != G32(RVA_TURN)) {
+        lua_pushinteger(L, 0);
+        return 2;   // No log: no call this turn.
+    }
+    static const char *const CALLS[] = {"aiBuyOffer", "planRitual", "scrapRitualPlan"};
+    for (int i = 0; i < aiActions[player].count; i++) {
+        const AiAction *x = &aiActions[player].list[i];
+        lua_createtable(L, 0, 8);
+        lua_pushstring(L, x->mod);
+        lua_setfield(L, -2, "mod");
+        lua_pushstring(L, CALLS[x->call]);
+        lua_setfield(L, -2, "call");
+        if (x->call == AI_ACTION_BUY) {
+            setIntField(L, "offer", x->a);
+            setIntField(L, "monster", x->b);
+            setIntField(L, "count", x->c);
+            setIntField(L, "x", x->d);
+            setIntField(L, "y", x->e);
+            if (x->f >= 0) setIntField(L, "commander", x->f);
+        } else {
+            setIntField(L, "commander", x->a);
+            setIntField(L, "ritual", x->b);
+        }
+        lua_rawseti(L, -2, i + 1);
+    }
+    lua_pushinteger(L, aiActions[player].dropped);
+    return 2;
+}
+
 // Why coe5.aiBuyOffer refuses its arguments, or NULL.
 static const char *aiBuyRefusal(int sitePlayer, int humanTurn, lua_Integer player, int controller, lua_Integer offer, int shopLast) {
     if (sitePlayer < 0) return "outside_ai_recruit";
@@ -751,6 +808,7 @@ static int lRecruitSquares(lua_State *L) {
 // coe5.aiBuyOffer(player, offer, x, y): buys the AI player's offer on square (x, y).
 typedef const char *(*AiBuySquareRule)(const AiRecruitCalls *g, int player, int offer, int x, int y);
 typedef void (*AiBuyAfter)(int player, int x, int y);
+static int aiBuyHumanTurn(int *x, int *y, AiBuySquareRule *rule, AiBuyAfter *after);
 static int lAiBuyOffer(lua_State *L) {
     lua_Integer player = luaCheckPlayer(L, 1), offer = luaL_checkinteger(L, 2);
     lua_Integer x = luaL_checkinteger(L, 3), y = luaL_checkinteger(L, 4);
@@ -763,9 +821,7 @@ static int lAiBuyOffer(lua_State *L) {
     int sitePlayer = aiRecruitPlayer(), humanTurn = 0, onlyX = -1, onlyY = -1;
     AiBuySquareRule humanRule = NULL;
     AiBuyAfter humanAfter = NULL;
-#ifdef COE5SE_AI_BUY_HOOK
-    if (sitePlayer < 0) humanTurn = (sitePlayer = COE5SE_AI_BUY_HOOK(&onlyX, &onlyY, &humanRule, &humanAfter)) >= 0;
-#endif
+    if (sitePlayer < 0) humanTurn = (sitePlayer = aiBuyHumanTurn(&onlyX, &onlyY, &humanRule, &humanAfter)) >= 0;
     const char *reason = aiBuyRefusal(sitePlayer, humanTurn, player, controller, offer, shopLast);
     if (!reason && !g) reason = "windows_only";
     if (!reason && (x < 0 || y < 0 || x >= G32(RVA_MAP_DEPTH) || y >= G32(RVA_MAP_H) || x >= MAP_COLUMNS_MAX || y >= MAP_COLUMN_SQUARES))
@@ -801,6 +857,7 @@ static int lAiBuyOffer(lua_State *L) {
     if (!(flags & SHOP_FLAG_EXTRA)) G32(RVA_SQUARE_FLAGS + square) |= SQUARE_FLAG_RECRUITED;
     if (flags & SHOP_FLAG_ONCE) PG32(RVA_SHOP_OFFER_COUNTS + block + (size_t)offer * 4) = 0;
     if (humanTurn && humanAfter) humanAfter((int)player, (int)x, (int)y);
+    noteAiAction((int)player, mod, AI_ACTION_BUY, (int)offer, monster, count, (int)x, (int)y, commander ? made : -1);
     writeLog("ai_offer_bought", "mod=%s player=%lld offer=%lld monster=%d count=%d commander=%d new_commander=%d x=%lld y=%lld "
              "gold_before=%d gold_after=%d flags=0x%x", mod, (long long)player, (long long)offer, monster, count, commander, made,
              (long long)x, (long long)y, goldBefore, PG32(RVA_PLAYER_INTS + block), flags);
@@ -843,6 +900,7 @@ static int lPlanRitual(lua_State *L) {
         return 1;
     }
     G16(RVA_COMMANDER_AI_PLAN + (size_t)commander * COMMANDER_SIZE) = (short)ritual;
+    noteAiAction(owner, s ? s->mod : "?", AI_ACTION_PLAN, (int)commander, (int)ritual, 0, 0, 0, 0);
     writeLog("ai_plan_set", "mod=%s commander=%lld player=%d ritual=%lld", s ? s->mod : "?", (long long)commander, owner, (long long)ritual);
     lua_pushboolean(L, 1);
     return 1;

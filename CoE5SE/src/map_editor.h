@@ -30,6 +30,9 @@ static int (*nextMapEditorWait)(int, int);
 static void (*nextMapEditorDraw)(void);
 static int mapEditorWaiting;
 static int mapEditorDrawing;
+static int (*nextMapScreenFrame)(int, int);
+static int mapScreenWaiting;
+static int mapDrawing;
 
 // The game's "Create Fancy Terrain" line, then each shown script line, in the order they were added.
 static u64 drawMapEditorToolboxLines(int id, const char *text) {
@@ -54,10 +57,25 @@ static int dispatchMapEditorLineClick(int a, int b) {
     return id;
 }
 
-// MAP_EDITOR_DRAW's gate: the site's wrappers run only in the editor's map frames.
+// The innermost wrapper of the map screen's frame wait: marks its draw pass as the map's frame.
+static int markMapScreenFrame(int a, int b) {
+    mapScreenWaiting++;
+    int id = nextMapScreenFrame(a, b);
+    mapScreenWaiting--;
+    return id;
+}
+
+// MAP_EDITOR_DRAW's gate: the site's wrappers run only in the editor's map frames, MAP_DRAW's in the map screen's.
 static void gateMapEditorDraw(void) {
     if (mapEditorWaiting <= 0) {
-        ((void (*)(void))siteGameTarget(SITE_MAP_EDITOR_DRAW))();
+        void *game = siteGameTarget(SITE_MAP_EDITOR_DRAW);
+        if (mapScreenWaiting <= 0 || !siteInstalled[SITE_MAP_DRAW]) {
+            ((void (*)(void))game)();
+            return;
+        }
+        mapDrawing++;
+        ((void (*)(void))siteEntry(SITE_MAP_DRAW, game))();
+        mapDrawing--;
         return;
     }
     mapEditorDrawing++;
@@ -115,7 +133,9 @@ static void installMapEditorHooks(void) {
     int wait = insertWrap(SITE_MAP_EDITOR_WAIT, (void *)dispatchMapEditorLineClick, (void **)&nextMapEditorWait, outermost, owner, NULL);
     int draw = insertWrap(SITE_MAP_EDITOR_DRAW, (void *)gateMapEditorDraw, (void **)&nextMapEditorDraw, outermost, owner, NULL);
     int editor = insertWrap(SITE_MAP_EDITOR, (void *)loadScriptsBeforeMapEditor, (void **)&nextMapEditor, outermost, owner, NULL);
-    writeLog("map_editor_hooks_installed", "toolbox_line=%d wait=%d draw=%d editor=%d", line, wait, draw, editor);
+    int mapFrame = insertWrap(SITE_MAP_SCREEN_WAIT, (void *)markMapScreenFrame, (void **)&nextMapScreenFrame,
+                              (WrapPlace){.priority = INT_MIN}, owner, NULL);
+    writeLog("map_editor_hooks_installed", "toolbox_line=%d wait=%d draw=%d editor=%d map_frame=%d", line, wait, draw, editor, mapFrame);
 }
 
 // ---- The map view ---------------------------------------------------------------------------------
@@ -219,6 +239,18 @@ static void drawUiLine(float x1, float y1, float x2, float y2, float r, float g,
         GL_IMPORT(void (*)(int, unsigned, int, const void *), RVA_GL_VERTEX_POINTER)(2, GL_FLOAT_TYPE, 0, points);
         GL_IMPORT(void (*)(unsigned, int, int), RVA_GL_DRAW_ARRAYS)(GL_LINES_MODE, 0, 2);
     }
+    GL_IMPORT(void (*)(unsigned), RVA_GL_DISABLE_CLIENT_STATE)(GL_VERTEX_ARRAY);
+}
+
+// A filled rectangle with its bottom left corner at (x, y), in r, g, b at `alpha`.
+static void drawUiRect(float x, float y, float w, float h, float r, float g, float b, float alpha) {
+    float sx = uiScaleX(), sy = uiScaleY();
+    float corners[8] = {x * sx, y * sy, (x + w) * sx, y * sy, (x + w) * sx, (y + h) * sy, x * sx, (y + h) * sy};
+    GAME_FN(void (*)(int, int), RVA_GL_STATE)(0, GL_STATE_LINES);
+    GL_IMPORT(void (*)(unsigned), RVA_GL_ENABLE_CLIENT_STATE)(GL_VERTEX_ARRAY);
+    GL_IMPORT(void (*)(float, float, float, float), RVA_GL_COLOR4F)(r, g, b, alpha);
+    GL_IMPORT(void (*)(int, unsigned, int, const void *), RVA_GL_VERTEX_POINTER)(2, GL_FLOAT_TYPE, 0, corners);
+    GL_IMPORT(void (*)(unsigned, int, int), RVA_GL_DRAW_ARRAYS)(GL_TRIANGLE_FAN_MODE, 0, 4);
     GL_IMPORT(void (*)(unsigned), RVA_GL_DISABLE_CLIENT_STATE)(GL_VERTEX_ARRAY);
 }
 

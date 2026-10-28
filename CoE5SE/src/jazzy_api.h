@@ -45,6 +45,13 @@
 #define MAP_ACTION_SPECIAL_POWER   5
 #define MAP_ACTION_GAME_MENU       6
 #define MAP_ACTION_SQUARE_INFO     96
+#define MAP_ACTION_END_TURN        7
+// The answers to the boxes that stop a turn, as their waits return them.
+#define BOX_MESSAGES_OK            1
+#define BOX_WARN_OK                1
+#define BOX_FIRST_BUTTON           11
+#define BOX_SECOND_BUTTON          12
+#define BOX_CANCEL                 2
 // The map editor's ids, as SITE_MAP_EDITOR_WAIT returns them.
 #define MAP_EDITOR_HIDE_TOOLBOX    2
 // Key values: the game's key codes.
@@ -229,6 +236,11 @@ typedef enum {
     SITE_MAP_EDITOR_TOOLBOX_LINE,
     SITE_MAP_EDITOR_DRAW,
     SITE_RUN_ONE_MOD_LINE_READ,
+    SITE_MAP_DRAW,
+    SITE_TOP_BAR,
+    SITE_TOP_BAR_INCOME_DRAW,
+    SITE_TOP_BAR_INCOME,
+    SITE_MESSAGE_BOX_WAIT,
     SITE_COUNT
 } CallSite;
 

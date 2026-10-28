@@ -68,6 +68,7 @@
 --   Make a unit on a square        coe5.spawnUnit(p, coe5.monsterVariant(coe5.findMonster("Spearman")), x, y)
 --   The square under the pointer   coe5.get("mapPointerX"), coe5.get("mapPointerY")   (in a MAP_SCREEN_WAIT wrap, after next)
 --   Keep the map from a click      coe5.set("mouseButtons", 0)   (the same wrap)
+--   Click on text drawn over the map  coe5.wrap("MAP_SCREEN_WAIT", function(next, b, m) local id = next(b, m) local x, y = coe5.get("uiPointerX"), coe5.get("uiPointerY") if coe5.get("mouseButtons") == 1 and x >= 10 and x < 240 and y >= 300 and y < 336 then coe5.set("mouseButtons", 0) return 0 end return id end)   (Windows)
 --   Send an AI explorer elsewhere  coe5.wrap("AI_EXPLORE", function(next, c, comstr) local s, x, y = next(c, comstr) return s, x, y end)
 --   A square's plane and portal    coe5.get("squarePlane", x, y), coe5.get("squarePortal", x, y), coe5.portalExits(x, y)
 --   Seal a portal                  coe5.onPortalCrossing(function(c) if c.portal == 1234 then return false end end)   (humans, the AI and its routes)
@@ -91,6 +92,15 @@
 --   Move one AI unit to another commander  coe5.transferFollower(u, c)   (same, both of the moving AI on one square)
 --   Plan a ritual an AI caster knows  coe5.planRitual(c, coe5.get("commanderRitual", c, 0))   (same; the commander has no plan)
 --   A player's income next turn    coe5.get("slotIncome", p, 3)   (Fungus)
+--   That income as its AI gets it  coe5.get("slotAiIncome", p, 0)   (Gold; a played AI is human meanwhile)
+--   And what its trade moves       coe5.get("slotAiIncome", p, 0) + coe5.get("slotAiTrade", p, 0)   (the gold its next turn start brings)
+--   Play an AI player's turn       coe5.observe("HUMAN_TURN", nil, function(_, p) coe5.runAiTurn(p) end)   (the game's AI moves what the player left)
+--   Which mods changed an answer   coe5.wrap("AI_CONQUER", function(next, c, comstr) local s, x, y = next(c, comstr) for _, ch in ipairs(coe5.changedBy()) do coe5.log(ch.mod) end return s, x, y end, 2000000000)
+--   Move the map to a square       coe5.centerMap(x, y)   (its plane too; Windows)
+--   Show an army's battlefield view coe5.viewArmy(x, y)   (the game's right-click view; Windows)
+--   See what another player sees   coe5.showSight(seat, p) ... coe5.restoreSight(seat)   (a human seat; Windows)
+--   Every battle's report to a seat coe5.reportBattlesTo(seat)   (with Battle reports on; Windows)
+--   A played AI's Recruit buy      coe5.wrap("RECRUIT_WAIT", function(next, b, m) local r = coe5.recruitScreen() ... coe5.aiBuyOffer(r.player, offer, r.x, r.y) return 0 end)
 --   What a terrain pays            coe5.get("terrainIncome", coe5.get("squareTerrain", x, y), 3)
 --   Does a square count for a terrain  coe5.terrainMatch(coe5.get("ritualTerrain", r), x, y)
 --   Keep the AI from planning a ritual  coe5.wrap("AI_RITUAL_CANDIDATE", function(next, c, ritual) if blocked(c, ritual) then return false end return next(c, ritual) end)
@@ -118,6 +128,13 @@
 --   A line in the commander's orders  coe5.addCommanderLine{label = "Rally", icon = 0x75, onClick = function() local c = coe5.get("selectedCommander") end}
 --   Teleport a commander's army    coe5.teleportCommander(c, x, y)   (coe5.mayEnterSquare(c, x, y): could it walk there)
 --   Draw over the map editor's map  coe5.wrap("MAP_EDITOR_DRAW", function(next) local v = coe5.mapView() coe5.ui.drawLine(v.originX, 0, v.originX, 600, 1, 1, 1, 0.3) return next() end)
+--   End the turn from a script     coe5.wrap("MAP_SCREEN_WAIT", function(next, b, m) local id = next(b, m) if skipping then return coe5.mapAction.endTurn end return id end)
+--   Close the Messages screen      coe5.wrap("MESSAGES_WAIT", function(next, b, m) if skipping then return coe5.box.messagesOk end return next(b, m) end)
+--   Answer the End Turn Warning    coe5.wrap("MESSAGE_BOX_WAIT", function(next, b, m) if skipping and coe5.get("messageBoxText"):find("AP left") then return coe5.box.firstButton end return next(b, m) end)   (Windows)
+--   Who bought for an AI           for _, a in ipairs(coe5.aiActions(p)) do coe5.log(a.mod .. " " .. a.call) end
+--   Draw over the world map        coe5.wrap("MAP_DRAW", function(next) coe5.ui.drawRect(10, 400, 200, 60, 0, 0, 0, 0.6) coe5.ui.drawText(16, 440, 12, "Hermann", 1, 1, 1, 1) return next() end)   (Windows)
+--   Change the top bar's income    coe5.wrap("TOP_BAR_INCOME", function(next, p, r, income) next(p, r, income) return coe5.get("slotAiIncome", p, r) end)   (Windows)
+--   A table row on a screen        coe5.ui.rowBegin(30, 400, 0.6, 0.5, 0.2, 0.4) coe5.ui.text(30, "Hermann") coe5.ui.columnX(200) coe5.ui.text(30, "275 (+54)") coe5.ui.rowEnd()   (Windows)
 --   Replace a seal's event         coe5.wrap("SEAL_EVENT", function(next, slot, seal) if seal ~= 3 then return next(slot, seal) end coe5.set("eventVar", 300, 1) end)
 --
 -- When CoE5SE refuses a call, the call returns false or coe5.message.notAdded (each note below
@@ -185,7 +202,12 @@ function require(name) end
 ---| "BATTLE_WAIT"               # fn(next, block, mode): each frame of a battle's real-time loop. next returns the clicked id.
 ---| "MAP_EDITOR_WAIT"           # fn(next, block, mode): each frame of the map editor. next returns the clicked id (coe5.mapEditor, or a coe5.addMapEditorLine id). A key bound with coe5.ui.bindKey before next counts for that frame, toolbox hidden or not.
 ---| "MAP_EDITOR"                # fn(next): the whole map editor, opened from the Mods screen's Start Map Editor or the --mapeditor launch option; next returns when the player quits it. With --mapeditor the editor opens before the main menu: the scripts load just before it, and the game exits when it closes.
----| "MAP_EDITOR_DRAW"           # fn(next): once per frame of the map editor's map, after the map's squares and before the toolbox, the plane buttons, and the hover box. Draw with coe5.ui.drawLine and coe5.ui.drawText: before next lands over the map and under the toolbox, after next over everything but the hover box. coe5.mapView says where each square is. next returns nothing.
+---| "MAP_EDITOR_DRAW"           # fn(next): once per frame of the map editor's map, after the map's squares and before the toolbox, the plane buttons, and the hover box. Draw with coe5.ui.drawLine, drawText and drawRect: before next lands over the map and under the toolbox, after next over everything but the hover box. coe5.mapView says where each square is. next returns nothing.
+---| "MAP_DRAW"                  # fn(next): once per frame of the world map in a player's turn, after the squares and the units and before the top bar, the commander panel, and the hover box. Draw with coe5.ui.drawLine, drawText and drawRect: before next lands over the map and under the game's panels, after next over everything but the hover box. coe5.mapView says where each square is. next returns nothing. Windows only for now: on Mac coe5.wrap returns false.
+---| "MESSAGES_WAIT"             # fn(next, block, mode): each frame of the Messages screen, as a human turn starts (View messages shares it). next returns the clicked id; return coe5.box.messagesOk to close it, as the player's Ok does.
+---| "WARN_WAIT"                 # fn(next, block, mode): each frame of the game's warning box ("<name> has been eliminated" and the like). next returns the clicked id; return coe5.box.warnOk to press its Ok.
+---| "MESSAGE_BOX_WAIT"          # fn(next, block, mode): each frame of the game's message box (the End Turn Warning, and any question the game asks with one or two buttons). next returns the clicked id, 0 for none; return coe5.box.firstButton, secondButton or cancel to answer it as the player would. Its text reads as messageBoxText meanwhile. Windows only for now: on Mac coe5.wrap returns false.
+---| "TOP_BAR_INCOME"            # fn(next, player, resource, income): the "+income" the map's top bar draws after one of the player's resources (0 Gold to 13 Lifeforce, as slotResource; not the gems or the trade points). Return the number to draw; next returns the game's. Only the drawn number changes: the income the game pays, which the AI reads, stays the game's. Windows only for now: on Mac coe5.wrap returns false.
 ---| "BATTLE_EDITOR_WAIT"        # fn(next, block, mode): each frame of the battle map editor. next returns the clicked id.
 ---| "RECRUIT_WAIT"              # fn(next, block, mode): each frame of Recruit. next returns the clicked id.
 ---| "VIEW_ARMY_WAIT"            # fn(next, block, mode): each frame of an army on the battlefield, before a battle. next returns the clicked id.
@@ -197,7 +219,7 @@ function require(name) end
 ---| "AI_FRIENDLY_MOVE"          # fn(next, commander, comstr): the AI's move to a square a teammate owns, after AI_RALLY; the game drops a square where an enemy army near it is much stronger than comstr. Kept when the score is above the rally's; as AI_RALLY otherwise.
 ---| "AI_CONQUER"                # fn(next, commander, comstr): the AI's conquest step, after AI_FRIENDLY_MOVE: a square to attack or take, among those the player has seen; -999 for none. Kept when the score is above the earlier steps' best; as AI_RALLY otherwise.
 ---| "AI_FAR_EXPLORE"            # fn(next, commander, comstr): the AI's far exploration, after AI_EXPLORE, run only while the best score is below coe5.aiMove.farExploreBelow: an unseen square anywhere. Kept when the score is above the best, and the move is then coe5.aiMove.explore. As AI_RALLY otherwise.
----| "AI_RITUAL_CANDIDATE"       # fn(next, commander, ritual): one candidate of the AI's ritual plan choice for a commander with no plan (commanderRitualPlan 0), after the game's income, "rare", "never plan this" and other data reasons passed it. next(commander, ritual) runs the game's remaining checks of it, the pointless check first, and returns true when they keep it, false when they drop it. Return false to veto the candidate (the game drops it as "pointless" and draws the next); return true or nothing to keep it, which leaves the decision to the game: a kept candidate always gets next's answer, called for you if the wrap didn't, so a wrap can veto but never plan what the game drops. Another value is refused (lua_refused reason=not_a_boolean) and keeps; another commander or ritual in next is refused (commander_changed, ritual_changed). A wrap that errors keeps. coe5.scrapRitualPlan works inside it. Not in network games.
+---| "AI_RITUAL_CANDIDATE"       # fn(next, commander, ritual): one candidate of the AI's ritual plan choice for a commander with no plan (commanderRitualPlan 0), after the game's income, "rare", "never plan this" and other data reasons passed it. next(commander, ritual) runs the game's pointless check of it (the corpses and resources the ritual needs at the caster's square) and returns true when the ritual isn't pointless, false when it is. Return false to veto the candidate (the game drops it as "pointless" and draws the next); return true or nothing to keep it, which leaves the decision to the game: a kept candidate always gets next's answer, called for you if the wrap didn't, so a wrap can veto but never plan what the game drops. A kept candidate is not yet planned: after the wrap the game still checks it is not bad for the AI, can be cast, has the ritual's terrain seen near enough, and meets its time and location rules, and drops it if any fails. Another value is refused (lua_refused reason=not_a_boolean) and keeps; another commander or ritual in next is refused (commander_changed, ritual_changed). A wrap that errors keeps. coe5.scrapRitualPlan works inside it. Not in network games.
 ---| "AI_RECRUIT"               # fn(next, player): an AI player's recruiting step, once a turn after AI_TURN and before its commanders move. next(player) runs the game's own buying: from the player's offers (coe5.shopOffers) at its citadels, keeping gold for the game's save target (10 turns of gold income, at most 250). Skip next and the game buys nothing this turn. coe5.aiBuyOffer buys inside it, before or after next. next returns nothing. Not in network games.
 ---| "AI_GATHER_TROOPS"         # fn(next, commander): the AI's troop pick-up for one commander, before each of its move steps: next(commander) takes the free troops on its square that may join it, leaving a share there (20% on a citadel, 60% with under 2 citadels), or, with none free, leaves some of its own ranged troops behind. Don't call next to skip it: the commander takes and leaves nothing this step, and the troops stay free for another commander there. Another commander in next is refused (commander_changed). A wrap that errors runs it. coe5.scrapRitualPlan works inside it. Not in network games.
 ---| "AI_PICK_UP_LONER"          # fn(next, commander, unit): the AI's pick-up of one lone commander (unit is its unit) into the army of commander, a caster of a higher ritual level on its square, after the game's checks passed it: from then on the lone commander and its followers follow commander and never move on their own again. next(commander, unit) joins them and returns how many units joined; don't call it (return 0) to keep the lone commander free. Another commander or unit in next is refused (commander_changed, unit_changed). A wrap that errors runs it. coe5.scrapRitualPlan works inside it. Not in network games.
@@ -251,6 +273,8 @@ function require(name) end
 ---| "slotColorGreen"        # per slot, number 0 to 1: the colour's green.
 ---| "slotColorBlue"         # per slot, number 0 to 1: the colour's blue.
 ---| "slotResource"          # per slot and resource, integer: how much of resource 0-13 (resourceName's order, 0 Gold) the player has. coe5.get("slotResource", slot, resource), coe5.set("slotResource", slot, resource, value).
+---| "slotAiIncome"          # per slot and resource 0-13, integer: slotIncome as the game pays an AI of the player's AI level, for a human too: a human a script plays as an AI (coe5.runAiTurn) gets a human's 100% meanwhile, and this reads what its AI would get. 0 for a slot that is neither a human nor an AI. Read-only.
+---| "slotAiTrade"           # per slot and resource 0-13, integer: what the trade step of the player's next turn start changes of the resource, as the game runs it after paying the incomes (slotAiIncome): the player's trade type (slotTradeType) buys a resource with gold or sells one for gold, with that turn start's trade points. Negative for what it pays (the gold of a buy, the resource of a sell, the trade points), positive for what it gets. Read with the stocks of now plus those incomes; the step's own random draw can give one unit more or less, and the more likely is taken; type 23's gem is that draw's, so no gem is listed. 0 with no trade type. Gold's gain at that turn start is slotAiIncome plus this, if nothing changes first. The trade points are that turn start's trade income alone: a Trade stock left over is overwritten, not added. The game fights a player's battles after its turn, before the next player's turn start, so a read in an AI_TURN `after` observer comes before them; the next player's PLAYER_TURN_START `before` observer comes after. Read-only.
 ---| "slotIncome"            # per slot and resource 0-13, integer: what the player gets of the resource at its next turn start, as the game works it out then: each special resource (all but Gold, Iron and Trade) only while the player has a commander who gathers it, then an AI's difficulty percent (a human's is 100; an AI's 100 plus its level's bonus, a quarter of a positive bonus more for the special resources, and that quarter less for Gold, Iron and Trade while the AI has any special income). Trade is the trade points. 0 for a slot that is neither a human nor an AI. Read-only.
 ---| "slotTradeType"         # per slot, integer 0-24: what the player's trade points turn into at its next turn start: 0 nothing, 1-22 a resource bought (odd) or sold (even: 1-2 iron, 3-4 sacrifices, 5-6 hands, 7-8 herbs, 9-10 fungus, 11-12 weed, 13-20 the four gems, 21-22 relics), 23 a random gem bought, 24 gems sold in turn. The game's AI picks it at the end of its move. Writable with 0 to 24; any other value is refused (out_of_range).
 ---| "slotTradeMode"         # per slot, integer: 1, or 2 when the AI's pick doubles its trade (a buy with gold above 500). Read-only.
@@ -310,8 +334,11 @@ function require(name) end
 ---| "classStartArmy"        # index: a class, then a line 0-15, string: a start army line, "6 Spearman" (addstartunits) or "High Lord" for a commander (addstartcom); nil at and past the last line. Read-only.
 ---| "classStandardTroops"   # index: a class, boolean: the class has stdtroops, so it also recruits Spearman, Swordsman, Archer, Crossbowman, Heavy Infantry, and Catapult. The game holds those six names in its code, not in a table, so a script lists them itself. Read-only.
 ---| "classAbility"          # index: a class, then an ability id (coe5.classAbility), integer: the class's value of it, through the game's own lookup (the first match), 0 when the class has none. The game's random class roll reads aiClass, randomSkip, aiLevelMin, and aiLevelMax. Read-only.
+---| "messageBoxText"        # string: the game's message box's text, as it shows it. Nil outside a wrap of MESSAGE_BOX_WAIT. Read-only. Windows only for now.
 ---| "mapPointerX"          # integer: the map square under the pointer in this map frame, -1 when none (it is a square of the world, planes side by side). Nil outside a wrap of MAP_SCREEN_WAIT; read it after next. Read-only.
 ---| "mapPointerY"           # integer: that square's y, -1 when none. Nil outside a wrap of MAP_SCREEN_WAIT. Read-only.
+---| "uiPointerX"            # number: the pointer's x in UI units, from the left, the space coe5.ui.drawText and drawRect take (the UI is 914 wide at 1152x756 and wider in a wider window: coe5.mapView's screenW). Updated each frame of any screen. Read-only. Windows only for now: nil on Mac.
+---| "uiPointerY"            # number: the pointer's y in UI units, up from the bottom, as uiPointerX. With mouseButtons in a MAP_SCREEN_WAIT wrap, after next, a script takes a click on what it drew: test the pointer against its text's rectangle, set mouseButtons to 0 while the button is down, and return 0 for next's id (a click over the game's own buttons gives their id). Read-only. Windows only for now: nil on Mac.
 ---| "mouseButtons"          # integer: this frame's mouse buttons, 1 left, 2 right, 4 middle, added; the first frame of a press, then each frame it is held. In a wrap of MAP_SCREEN_WAIT, after next, set it to 0 to keep the map from acting on the click (a left click moves the selected commander), and keep setting it to 0 while the button stays down. 0 to 7.
 ---| "squareSeen"            # index: a slot, then x 0-999, then y 0-159, integer: what that player sees of the square: 1 darkened, 2 seen, 3 scried, 0 none of these. The map acts on a click only on a square above 1. Read-only.
 ---| "squareArmy"            # index: x 0-999, then y 0-159, integer: the square's army size, 0 for none, -1 while two players at war share it. Read-only.
@@ -407,7 +434,7 @@ function require(name) end
 ---| "apocalypseMonths"      # integer: 0 until the seventh seal's event, then the months of the apocalypse so far. Read-only.
 ---| "magicTaintedMonths"    # integer: the months of tainted magic left ("Horrors are drawing closer to our world and magic has become tainted"), 0 for none; the game's AI casts no ritual meanwhile. Read-only.
 ---| "mapZoom"               # number: the map view's UI units per square: 48 at the start, Page Up and Down glide it between 8 (12 outside the map editor) and 100. Read-only.
----| "mapCameraX"            # number: the world x, in squares, at the map view's centre column. Read-only.
+---| "mapCameraX"            # number: the world x, in squares, at the map view's centre column. Read-only: coe5.centerMap moves it.
 ---| "mapCameraY"            # number: the y, in squares; the square at the centre row is mapCameraY + 1. Read-only.
 ---| "mapViewPlane"          # integer: the plane the map view shows (planeName takes it). Read-only.
 ---| "enchantLastIndex"      # integer: the last record of the active ritual effects in use, at most 999. Read-only.
@@ -1152,6 +1179,103 @@ function coe5.recruitSquares(player, offer) end
 ---@return string? reason the lua_refused reason when refused
 function coe5.aiBuyOffer(player, offer, x, y) end
 
+---The buys and ritual plans scripts made for `player` this turn, in order, each with the mod that
+---made it: a call "aiBuyOffer" (each buy) with offer, monster, count, x, y and commander (the new
+---commander; nil for troops), and "planRitual" or "scrapRitualPlan" with commander and ritual. The
+---list starts again with the first call of a new turn; it holds 64 a turn, and the second result
+---counts the ones past that. It only reads: no call changes. Empty for a player with no call this
+---turn.
+---@param player integer|string
+---@return {mod: string, call: string, offer?: integer, monster?: integer, count?: integer, x?: integer, y?: integer, commander?: integer, ritual?: integer}[] actions
+---@return integer cut
+function coe5.aiActions(player) end
+-- On a played AI's Recruit screen: inside a RECRUIT_WAIT wrap, when the screen is the active
+-- player's and that player is human, coe5.aiBuyOffer also buys for that player, at the screen's
+-- selected square only (else not_screen_square), through the game's AI buy, with the Recruit
+-- screen's own checks in place of the AI's rules (square_used, not_enough_gold, not_enough_iron,
+-- not_enough_units, cannot_pay, wrong_plane, no_upgrade_units, sold_out, not_here, not_possible,
+-- item, too_few_to_upgrade). Windows only.
+
+---The game's AI moves for `player` in its own turn, from where the player left its commanders: the
+---way Play as AI hands a played AI back to the game. Only in a HUMAN_TURN `after` observer for that
+---player's turn. The player is an AI while the game's ai_move runs, then gets back its controller.
+---Nothing of a turn's start runs again: no income, no action points back, no upkeep.
+---Refused (lua_refused) and false: reason=network_game, outside_human_turn_end, not_this_turn,
+---resigning.
+---@param player integer the player whose human turn just ended
+---@return boolean ran
+function coe5.runAiTurn(player) end
+
+---The Recruit screen, inside a RECRUIT_WAIT wrap: its player, its selected square (x and y -1 with
+---none), whether a ctrl key is down (a ctrl click toggles an offer's auto-recruit), and its click
+---latch (1 once a frame had no mouse button; the screen acts on a click only then). nil, refused
+---(lua_refused), outside a RECRUIT_WAIT wrap (outside_recruit_wait), on Mac (windows_only), or
+---when the screen can't be read (no_frame).
+---@return {player: integer, x: integer, y: integer, ctrl: boolean, latch: integer}|nil screen
+function coe5.recruitScreen() end
+
+---Inside a wrap, after its next(): the other scripts' wraps of the same site, inside that next(),
+---that changed what their own next() gave them, innermost first. `answer` is true when a wrap
+---returned something else than its next() returned (or skipped next()); `arguments` when it passed
+---other arguments to its next(). A wrap that passed everything on unchanged isn't listed. It only
+---reads: no wrap's arguments or answer change. Wrap at 2000000000 to see every script's change;
+---a plugin DLL's wrap isn't listed. An empty list (lua_refused) outside a wrap (outside_wrap) or
+---before next() (next_not_called). On Mac the AI steps Mac's game copied into their callers list no
+---changes, for now.
+---@return {mod: string, priority: integer, answer: boolean, arguments: boolean}[] changes
+function coe5.changedBy() end
+
+---Centres the map view on world square (x, y), on the plane that holds it, as the game centres the
+---map on a commander or a message's square: the view switches plane as a plane button would, then
+---the camera moves (a glide on the same plane). Only the view changes: nothing a game turn decides
+---reads the camera or the view plane. Refused (lua_refused) and false: reason=no_game, off_map (x
+---or y outside the world: mapW and mapH), no_plane (a square on no plane), windows_only (Mac,
+---for now).
+---@param x integer a world square's x (planes side by side, as mapPointerX)
+---@param y integer
+---@return boolean centred
+function coe5.centerMap(x, y) end
+
+---Shows the army on world square (x, y) in the game's own army view, the screen a right click on an
+---army opens: its battlefield, both sides deployed. It waits there until the player leaves it, then
+---returns. The game's random sequence is put back after, so a view changes nothing a later turn
+---draws. Refused (lua_refused) and false: reason=no_game, off_map (outside the world: mapW and
+---mapH), no_army (no army on the square), windows_only (Mac, for now). Logs lua_army_viewed.
+---@param x integer a world square's x (planes side by side, as mapPointerX)
+---@param y integer
+---@return boolean shown
+function coe5.viewArmy(x, y) end
+
+---Shows `player`'s sight on the human `seat`: the map then shows the seat what that player sees,
+---fog and all, and the game shows the seat that player's moves. The seat's own sight is kept the
+---first time, and coe5.restoreSight puts it back. Nothing else changes: the player's own sight and
+---every other player's stay as they are. At the seat's next turn start the game ages the seat's
+---sight as always, so the player's "in view now" squares become "seen before" ones. Refused
+---(lua_refused) and false: reason=network_game, no_game, bad_player (outside 0-31), same_player,
+---seat_not_human, out_of_memory; windows_only on Mac, for now.
+---@param seat integer a human player
+---@param player integer the player whose sight to show
+---@return boolean shown
+function coe5.showSight(seat, player) end
+
+---Puts back the sight coe5.showSight kept for the seat, as it was at that first call. Refused
+---(lua_refused) and false: reason=bad_player, no_game, not_shown (nothing kept in this game; a new
+---or loaded game drops it), windows_only on Mac, for now.
+---@param seat integer
+---@return boolean restored
+function coe5.restoreSight(seat) end
+
+---Gives `seat` the game's own Battle Report message for every battle an AI faction fights that the
+---seat isn't in (a battle of independents or Horrors alone gives none), as if it saw the square: "You have observed a battle in ...", with the jump to the square, the replay and the
+---stats, on its Messages screen at its next turn start. The seat gets no sight: what it and every
+---other player see stays as it is. The game sends the reports only while its Battle reports option
+---is on (coe5.get("battleReports")), and only while the seat is human. nil or -1 turns it off; a
+---new or loaded game starts with none. Refused (lua_refused) and false: reason=network_game,
+---bad_player (outside 0-31), not_installed; windows_only on Mac, for now.
+---@param seat integer? a player 0-31, or nil or -1 for none
+---@return boolean set
+function coe5.reportBattlesTo(seat) end
+
 ---Adds a line to the map editor's toolbox, right under "Create Fancy Terrain". The editor's Tab
 ---(Hide Toolbox) hides it with the rest. CoE5SE gives the line an id the editor itself never uses
 ---(44 to 999, in the order lines are added); a click on the line runs onClick, and so does a key
@@ -1367,9 +1491,11 @@ function coe5.dataFolder(name) end
 function coe5.readIni(name) end
 
 ---Writes t[section][key] = value as data file `name`.ini in your data folder, in place of the old
----file, sections and keys in sorted order. Values are strings or numbers. A name or value that
----wouldn't read back the same is refused: a line break, ] in a section name, = in a key, a key
----starting with [ ; or #, or a space at either end.
+---file, sections and keys in sorted order. Values are strings or numbers. A section name, key or
+---value over 1,024 bytes is refused (problem=too_long), and so is one that wouldn't read back the
+---same: a line break, ] in a section name, = in a key, a key starting with [ ; or #, or a space at
+---either end. One refused section name, key or value fails the whole write: nothing is written and
+---the old file stays as it was. Split a long list over several keys.
 ---@param name string the file's name without .ini
 ---@param t table<string, table<string, string|number>>
 ---@return boolean written false when something is refused, the file would pass 1 MB, your mod's area would pass 10 MB or its .c5se's maxdata (data_quota), or it can't be written (logged as lua_refused)
@@ -1757,6 +1883,24 @@ function coe5.ui.screenMusic() end
 ---@param x number
 function coe5.ui.columnX(x) end
 
+---Opens a row `width` UI units wide, all of it clicked as `id` (0 for none), with a background in
+---r, g, b (each 0 to 1) at `alpha` (none when left out or 0): a table's row, or its highlighted
+---one. Draw the cells with coe5.ui.text at coe5.ui.columnX, then close it with coe5.ui.rowEnd.
+---Refused (lua_refused), drawing nothing: a row already open (row_open), a width of 0 or less, an
+---id past the game's 32-bit int, or a colour outside 0 to 1 (out_of_range), NaN or an infinity
+---(not_finite), Mac (windows_only, for now). A row left open is closed at coe5.ui.wait or
+---screenBegin (row_open).
+---@param id integer
+---@param width number
+---@param r? number
+---@param g? number
+---@param b? number
+---@param alpha? number
+function coe5.ui.rowBegin(id, width, r, g, b, alpha) end
+
+---Closes the row coe5.ui.rowBegin opened. With none open it does nothing (lua_refused reason=no_row).
+function coe5.ui.rowEnd() end
+
 ---The game's "Enter name" box, with a monster's picture. It runs its own loop until Ok or Cancel.
 ---Enter clicks Ok, and Esc clicks Cancel. CoE5SE draws the box itself, as the game draws it, because
 ---the game's own box binds no key to Esc and, on Mac, always says "Enter name", takes 25 characters,
@@ -1783,8 +1927,8 @@ function coe5.ui.monsterRow(id, monster, text, line2) end
 ---Draws one line from (x1, y1) to (x2, y2) at UI coordinates, in r, g, b (each 0 to 1) at `alpha`
 ---(0 clear, 1 solid), `width` screen pixels wide. A line straight across or straight up the screen
 ---is drawn on whole pixels, a pixel it covers in part at that part of `alpha`, so it moves by
----fractions of a pixel with the map while the zoom glides. Only inside a MAP_EDITOR_DRAW wrap; anywhere
----else it draws nothing (lua_refused reason=not_drawing). NaN or an infinity draws nothing
+---fractions of a pixel with the map while the zoom glides. Only inside a MAP_EDITOR_DRAW or MAP_DRAW
+---wrap; anywhere else it draws nothing (lua_refused reason=not_drawing). NaN or an infinity draws nothing
 ---(not_finite), and so does a width of 0 or less (out_of_range).
 ---@param x1 number
 ---@param y1 number
@@ -1798,7 +1942,7 @@ function coe5.ui.monsterRow(id, monster, text, line2) end
 function coe5.ui.drawLine(x1, y1, x2, y2, r, g, b, alpha, width) end
 
 ---Draws one line of text in the game's GUI font with its bottom left at (x, y), UI coordinates,
----`size` UI units high, in r, g, b at `alpha`. Only inside a MAP_EDITOR_DRAW wrap, as drawLine.
+---`size` UI units high, in r, g, b at `alpha`. Only inside a MAP_EDITOR_DRAW or MAP_DRAW wrap, as drawLine.
 ---The text is cut to 499 bytes (logged as api_cut).
 ---@param x number
 ---@param y number
@@ -1809,6 +1953,20 @@ function coe5.ui.drawLine(x1, y1, x2, y2, r, g, b, alpha, width) end
 ---@param b number
 ---@param alpha number
 function coe5.ui.drawText(x, y, size, text, r, g, b, alpha) end
+
+---Draws a filled rectangle with its bottom left corner at (x, y), UI coordinates, `width` across
+---and `height` up, in r, g, b at `alpha`: a panel behind drawn text, or a square of fog over the
+---map. Only inside a MAP_EDITOR_DRAW or MAP_DRAW wrap, as drawLine. A width or height of 0 or
+---less draws nothing (out_of_range), and so does NaN or an infinity (not_finite).
+---@param x number
+---@param y number
+---@param width number
+---@param height number
+---@param r number
+---@param g number
+---@param b number
+---@param alpha number
+function coe5.ui.drawRect(x, y, width, height, r, g, b, alpha) end
 
 -- ---- Game numbers ------------------------------------------------------------------------------
 -- The game's own numbers that a script passes to CoE5SE or gets back, by name. The values are the
@@ -1856,6 +2014,17 @@ coe5.mapAction = {
   specialPower = 5,  -- Use Special Power: a caster's ritual screen
   gameMenu = 6,      -- the Game Menu (F10)
   squareInfo = 96,   -- the square info window for the square under the pointer
+  endTurn = 7,       -- End Turn (y): MAP_SCREEN_WAIT returning it ends the human turn
+}
+
+---The answers to the boxes that stop a turn, as their waits return them (C: BOX_*).
+---@class coe5.box
+coe5.box = {
+  messagesOk = 1,     -- the Messages screen's Ok (MESSAGES_WAIT)
+  warnOk = 1,         -- the warning box's Ok (WARN_WAIT): an elimination's box and the like
+  firstButton = 11,   -- the message box's first button (MESSAGE_BOX_WAIT): the End Turn Warning's Yes
+  secondButton = 12,  -- its second button
+  cancel = 2,         -- its Cancel, or Esc
 }
 
 ---Key values: the game's key codes, the same on Windows and Mac (C: KEY_*). A letter, digit, or

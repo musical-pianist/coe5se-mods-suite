@@ -10,6 +10,7 @@ enum {
     T_FLAG_U8,
     T_FLAG_POSITIVE,
     T_FRAME_I32,
+    T_FRAME_STR,
     T_FLAG_I32,
     T_PTR_STR,
     T_F32,
@@ -32,6 +33,8 @@ enum {
     T_UNIT_ABILITY,
     T_COMMANDER_COST,
     T_SLOT_INCOME,
+    T_SLOT_AI_INCOME,
+    T_SLOT_AI_TRADE,
     T_TERRAIN_INCOME,
     T_I8,
     T_PLANE_AT,
@@ -96,15 +99,20 @@ typedef struct { const char *name; int count3, stride3, list, nameBack; uintptr_
 // Values only the Windows build has an address for so far.
 #ifdef __APPLE__
 #define WINDOWS_ONLY_RVA(rva) 0
+#define WINDOWS_ONLY_F32 T_WINDOWS_ONLY
+#define WINDOWS_ONLY_FRAME_STR T_WINDOWS_ONLY
 #define BUG_CHECKS_OFF_TYPE T_FLAG_U8
 #else
 #define WINDOWS_ONLY_RVA(rva) (rva)
+#define WINDOWS_ONLY_F32 T_F32
+#define WINDOWS_ONLY_FRAME_STR T_FRAME_STR
 #define BUG_CHECKS_OFF_TYPE T_FLAG_I32
 #endif
 #define CEREMONY_INDEXES (CEREMONY_LAST + 1)
 #define FORT_PART_BITS 32
 #define RESOURCE_COUNT 14
 #define NAME_SIZE 100
+#define MESSAGE_BOX_TEXT_SIZE 10000
 #define COUNT_AT_CALL 0
 #define SQUARE_COLUMN_SIZE (MAP_COLUMN_SQUARES * SQUARE_SIZE)
 // Each row: name, address, type, count, stride, size, writable, site, count2, stride2.
@@ -134,6 +142,8 @@ static const GameVar GAME_VARS[] = {
     {"slotColorBlue",  RVA_SLOT_COLOUR + 8,               T_F32, 32, PLAYER_BLOCK_SIZE, 0, 1, 0, 0, 0},
     {"slotResource",   RVA_PLAYER_INTS,                   T_I32, 32, PLAYER_BLOCK_SIZE, 0, 1, 0, 14, 4},
     {"slotIncome",     0,                                 T_SLOT_INCOME, PLAYER_SLOTS, 0, 0, 0, 0, RESOURCE_COUNT, 0},
+    {"slotAiIncome",   0,                                 T_SLOT_AI_INCOME, PLAYER_SLOTS, 0, 0, 0, 0, RESOURCE_COUNT, 0},
+    {"slotAiTrade",    0,                                 T_SLOT_AI_TRADE, PLAYER_SLOTS, 0, 0, 0, 0, RESOURCE_COUNT, 0},
     {"slotTradeType",  RVA_PLAYER_TRADE_TYPE, T_I16, 32, PLAYER_BLOCK_SIZE, 0, 1, 0, 0, 0},
     {"slotTradeMode",  RVA_PLAYER_TRADE_MODE, T_I16, 32, PLAYER_BLOCK_SIZE, 0, 0, 0, 0, 0},
     {"newWorldUniqueRandom", FRAME_NEW_WORLD_UNIQUE_RANDOM, T_FRAME_I32, 1, 0, 0, 1, SITE_NEW_WORLD_CREATING_WORLD, 0, 0},
@@ -189,8 +199,11 @@ static const GameVar GAME_VARS[] = {
     {"classStandardTroops", RVA_CLASS_TABLE, T_CLASS_STDTROOPS, CLASS_TABLE_MAX, CLASS_SIZE, 0, 0, 0, 0, 0},
     {"classAbility",   RVA_CLASS_TABLE,                   T_CLASS_ABILITY, CLASS_TABLE_MAX, CLASS_SIZE, 0, 0, 0, INT_MAX, 0},
     {"mapPointerX",    RVA_SQUARE_INFO_X,                 T_SITE_I32, 1, 0, 0, 0, SITE_MAP_SCREEN_WAIT, 0, 0},
+    {"messageBoxText", WINDOWS_ONLY_RVA(FRAME_MESSAGE_BOX_TEXT), WINDOWS_ONLY_FRAME_STR, 1, 0, MESSAGE_BOX_TEXT_SIZE, 0, SITE_MESSAGE_BOX_WAIT, 0, 0},
     {"mapPointerY",    RVA_SQUARE_INFO_Y,                 T_SITE_I32, 1, 0, 0, 0, SITE_MAP_SCREEN_WAIT, 0, 0},
     {"mouseButtons",   RVA_MOUSE_BUTTONS,                 T_I32, 1, 0, 0, 1, 0, 0, 0},
+    {"uiPointerX",     WINDOWS_ONLY_RVA(RVA_UI_MOUSE_X),  WINDOWS_ONLY_F32, 1, 0, 0, 0, 0, 0, 0},
+    {"uiPointerY",     WINDOWS_ONLY_RVA(RVA_UI_MOUSE_Y),  WINDOWS_ONLY_F32, 1, 0, 0, 0, 0, 0, 0},
     {"squareSeen",     RVA_SQUARE_RECORDS + SQUARE_SEEN,  T_U8, PLAYER_SLOTS, 1, 0, 0, 0, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE},
     {"squareArmy",     RVA_SQUARE_ARMY,                   T_I16, MAP_COLUMNS_MAX, MAP_COLUMN_SQUARES * 2, 0, 0, 0, MAP_COLUMN_SQUARES, 2},
     {"squareArmyOwner", RVA_SQUARE_RECORDS + SQUARE_ARMY_OWNER, T_ARMY_OWNER, MAP_COLUMNS_MAX, SQUARE_COLUMN_SIZE, 0, 0, 0,
@@ -497,7 +510,7 @@ static unsigned char *gameVarAddress(lua_State *L, const GameVar **out, int *arg
         if (index3 < 0 || index3 >= shape.count3) luaL_error(L, "%s: index %I out of range 0-%d", name, (LUAI_UACINT)index3, shape.count3 - 1);
     }
     *out = v;
-    if (v->type == T_FRAME_I32) {
+    if (v->type == T_FRAME_I32 || v->type == T_FRAME_STR) {
         CallSite running = runningFrameSite(v->site);
         uintptr_t sp = running != SITE_COUNT ? luaApi->callerRsp(running) : 0;
         return sp ? (unsigned char *)(sp + v->addr) : NULL;

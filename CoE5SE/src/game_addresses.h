@@ -908,6 +908,10 @@
 #define RVA_BATTLE_COLUMN_FREE_ROW             ADDR(        0x0ea710,          MAC_NOT_LOOKED_UP)
 #define RVA_BATTLE_INTRO_SCREEN                ADDR(        0x0e1f20,          MAC_NOT_LOOKED_UP)
 #define RVA_BATTLE_SHOWN_TO_SLOT               ADDR(        0x32b490,          MAC_NOT_LOOKED_UP)
+#define RVA_FIGHT_SHOWN_STORE                  ADDR(        0x0f5d43,          MAC_NOT_LOOKED_UP)
+#define RVA_FIGHT_SHOWN_STORE_NEXT             ADDR(        0x0f5d48,          MAC_NOT_LOOKED_UP)
+#define DO_ALL_FIGHTS_ROLES                    0x40
+#define DO_ALL_FIGHTS_SHOWN                    0x58
 #define RVA_FIGHT_ADVANCE_ATT_CALL             ADDR(        0x0f33f1,          MAC_NOT_LOOKED_UP)
 #define RVA_FIGHT_PLAN_CALL                    ADDR(        0x0f359f,          MAC_NOT_LOOKED_UP)
 #define RVA_FIGHT_DOATTACK_CALL                ADDR(        0x0f3ab7,          MAC_NOT_LOOKED_UP)
@@ -1041,6 +1045,7 @@
 #define RVA_RECRUIT_LOCATION_LAST              ADDR(        0x441914,          MAC_NOT_LOOKED_UP)
 #define RVA_RECRUIT_LOCATION_X                 ADDR(        0x11f48f80,        MAC_NOT_LOOKED_UP)
 #define RVA_RECRUIT_LOCATION_Y                 ADDR(        0x11f49400,        MAC_NOT_LOOKED_UP)
+#define FRAME_MESSAGE_BOX_TEXT                 FRAME_OFFSET(0x000020,          MAC_NOT_LOOKED_UP)
 #define FRAME_RECRUIT_SCREEN_PLAYER            FRAME_OFFSET(0x000098,          MAC_NOT_LOOKED_UP)
 #define FRAME_RECRUIT_SCREEN_X                 FRAME_OFFSET(0x000094,          MAC_NOT_LOOKED_UP)
 #define FRAME_RECRUIT_SCREEN_Y                 FRAME_OFFSET(0x000090,          MAC_NOT_LOOKED_UP)
@@ -1228,6 +1233,7 @@
 #define RVA_ADDPLANE_CAP_CHECK                 ADDR(        WIN_INLINED,       0x10056e0a4)
 #define RVA_ELYSIUM2_INDEX_CHECK               ADDR(        0x2a3dda,          0x1004b4c00)
 #define RVA_VOID_INDEX_CHECK                   ADDR(        0x2a3cc0,          0x1004b4b6c)
+#define RVA_CENTER_MAP_ON                      ADDR(        0x0b0b00,          MAC_NOT_LOOKED_UP)
 #define RVA_VIEW_PLANE                         ADDR(        0x23e5d0,          0x10048f610)
 #define RVA_PLANE_CAMERA_X                     ADDR(        0x9fab220,         0x106cee504)
 #define RVA_PLANE_CAMERA_Y                     ADDR(        0x9fab250,         0x106cee530)
@@ -2053,7 +2059,7 @@
 #define RVA_RITUAL_COUNT                       ADDR(        0x1afe774,         0x101cce58c)
 #define RVA_RITPOW_COUNT                       ADDR(        0x1afe48c,         0x101cce594)
 #define RVA_RITUAL_CURRENT                     ADDR(        0x1a92494,         0x101cb6e38)
-#define RVA_FIND_RITUAL                        ADDR(        0x2be690,          MAC_NOT_FOUND)
+#define RVA_FIND_RITUAL                        ADDR(        0x2be690,          MAC_INLINED)
 #define RVA_ALLOC_RITUAL                       ADDR(        0x2be760,          0x10056725c)
 #define RVA_ALLOC_RITUAL_TABLE_REF             ADDR_DIFFERS(0x2be788,          0x100567298)
 
@@ -2717,6 +2723,20 @@
 #define RVA_POPULATE_SKY_FILTER                ADDR(        0x299b3b,          0x100451bd8)
 #define RVA_POPULATE_AGARTHA_FILTER            ADDR(        0x273206,          MAC_INLINED)
 #define RVA_POPULATE_INFERNO_FILTER            ADDR(        0x28c00d,          0x10043b120)
+#define RVA_POPULATE_INFERNO_CASES             ADDR_DIFFERS(0x291c88,          0x10075969c)
+#define RVA_POPULATE_INFERNO_BELPHEGOR         ADDR(        0x28c97e,          0x10043b660)
+#define RVA_POPULATE_INFERNO_SIN               ADDR(        0x28da34,          0x10043b6dc)
+#define RVA_POPULATE_INFERNO_ABADDON           ADDR(        0x28ed53,          0x10043c428)
+#define RVA_POPULATE_INFERNO_BUER              ADDR(        0x28fcc8,          0x10043b81c)
+#define RVA_POPULATE_INFERNO_GERYON            ADDR(        0x290c05,          0x10043c4a8)
+#define RVA_POPULATE_INFERNO_CAPITOLIUM        ADDR(        0x29104f,          0x10043c5a4)
+#define RVA_POPULATE_INFERNO_MINE_POOL         ADDR(        0x291de0,          0x10043ac84)
+#define RVA_POPULATE_INFERNO_DEVIL_POOL        ADDR(        0x292790,          MAC_INLINED)
+#define RVA_POPULATE_INFERNO_VILLAGE_POOL      ADDR(        0x292ac0,          0x10043a930)
+#define RVA_POPULATE_INFERNO_OVEN_POOL         ADDR(        0x292cc0,          MAC_INLINED)
+#define RVA_POPULATE_INFERNO_SINNERS_POOL      ADDR(        0x292ff0,          MAC_INLINED)
+#define RVA_POPULATE_INFERNO_CITY_POOL         ADDR(        0x293390,          0x1004399ec)
+#define RVA_POPULATE_HADES_CITADEL             ADDR(        0x27e091,          0x100447418)
 #define RVA_POPULATE_HADES_FILTER              ADDR(        0x27c32a,          0x100446ae4)
 #define RVA_POPULATE_AZTLAN_FILTER             ADDR(        0x275312,          0x10045d5c8)
 #define RVA_POPULATE_PRIMAL_FILTER             ADDR(        0x293a36,          0x100458a88)
@@ -3875,6 +3895,21 @@ static const SiteInfo SITES[SITE_COUNT] = {
     [SITE_MAP_EDITOR_DRAW] = SITE("map_editor_draw", 0,
         /* windows */ (0x24084f),       0x02cfc0,
         /* mac     */ (M(0x10048aba8)), M(0x100345b20)),
+    [SITE_MAP_DRAW] = SITE("map_draw", 0,
+        /* windows */ (0),              0x02cfc0,
+        /* mac     */ (0),              0),
+    [SITE_TOP_BAR] = SITE("top_bar", 0,
+        /* windows */ (0x095030),       0x09c4a0,
+        /* mac     */ (0),              0),
+    [SITE_TOP_BAR_INCOME_DRAW] = SITE("top_bar_income_draw", 0,
+        /* windows */ (0x09c9f1, 0x09cad0, 0x09ce18, 0x09cef5, 0x09cfc9, 0x09d09d, 0x09d171, 0x09d260, 0x09d34a), 0x036120,
+        /* mac     */ (0),              0),
+    [SITE_MESSAGE_BOX_WAIT] = SITE("message_box_wait", 0,
+        /* windows */ (0x0422ec),       0x23f240,
+        /* mac     */ (0),              0),
+    [SITE_TOP_BAR_INCOME] = SITE("top_bar_income", 0,
+        /* windows */ (0),              0,
+        /* mac     */ (0),              0),
 };
 #undef M
 #undef SITE
