@@ -1,6 +1,6 @@
 # CoE5SE
 
-[All mods](../README.md#mods) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
+[All mods](../README.md#mods) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
 
 I debated and decided to *release* this mod unhidden. Please give your critique and offer your support! Most script extenders aren't built in a couple of days and take teams. It takes time to get this right.
 

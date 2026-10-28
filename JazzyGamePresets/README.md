@@ -1,6 +1,6 @@
 # Jazzy Game Presets
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
+[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
 
 ## Set up your perfect game once. Load it in one click. Tweak it mid-game.
 

@@ -1,6 +1,6 @@
 # Jazzy Cheats
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md)
+[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
 
 Give yourself resources, drop units anywhere you've seen, get your movement back, and see every plane for a turn. All from the Game Menu.  
 **Needs [CoE5SE](../CoE5SE/README.md) from Nexus Mods.**

@@ -1,6 +1,6 @@
 # Jazzy UI Tweaks
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
+[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
 
 Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. You can turn each one back to vanilla in Mod Settings, Jazzy UI Tweaks.  
 **Needs [CoE5SE](../CoE5SE/README.md) from Nexus Mods.**

@@ -102,4 +102,5 @@ Click a mod for its Readme. All these mods need CoE5SE to run.
 - [Jazzy Restart](JazzyRestart/README.md): Restart in the Game Menu. It ends the game and starts a new world with the same settings, no relaunch. Also adds a "Load Game".
 - [Jazzy UI Tweaks](JazzyUITweaks/README.md): Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. Did the modders description forget to mention the baron had to be in a fairy circle IN SUMMER for the ritual to work? No worries. This mod gots you. You can turn each part of the mod back to vanilla in Mod Settings, Jazzy UI Tweaks.
 - [Jazzy Cheats](JazzyCheats/README.md): Give yourself resources, drop units anywhere you've seen, get your movement back, and see every plane for a turn. No Cheat Engine needed. Works in multiplayer if folks want to have a cheat fest together for some reason.
+- [Jazzy AI Observer](JazzyAIObserver/README.md): Watch every AI player at once: what each one did last turn and why, its income, its view of the map, and its battles. Then take over one AI and play its turns.
 <!-- mods end -->
