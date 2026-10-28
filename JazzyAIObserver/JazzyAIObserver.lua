@@ -2067,7 +2067,7 @@ function openOverview()
     viewSlot = slots[at]
     local partner = playAs and playAs.active
     frame("AI Inspector")
-    coe5.ui.sectionBegin(string.format("After turn %d", math.max(coe5.turn() - 1, 0)))
+    coe5.ui.sectionBegin(string.format("Turn %d", math.max(coe5.turn() - 1, 0)))
     Ins.headRow(OV_COLUMNS, {"Player", "Class", "Gold", "Iron", "Land", "Citadels", "Cmdrs", "Bought", "Other", "Flags"},
       "Gold, iron and every other resource now, each with its income as the game pays the AI; the rest from its last turn. Land: the change since the turn before.")
     for _, s in ipairs(slots) do tableRow(ID_AI_FIRST + s, OV_COLUMNS, Ins.aiRow(s), s == viewSlot) end
@@ -2187,7 +2187,7 @@ function openOffers()
     local turn, r = latestRecord(viewSlot or -1)
     local name = viewSlot and (playerLabel(viewSlot)) or "?"
     frame("AI Inspector: offers")
-    coe5.ui.sectionBegin(string.format("%s, %s", name, turn and ("after turn " .. turn) or "not recorded"))
+    coe5.ui.sectionBegin(string.format("%s, %s", name, turn and ("turn " .. turn) or "not recorded"))
     if r then
       Ins.say(0, string.format("Gold at recruiting %s. Recruiting: %s.", tostring(r.gold_at_buy or "?"), r.buy_step or "not reached"))
       Ins.say(0, "Bought: " .. (#r.buys > 0 and Records.whoText(table.concat(r.buys, ", ")) or "nothing"))
@@ -2283,7 +2283,7 @@ function openReasoning(slot, c)
       local br = readRecord(back, slot)
       shownName = br and br.coms[c] and br.coms[c].name
     end
-    coe5.ui.sectionBegin(string.format("%s, %s's commander, after turn %d", shownName or commanderLabel(c), slotName, turn))
+    coe5.ui.sectionBegin(string.format("%s, %s's commander, turn %d", shownName or commanderLabel(c), slotName, turn))
     if not r or not com then   -- the same three lines as a recorded turn, so the screen keeps its size
       Ins.say(0, string.format("Turn %d: %s.", turn, r and absentReason(slot, c, turn) or missingReason(turn)))
       Ins.say(0, "Troops picked up or split off: -.")
@@ -2424,7 +2424,7 @@ function openReasoning(slot, c)
       local at = 1
       for i, other in ipairs(list) do if other.c == c then at = i end end
       local from = math.max(1, math.min(at - 2, #list - 5))
-      coe5.ui.sectionBegin(string.format("%s's commanders after turn %d: %s%s", slotName, turn, r and "click one" or missingReason(turn),
+      coe5.ui.sectionBegin(string.format("%s's commanders, turn %d: %s%s", slotName, turn, r and "click one" or missingReason(turn),
         #list > 6 and string.format(", %d to %d of %d", from, math.min(#list, from + 5), #list) or ""))
       local leader = r and r.leader
       local shown = {}
@@ -3274,7 +3274,7 @@ function Ins.drawTags(v, tags)
   local onScreen = 0
   for _, sq in ipairs(tags.squares) do
     if sq.x >= v.firstX and sq.x <= v.lastX and sq.y >= v.firstY and sq.y <= v.lastY and coe5.get("squarePlane", sq.x, sq.y) == v.plane then
-      onScreen = onScreen + #sq.coms
+      for _, e in ipairs(sq.coms) do onScreen = onScreen + 1 + e.followers end   -- followers too, as the commander count
       local lead, z = sq.lead, v.zoom
       local sx, sy = v.originX + sq.x * z, v.originY - sq.y * z
       local com = lead.com
@@ -3407,12 +3407,12 @@ function Ins.drawStrip(v, slot, tags, onScreen)
     for _, sq in ipairs(tags and tags.squares or {}) do n = n + #sq.coms end
     local _, last = latestRecord(slot)   -- the commanders as the overview counts them (tags leave followers out)
     if last and last.commanders then n = last.commanders end
-    local facts = string.format("%s   %s   %s, %d on this screen", class,
-      tags and tags.turn and ("after turn " .. tags.turn) or "no AI turn yet", Records.count(n, "commander"), onScreen or 0)
+    local facts = string.format("%s   %s   %s%s", class, tags and tags.turn and ("turn " .. tags.turn) or "no AI turn yet",
+      Records.count(n, "commander"), onScreen and onScreen < n and string.format(", %d on this screen", onScreen) or "")
     if partner then facts = class .. "   turn " .. coe5.turn() end
     Ins.text(x, bottom + 23 + lift, C.SMALL, Ins.cut(facts, C.SMALL, left + w - x - 6), C.VELLUM, 1)
   end
-  local line2, colour, emptyLine = "Left click a name: its view.   Right click a square or a name: open.", C.ASH, false
+  local line2, colour, emptyLine = "Right click a square or a name to open", C.ASH, false
   if partner and not Ins.seatInGame() then
     line2, colour = "The Observer is out of the game: Play as Observer would end it.", C.CINN
   elseif Ins.skip and Ins.skip.mode then
@@ -3591,7 +3591,7 @@ function Ins.drawPartnerPanel()
   local turn, r = latestRecord(slot)
   local name = (playerLabel(slot))
   local lines = {}
-  lines[1] = {r and string.format("%s after its turn %d", name, turn) or (name .. ": no AI turn yet"), C.NAME - 1.5, C.VERD}
+  lines[1] = {r and string.format("%s, turn %d", name, turn) or (name .. ": no AI turn yet"), C.NAME - 1.5, C.VERD}
   lines[#lines + 1] = {"As the AI: " .. Records.resJoin(Ins.resNow(slot)) .. ".", C.LIST, C.VELLUM}
   lines[#lines + 1] = {string.format("Land %s.  Citadels %s.", r and tostring(r.land) or "-", r and tostring(r.citadels) or "-"), C.LIST, C.VELLUM}
   for _, text in ipairs(Records.partnerLines(r)) do lines[#lines + 1] = {text, C.LIST, C.VELLUM} end
@@ -3626,7 +3626,7 @@ coe5.wrap("MAP_DRAW", function(next)
       local slot = Ins.mapSlot()
       local tags = Ins.tagsFor(slot)   -- the strip counts from them whether they are drawn or not
       if settings.arrows > 0 then Ins.drawArrows(v) end
-      local onScreen = (tags and settings.tags ~= false) and Ins.drawTags(v, tags) or 0
+      local onScreen = (tags and settings.tags ~= false) and Ins.drawTags(v, tags) or nil
       glanceBox, Ins.stripBox = nil, nil
       Ins.drawStrip(v, slot, tags, onScreen)
       Ins.partnerBox = nil
