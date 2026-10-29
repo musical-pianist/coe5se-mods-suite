@@ -1,32 +1,6 @@
-CoE5SE (the CoE5SE folder)
-Copyright musical_pianist. All rights reserved. This uses Nexus standard license.
-
-Use it as intended: download CoE5SE, play with it, and make mods that need it. A mod that
-needs CoE5SE tells its players to install CoE5SE; it never includes CoE5SE's files.
-The example mods and files in ToolsAndExamples/, and coe5.lua, are free to copy and change
-for your own mods.
-
-Upload permission
-You are not allowed to upload this file to other sites under any circumstances
-
-Modification permission
-You must get permission from me before you are allowed to modify my files to improve it
-
-Conversion permission
-You are not allowed to convert this file to work on other games under any circumstances
-
-Asset use permission (assets include code)
-You must get permission from me before you are allowed to use any of the assets in this file
-
-Asset use permission in mods/files that are being sold
-You are not allowed to use assets from this file in any mods/files that are being sold, for money, on Steam Workshop or other platforms
-
-Asset use permission in mods/files that earn donation points
-You are not allowed to earn Donation Points for your mods if they use my assets
-
-
 The Jazzy mods (JazzyGamePresets, JazzyHotkeys, JazzyRestart, JazzyUITweaks)
 
 Free for anyone to use, copy, change, share and sell, with no permission and no credit needed:
 public domain under CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
-They need CoE5SE to run, and CoE5SE stays under its own terms above.
+They need CoE5SE to run, and CoE5SE stays under its own terms, in its own repository:
+https://github.com/musical-pianist/coe5se

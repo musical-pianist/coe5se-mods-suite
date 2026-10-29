@@ -1,9 +1,9 @@
 # Jazzy Cheats
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
+[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
 
 Give yourself resources, drop units anywhere you've seen, get your movement back, and see every plane for a turn. All from the Game Menu.  
-**Needs [CoE5SE](../CoE5SE/README.md) from Nexus Mods.**
+**Needs [CoE5SE](https://github.com/musical-pianist/coe5se) from Nexus Mods.**
 
 ## What It Adds
 
@@ -50,7 +50,7 @@ Jazzy Cheats is a Lua mod. The script, JazzyCheats.lua, is in the mod's folder t
 
 ## Check Out My Other Mods!
 
-- [CoE5SE](../CoE5SE/README.md): loads mods' Lua scripts and adds Mod Settings to the main menu.
+- [CoE5SE](https://github.com/musical-pianist/coe5se): loads mods' Lua scripts and adds Mod Settings to the main menu.
 - [Jazzy Game Presets](../JazzyGamePresets/README.md): save a new-game setup as a preset.
 - [Jazzy Hotkeys](../JazzyHotkeys/README.md): change any key of the game's Keyboard Shortcuts list, on every screen.
 - [Jazzy Restart](../JazzyRestart/README.md): Restart in the Game Menu. Single player.

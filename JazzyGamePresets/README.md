@@ -1,11 +1,11 @@
 # Jazzy Game Presets
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
+[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
 
 ## Set up your perfect game once. Load it in one click. Tweak it mid-game.
 
 Save your whole new-game setup (map, society, every player slot, every AI's difficulty) as a preset, load it next time, and change the AI and game rules in a game you're already playing.  
-**Needs [CoE5SE](../CoE5SE/README.md) from Nexus Mods.**
+**Needs [CoE5SE](https://github.com/musical-pianist/coe5se) from Nexus Mods.**
 
 ## What It Adds
 
@@ -64,7 +64,7 @@ Jazzy Game Presets is a Lua mod. The script, JazzyGamePresets.lua, is in the mod
 
 ## Check Out My Other Mods!
 
-- [CoE5SE](../CoE5SE/README.md): loads mods' Lua scripts and adds Mod Settings to the main menu.
+- [CoE5SE](https://github.com/musical-pianist/coe5se): loads mods' Lua scripts and adds Mod Settings to the main menu.
 - [Jazzy Restart](../JazzyRestart/README.md): Restart in the Game Menu. Single player.
 - [Jazzy Hotkeys](../JazzyHotkeys/README.md): change any key of the game's Keyboard Shortcuts list, on every screen.
 - [Jazzy UI Tweaks](../JazzyUITweaks/README.md): small changes to the game's own screens, like deleting saves from Load Game.

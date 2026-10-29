@@ -1,2 +1,0 @@
-icon "banner.tga"
-description "CoE5 Script Extender (CoE5SE). Runs mods' Lua scripts, reads their .c5se files with new mod commands, and gives mods new spells, rituals, and spell paths. Adds Mod Settings to the main menu: every mod's settings in one place. Needed by every mod that uses these."

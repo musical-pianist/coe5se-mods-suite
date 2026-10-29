@@ -1,9 +1,9 @@
 # Jazzy UI Tweaks
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
+[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
 
 Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. You can turn each one back to vanilla in Mod Settings, Jazzy UI Tweaks.  
-**Needs [CoE5SE](../CoE5SE/README.md) from Nexus Mods.**
+**Needs [CoE5SE](https://github.com/musical-pianist/coe5se) from Nexus Mods.**
 
 ## What It Adds
 
@@ -46,7 +46,7 @@ Jazzy UI Tweaks is a Lua mod. The script, JazzyUITweaks.lua, is in the mod's fol
 
 ## Check Out My Other Mods!
 
-- [CoE5SE](../CoE5SE/README.md): loads mods' Lua scripts and adds Mod Settings to the main menu.
+- [CoE5SE](https://github.com/musical-pianist/coe5se): loads mods' Lua scripts and adds Mod Settings to the main menu.
 - [Jazzy Game Presets](../JazzyGamePresets/README.md): save a new-game setup as a preset.
 - [Jazzy Restart](../JazzyRestart/README.md): Restart in the Game Menu. Single player.
 - [Jazzy Hotkeys](../JazzyHotkeys/README.md): change any key of the game's Keyboard Shortcuts list, on every screen.

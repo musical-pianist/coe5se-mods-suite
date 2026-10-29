@@ -1,9 +1,9 @@
 # Jazzy AI Observer
 
-[All mods](../README.md#mods) | [CoE5SE](../CoE5SE/README.md) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
+[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md)
 
 Watch every AI player at once: what each one did last turn and why, its income, its view of the map, and its battles. Then take over one AI and play its turns.  
-**Needs [CoE5SE](../CoE5SE/README.md) 2.10.1 or later. Windows only (for now).**
+**Needs [CoE5SE](https://github.com/musical-pianist/coe5se) 2.10.1 or later. Windows only (for now).**
 
 ## What It Adds
 
@@ -50,7 +50,7 @@ Jazzy AI Observer is a Lua mod built on CoE5SE's AI sites. The script, JazzyAIOb
 
 ## Check Out My Other Mods!
 
-- [CoE5SE](../CoE5SE/README.md): loads mods' Lua scripts and adds Mod Settings to the main menu.
+- [CoE5SE](https://github.com/musical-pianist/coe5se): loads mods' Lua scripts and adds Mod Settings to the main menu.
 - [Jazzy Cheats](../JazzyCheats/README.md): resources, units anywhere you've seen, movement back, and Reveal Map, from the Game Menu.
 - [Jazzy Game Presets](../JazzyGamePresets/README.md): save a new-game setup as a preset.
 - [Jazzy Hotkeys](../JazzyHotkeys/README.md): change any key of the game's Keyboard Shortcuts list, on every screen.
