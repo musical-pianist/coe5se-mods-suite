@@ -4,13 +4,13 @@ Mods for Conquest of Elysium 5 built on [CoE5SE](https://github.com/musical-pian
 
 ## Install
 
-**One command:** the [CoE5SE installer](https://github.com/musical-pianist/coe5se-installer) installs CoE5SE and every mod here. Run it again any time to update.
+Install a mod in three steps, or let the [CoE5SE installer](https://github.com/musical-pianist/coe5se-installer) do them all for you. It installs CoE5SE and every mod here, and updates them all when you run it again. Close the game first.
 
-**By hand:**
+1. Install [CoE5SE](https://github.com/musical-pianist/coe5se#install).
+2. Download the mod's zip from [Releases](https://github.com/musical-pianist/coe5se-mods-suite/releases) and copy its folder into your mods folder: `%APPDATA%\coe5\mods\` on Windows (paste that path into File Explorer's address bar), or `~/.coe5/mods/` on Mac (Finder: Go, Go to Folder).
+3. Start the game and turn the mod on in the Mods screen. Its settings, if it has any, are on its page in Mod Settings.
 
-1. Install CoE5SE, as its [Install by Hand](https://github.com/musical-pianist/coe5se#install-by-hand) shows.
-2. Download a mod's zip from [Releases](https://github.com/musical-pianist/coe5se-mods-suite/releases) and copy its folder into your mods folder: `%APPDATA%\coe5\mods\` on Windows, `~/.coe5/mods/` on Mac.
-3. Start the game and turn the mod on in the Mods screen.
+## License
 
 Terms of use: [LICENSE.txt](LICENSE.txt).
 
