@@ -24,6 +24,8 @@ Or install by hand: download a mod's zip from https://github.com/musical-pianist
 
 Terms of use: [LICENSE.txt](LICENSE.txt).
 
+CoE5SE's license has moved to its own repo: https://github.com/musical-pianist/coe5se/blob/main/LICENSE.txt. This repo's older commits still hold CoE5SE's files, and that license still covers them.
+
 <!-- mods start -->
 ## Mods
 
