@@ -1,4 +1,4 @@
-The Jazzy mods (JazzyGamePresets, JazzyHotkeys, JazzyRestart, JazzyUITweaks)
+The Jazzy mods (JazzyGamePresets, JazzyHotkeys, JazzyRestart, JazzyUITweaks, JazzyCheats, JazzyAIObserver)
 
 Free for anyone to use, copy, change, share and sell, with no permission and no credit needed:
 public domain under CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
