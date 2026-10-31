@@ -1,0 +1,14 @@
+# Jazzy Cheats' Mod Settings. CoE5SE reads this file right after JazzyCheats.c5m.
+
+# JazzyCheats.lua reads it with coe5.setting and follows it live.
+newsetting teleport
+onoff
+default 1
+label "Teleport in the commander's orders"
+tip "A Teleport line under the selected commander's orders on the map: a click on it, then on a seen square, moves the commander and his troops there for no action points."
+
+newsetting restore_movement
+onoff
+default 1
+label "Restore movement in the commander's orders"
+tip "A Restore movement line under the selected commander's orders on the map: a click on it, then on a square, gives every unit there its action points back."

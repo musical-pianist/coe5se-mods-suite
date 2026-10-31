@@ -1,9 +1,12 @@
--- Jazzy Cheats: four lines in the Game Menu's own "Cheats" section, for the player whose turn
+-- Jazzy Cheats: three lines in the Game Menu's own "Cheats" section, for the player whose turn
 -- it is. "Resources" opens a screen that gives 10 or 100 of one resource per click. "Units" lists
 -- the units of the player's class with their pictures; a click on one closes the menu, and the next
--- left click on a map square places 1 or 10 of it there. "Restore movement" closes the menu, and the
--- next left click on a map square gives every unit there its action points back. "Reveal Map" puts
--- every plane in view until the player's next turn.
+-- left click on a map square places 1 or 10 of it there. "Reveal Map" puts every plane in view
+-- until the player's next turn. Two lines under the selected commander's orders on the map, each
+-- turned off by its own setting: "Restore movement (cheat)" gives every unit on the next
+-- left-clicked square its action points back, and "Teleport (cheat)" moves the commander and his
+-- army to the next left-clicked square, as a teleport ritual does, for no action points. While
+-- either waits for a square its line reads what it waits for, in PICKING_COLOR.
 
 local CHEATS_SECTION = "Cheats"   -- the Game Menu section CoE5SE draws for these lines
 local ID_BACK = 9
@@ -97,6 +100,9 @@ local unitPage, unitPageClass = 0, nil
 local placing = nil          -- the picked unit until a map square takes it
 ---@type {player: integer}|nil
 local restoring = nil        -- set by Restore movement until a map square is picked
+---@type {player: integer, commander: integer, name: string}|nil
+local teleporting = nil      -- set by the commander's Teleport line until a map square is picked
+local stopPicking            -- stops every pick for a square, below
 local lastButtons = 0        -- the map frame's mouseButtons a frame before, to see a press start
 local swallowing = false     -- a click the mod used: its button reads 0 until let go
 
@@ -439,23 +445,58 @@ local function place(x, y)
   placing = nil
 end
 
--- ---- Restore movement ---------------------------------------------------------------------------
-coe5.addGameMenuLine{
-  label = "Restore movement",
-  tooltip = "Action points back for every unit on a clicked square",
-  section = CHEATS_SECTION,
-  visible = function() return coe5.get("activePlayer") >= 0 end,
-  onClick = function()
-    restoring = {player = coe5.get("activePlayer")}
-    lastButtons = BUTTON_LEFT   -- the click on this line may still be held when the map is back
-    coe5.log(string.format("movement_pick_started slot=%d", restoring.player))
-    return coe5.gameMenu.close
-  end,
-}
+-- ---- The commander's cheat lines ---------------------------------------------------------------
+-- Restore movement and Teleport are lines under the selected commander's orders on the map, each
+-- while its setting is on (its default). While one waits for a square, its line is replaced by one
+-- in PICKING_COLOR saying so; a click on that line stops the wait. A CoE5SE older than
+-- coe5.addCommanderLine has no such lines.
+local PICKING_COLOR = {1, 0.85, 0.3}   -- a waiting line's label: gold, beside the game's white
+local RESTORE_ICON = 0x85    -- the game's Continue Moving icon in the commander panel
+local TELEPORT_ICON = 0x7a   -- the game's Enter Gateway icon in the commander panel
 
+-- The player whose commander is selected, or nil: the player whose turn it is, if the commander is his and alive.
+local function ownCommanderPlayer(commander)
+  local player = coe5.get("activePlayer")
+  if commander < 0 or player < 0 then return nil end
+  local unit = coe5.get("commanderUnit", commander)
+  if unit < 0 or coe5.get("unitOwner", unit) ~= player or coe5.get("unitHp", unit) <= 0 then return nil end
+  return player
+end
+
+-- ---- Restore movement ---------------------------------------------------------------------------
 local function stopRestoring(reason)
   coe5.log(string.format("movement_pick_stopped slot=%d reason=%s", restoring.player, reason))
   restoring = nil
+end
+
+-- Whether the Restore movement lines may show: the setting on and the player's own commander selected.
+local function restoreLinesShown()
+  return coe5.setting("restore_movement") == true and ownCommanderPlayer(coe5.get("selectedCommander")) ~= nil
+end
+
+if coe5.addCommanderLine then
+  coe5.addCommanderLine{
+    label = "Restore movement (cheat)",
+    tooltip = "Action points back for every unit on a clicked square",
+    icon = RESTORE_ICON,
+    visible = function() return restoring == nil and restoreLinesShown() end,
+    onClick = function()
+      local player = ownCommanderPlayer(coe5.get("selectedCommander"))
+      if not player then return end
+      stopPicking("other_pick")
+      restoring = {player = player}
+      lastButtons = BUTTON_LEFT   -- the click on this line may still be held
+      coe5.log(string.format("movement_pick_started slot=%d", restoring.player))
+    end,
+  }
+  coe5.addCommanderLine{
+    label = "Restoring: pick a square",
+    tooltip = "Left click a square to restore its units' movement. Right click cancels.",
+    icon = RESTORE_ICON,
+    color = PICKING_COLOR,
+    visible = function() return restoring ~= nil and restoreLinesShown() end,
+    onClick = function() if restoring then stopRestoring("line") end end,
+  }
 end
 
 -- The screen after a restore: "Movement restored" and how many units got their action points back.
@@ -497,18 +538,94 @@ local function restore(x, y)
   restoredScreen(count)
 end
 
--- Stops picking a square for Units or Restore movement.
-local function stopPicking(reason)
-  if placing then stopPlacing(reason) end
-  if restoring then stopRestoring(reason) end
+-- ---- Teleport ---------------------------------------------------------------------------------
+-- A line under the selected commander's orders on the map, while the "teleport" setting is on (its
+-- default): a click on it, then a left click on a map square, moves the commander and every unit
+-- following him on his square there, on any plane, through coe5.teleportCommander, the teleport
+-- ritual's own call. A free square costs no action points. On a square where the army meets another
+-- at war the game spends all of them, as walking in does, and the battle is fought after the move.
+-- The mod refuses a square the player hasn't seen, terrain the army couldn't walk onto (the game's
+-- teleport checks none, so sea would drown it), and a commander already in a battle, so the cheat
+-- never takes an army out of a fight.
+local function stopTeleporting(reason)
+  coe5.log(string.format("teleport_pick_stopped slot=%d commander=%d reason=%s", teleporting.player, teleporting.commander, reason))
+  teleporting = nil
 end
 
--- Each map frame while a unit is picked or Restore movement waits for a square: the first frame of a
--- left click on a square places the unit or restores movement there; Esc, a right click, the Game
+-- Whether the selected commander waits for a square to teleport to.
+local function selectedTeleporting()
+  return teleporting ~= nil and teleporting.commander == coe5.get("selectedCommander")
+end
+
+if coe5.addCommanderLine then
+  coe5.addCommanderLine{
+    label = "Teleport (cheat)",
+    tooltip = "Teleport the commander and his troops to a seen square on any plane, for no action points. Landing on enemies starts a battle.",
+    icon = TELEPORT_ICON,
+    visible = function()
+      return coe5.setting("teleport") == true and not selectedTeleporting() and ownCommanderPlayer(coe5.get("selectedCommander")) ~= nil
+    end,
+    onClick = function()
+      local commander = coe5.get("selectedCommander")
+      local player = ownCommanderPlayer(commander)
+      if not player then return end
+      stopPicking("other_pick")
+      teleporting = {player = player, commander = commander, name = coe5.get("commanderName", commander)}
+      lastButtons = BUTTON_LEFT   -- the click on this line may still be held
+      coe5.log(string.format("teleport_pick_started slot=%d commander=%d", teleporting.player, commander))
+    end,
+  }
+  coe5.addCommanderLine{
+    label = "Teleporting: pick a square",
+    tooltip = "Left click a seen square to teleport there. Right click cancels.",
+    icon = TELEPORT_ICON,
+    color = PICKING_COLOR,
+    visible = function()
+      return coe5.setting("teleport") == true and selectedTeleporting() and ownCommanderPlayer(coe5.get("selectedCommander")) ~= nil
+    end,
+    onClick = function() if teleporting then stopTeleporting("line") end end,
+  }
+end
+
+-- Why the picked commander can't teleport to (x, y), or nil.
+local function teleportProblem(t, x, y)
+  if coe5.get("squareSeen", t.player, x, y) <= 1 then return "not_seen", "Square not seen" end
+  local unit = coe5.get("commanderUnit", t.commander)
+  if coe5.get("squareArmy", coe5.get("unitX", unit), coe5.get("unitY", unit)) == -1 then
+    return "in_battle", "Commander is in a battle"
+  end
+  if not coe5.mayEnterSquare(t.commander, x, y) then return "no_entry", "The army can't enter that terrain" end
+end
+
+-- Teleports the picked commander's army to (x, y), or says why not, with "Pick another square".
+local function teleport(x, y)
+  local t = teleporting
+  local reason, text = teleportProblem(t, x, y)
+  local moved = not reason and coe5.teleportCommander(t.commander, x, y)
+  if not reason and not moved then reason, text = "refused", "Can't teleport there" end   -- logged by CoE5SE as lua_refused
+  lastButtons = BUTTON_LEFT   -- a screen's click may still be held when the map is back
+  if reason then
+    coe5.log(string.format("teleport_refused slot=%d commander=%d x=%d y=%d reason=%s", t.player, t.commander, x, y, reason))
+    if not refusedScreen("Teleport", string.format("Can't teleport %s there", t.name), text) then stopTeleporting("cancelled") end
+    return
+  end
+  coe5.log(string.format("teleported slot=%d commander=%d x=%d y=%d", t.player, t.commander, x, y))
+  teleporting = nil
+end
+
+-- Stops picking a square for Units, Restore movement or Teleport.
+function stopPicking(reason)
+  if placing then stopPlacing(reason) end
+  if restoring then stopRestoring(reason) end
+  if teleporting then stopTeleporting(reason) end
+end
+
+-- Each map frame while a unit is picked or Restore movement or Teleport waits for a square: the first
+-- frame of a left click on a square places the unit, restores movement or teleports there; Esc, a right click, the Game
 -- Menu, or another player's turn stops. A click the mod uses never reaches the map (it would move
 -- the selected commander): mouseButtons reads 0 until the button is let go.
 coe5.wrap("MAP_SCREEN_WAIT", function(next, block, mode)
-  local picking = placing or restoring
+  local picking = placing or restoring or teleporting
   if not picking and not swallowing then return next(block, mode) end
   if picking then coe5.ui.bindKey(MAP_ID_CANCEL, coe5.key.esc) end
   local id = next(block, mode)
@@ -542,16 +659,17 @@ coe5.wrap("MAP_SCREEN_WAIT", function(next, block, mode)
   if buttons ~= BUTTON_LEFT or id ~= 0 or x < 0 or y < 0 then return id end   -- the map's own lines keep their clicks
   coe5.set("mouseButtons", 0)
   swallowing = true
-  if placing then place(x, y) else restore(x, y) end
+  if placing then place(x, y) elseif restoring then restore(x, y) else teleport(x, y) end
   return 0
 end)
 
--- While a unit is picked or Restore movement waits, the map's menu button's hover text, "(F10)
+-- While a unit is picked or Restore movement or Teleport waits, the map's menu button's hover text, "(F10)
 -- Menu", says what a click on the map does. A line drawn in MAP_SCREEN_WAIT's wrap isn't shown: the
 -- map lays its lines out before that wait.
 coe5.wrap("MAP_MENU_BUTTON_TEXT", function(next, text)
   if placing then return next(string.format("Placing %s x%d (right click cancels)", placing.name, placing.amount)) end
   if restoring then return next("Restoring movement (right click cancels)") end
+  if teleporting then return next(string.format("Teleporting %s (right click cancels)", teleporting.name)) end
   return next(text)
 end)
 
