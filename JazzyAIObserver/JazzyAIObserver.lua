@@ -1,31 +1,26 @@
--- Jazzy AI Observer: what each AI player did on its last turn and why.
-
 local SECTION = "AI Inspector"
-local OUTER, INNER = 2000000000, -2000000000   -- outside every other script's wrap; inside every one
+local OUTER, INNER = 2000000000, -2000000000
 local STEPS = {"rally", "friendly", "conquer", "explore", "far"}
 local STEP_SITE = {rally = "AI_RALLY", friendly = "AI_FRIENDLY_MOVE", conquer = "AI_CONQUER", explore = "AI_EXPLORE",
                    far = "AI_FAR_EXPLORE"}
 local STEP_NAME = {rally = "Rally", friendly = "Friendly move", conquer = "Conquer", explore = "Explore", far = "Far explore"}
 local STEP_ORDER = {rally = 1, friendly = 2, conquer = 3, explore = 4, far = 5}
-local EXPLORE_BELOW, FAR_EXPLORE_BELOW = 50, 10   -- coe5.aiMove.exploreBelow, farExploreBelow
+local EXPLORE_BELOW, FAR_EXPLORE_BELOW = 50, 10
 local NO_SQUARE = -1
 local HISTORY_TURNS = 5
 
--- Records: the record logic; Ins: the inspector's own helpers.
 local Records = {}
-local Ins = {}   -- the inspector's own helpers (the main chunk holds at most 200 locals)
+local Ins = {}
 
 -- ---- Text --------------------------------------------------------------------------------------
-local function clean(text)   -- a value for a record: no line breaks, |, or outer spaces
+local function clean(text)
   return (tostring(text or ""):gsub("[\r\n|]", " "):match("^%s*(.-)%s*$"))
 end
 
 local function turnLabel(turn) return string.format("Turn %d", turn) end
--- Who played or changed something, as a screen says it.
 function Records.whoText(text)
   return (tostring(text or ""):gsub("by you%f[%A]", "by hand"):gsub("%f[%a]you%f[%A]", "human"))
 end
--- The move flags the AI's loop skips, in words.
 function Records.skipText(skip)
   local out, s = {}, " " .. tostring(skip or "") .. " "
   for _, w in ipairs({{" stupid ", "Stupid"}, {" loner ", "loner"}, {" hero for hire ", "adventurer"}, {" stationary ", "Stationary"}}) do
@@ -33,16 +28,13 @@ function Records.skipText(skip)
   end
   return table.concat(out, ", ")
 end
--- An answer {score, x, y} in words: "29 at 4,5", "0, no square".
 function Records.answerWords(a)
   if not a then return "none" end
   if (a[2] or -1) < 0 then return string.format("%d, no square", a[1] or 0) end
   return string.format("%d at %d,%d", a[1] or 0, a[2], a[3])
 end
 
--- What a player sees of a square: squareSeen 0 never explored, 1 not seen now, 2 seen, 3 scried.
 local SEEN_WORD = {[0] = "never explored", [1] = "not seen now", [2] = "seen", [3] = "scried"}
--- A record's word as a screen says it, for `who` ("John", or "its"/"it" for the commander's own player).
 local function seenPhrase(word, who, whoIt)
   if word == "seen" then return "in " .. who .. " sight" end
   if word == "not seen now" then return "out of " .. who .. " sight (seen before)" end
@@ -51,7 +43,6 @@ local function seenPhrase(word, who, whoIt)
   return word or ""
 end
 
--- "32,17 Stargazer's Keep (Elysium)": the square, its name or terrain, and its plane.
 local function placeOf(x, y)
   if not x or x < 0 or not y or y < 0 then return "no square" end
   local p = coe5.get("squarePlane", x, y)
@@ -79,7 +70,6 @@ end
 
 local function isController(s, controller) return coe5.get("slotController", s) == controller end
 
--- The living commanders of player s: {[commander] = unit}.
 local function commandersOf(s)
   local out = {}
   for c = 0, coe5.get("commanderLastIndex") do
@@ -89,7 +79,6 @@ local function commandersOf(s)
   return out
 end
 
--- The units following commander c on its square, its own unit left out.
 local function followerCount(c)
   local unit = coe5.get("commanderUnit", c)
   if not unit or unit < 0 then return 0 end
@@ -101,9 +90,7 @@ local function followerCount(c)
 end
 
 -- ---- Records: the logic ------------------------------------------------------------------------
--- One plan of a commander: each step's scores and squares.
 
--- The step whose square the game keeps, and the best score.
 function Records.pick(plan, side)
   local best, winner = 0, nil
   for _, step in ipairs(STEPS) do
@@ -116,7 +103,6 @@ function Records.pick(plan, side)
   return winner, best
 end
 
--- The best score of the steps before `step` that ran (final answers), as the game's best then.
 function Records.bestBefore(plan, step)
   local cut = {}
   for _, s in ipairs(STEPS) do
@@ -127,7 +113,6 @@ function Records.bestBefore(plan, step)
   return best
 end
 
--- The runner-up: the highest final score among the other steps that ran, and its step.
 function Records.runnerUp(plan, winner)
   local score, step
   for _, s in ipairs(STEPS) do
@@ -137,7 +122,6 @@ function Records.runnerUp(plan, winner)
   return score, step
 end
 
--- Why a step has no answer: nil when it ran.
 function Records.notRun(plan, step)
   local e = plan[step]
   if e and e.final and e.game then return nil end
@@ -158,7 +142,6 @@ function Records.notRun(plan, step)
   return "not run"
 end
 
--- Whether a game folder holds the game being played.
 function Records.sameGame(live, stored)
   local both = 0
   for s, v in pairs(stored or {}) do
@@ -170,7 +153,6 @@ function Records.sameGame(live, stored)
   return both >= 3
 end
 
--- The turns of a "last turns" list around `turn`: `n` turns, centred on it where the records allow.
 function Records.window(turn, first, latest, n)
   local lo = math.max(first, turn - n // 2)
   local hi = math.min(latest, lo + n - 1)
@@ -180,22 +162,23 @@ function Records.window(turn, first, latest, n)
   return out
 end
 
--- The trade line: what the next turn start's trade step moves.
-function Records.tradeText(items)
+function Records.tradeText(items, power)
   local pays, gets = {}, {}
   for _, item in ipairs(items or {}) do
     local name, n = tostring(item):match("^(.-) (%-?%d+)$")
     n = tonumber(n)
     if n and n < 0 then pays[#pays + 1] = (-n) .. " " .. name elseif n and n > 0 then gets[#gets + 1] = n .. " " .. name end
   end
-  if #pays == 0 and #gets == 0 then return "Trade at the next turn start: none." end
-  local text = "Trade at the next turn start:"
-  if #pays > 0 then text = text .. " pays " .. table.concat(pays, ", ") end
-  if #gets > 0 then text = text .. (#pays > 0 and " for " or " gets ") .. table.concat(gets, ", ") end
-  return text .. "."
+  if #pays == 0 and #gets == 0 then return power and string.format("No trade (%d).", power) or "No trade." end
+  if #pays > 0 and #gets > 0 then return "Trades " .. table.concat(pays, ", ") .. " for " .. table.concat(gets, ", ") .. "." end
+  if #gets > 0 then return "Trade gets " .. table.concat(gets, ", ") .. "." end
+  return "Trade pays " .. table.concat(pays, ", ") .. "."
 end
 
--- The line of a drawn box under the point (x, y), or nil.
+function Records.inBox(box, x, y)
+  return box ~= nil and x ~= nil and y ~= nil and box.bottom ~= nil and x >= box.left and x < box.left + box.width
+    and y >= box.bottom and y < box.bottom + box.height
+end
 function Records.lineAt(box, x, y)
   if not (box and x and y) or x < box.left or x >= box.left + box.width then return nil end
   local i = math.floor((box.top + box.line - 3 - y) / box.line)
@@ -203,7 +186,6 @@ function Records.lineAt(box, x, y)
   return i
 end
 
--- A ritual candidate's record in words.
 function Records.ritualText(line, count)
   local name, said, kept, by = line:match("^([^:]*):([^:]*):([^:]*):?(.*)$")
   if not name then return line end
@@ -217,7 +199,6 @@ function Records.ritualText(line, count)
   return string.format("%s (%s%s)", name, text, (count or 1) > 1 and string.format(", %d times", count) or "")
 end
 
--- A text cut at spaces into lines of at most `width` characters (a word longer than that keeps its own line).
 function Records.wrapText(text, width)
   local out, line = {}, ""
   for word in tostring(text or ""):gmatch("%S+") do
@@ -232,7 +213,6 @@ function Records.wrapText(text, width)
   return out
 end
 
--- Recording-off spans "20-21,30-30" as words: "turns 20-21, turn 30".
 function Records.spansText(spans)
   local out = {}
   for from, to in tostring(spans or ""):gmatch("(%d+)%-(%d+)") do
@@ -241,7 +221,6 @@ function Records.spansText(spans)
   return table.concat(out, ", ")
 end
 
--- A list with repeats said once each with a count: "troop pick-up skipped by X (3 times); ...".
 function Records.counted(items)
   local counts, order = {}, {}
   for _, item in ipairs(items) do
@@ -254,10 +233,8 @@ function Records.counted(items)
   return table.concat(order, "; ")
 end
 
--- "1 turn", "3 turns".
 function Records.count(n, word) return n .. " " .. word .. (n == 1 and "" or "s") end
 
--- The mods that made a call this turn, "ModA,ModB", or nil.
 function Records.actorsOf(actions, call, commander)
   local out, seen = {}, {}
   for _, a in ipairs(actions or {}) do
@@ -269,24 +246,19 @@ function Records.actorsOf(actions, call, commander)
   return #out > 0 and table.concat(out, ",") or nil
 end
 
--- A square's name without the mark a name may start with.
 function Records.plainName(name) return (tostring(name or ""):gsub("^![!%d]", "")) end
--- A place as records hold it ("31,20 !!Oak Road Castle (Elysium)") without that mark.
 function Records.plainPlace(place)
   local xy, rest = tostring(place or ""):match("^(%-?%d+,%-?%d+ )(.*)$")
   if xy then return xy .. Records.plainName(rest) end
   return Records.plainName(place)
 end
 
--- The square a record's "x y" (or a place's "x,y ...") names, nil for none (-1): where a click goes.
 function Records.squareAt(text)
   local x, y = tostring(text or ""):match("^%s*(%-?%d+)[ ,](%-?%d+)")
   x, y = tonumber(x), tonumber(y)
   if x and y and x >= 0 and y >= 0 then return x, y end
 end
--- A go line's hover text: "Click: go to 39,19 Silver Mine (Elysium)"; how: "Click" or "Right click".
-function Records.goText(place, how) return string.format("%s: go to %s", how or "Click", tostring(place or "?")) end
--- The column of a table row under the pointer, or nil.
+function Records.goText(place) return tostring(place or "?") end
 function Records.columnAt(columns, rowLeft, rowWidth, px)
   if not px then return nil end
   local x = px - rowLeft
@@ -295,7 +267,6 @@ function Records.columnAt(columns, rowLeft, rowWidth, px)
   for i, cx in ipairs(columns) do if x >= cx then at = i end end
   return at
 end
--- The commander header's sentence without its place.
 function Records.headRest(text, from, to)
   local pre, post = text:sub(1, from - 1), text:sub(to + 1)
   local words = {["Heading to "] = "Heading there", ["Exploring toward "] = "Exploring toward it", ["On its target, "] = "On its target",
@@ -306,7 +277,6 @@ function Records.headRest(text, from, to)
   return pre .. "there" .. post
 end
 
--- One map frame of a skip at the seat's turn: "wait", "end" (End Turn now) or "stop" (a key or click).
 function Records.skipStep(sk, pressed, frames)
   if not sk.armed then
     if not pressed then sk.armed = true end
@@ -315,25 +285,22 @@ function Records.skipStep(sk, pressed, frames)
   if pressed then return "stop" end
   sk.frames = sk.frames + 1
   if sk.frames < frames then return "wait" end
-  sk.frames, sk.armed = 0, false   -- the next turn arms again
+  sk.frames, sk.armed = 0, false
   return "end"
 end
 
--- Whose human turn a skip ends.
 function Records.skipEnds(active, observer, played)
   if active == nil or active < 0 then return false end
   if active == observer then return true end
   return played ~= nil and (active == played.slot or active == played.seat)
 end
 
--- Whether a run of ended turns for Play as AI stops here.
 function Records.handoverArrived(mode, playedTurn)
   if mode == "pick" then return playedTurn == true end
   if mode == "return" then return not playedTurn end
   return false
 end
 
--- A screen's rows held to a fixed count.
 function Records.fixedRows(rows, n, none)
   local out = {}
   for i, r in ipairs(rows) do out[i] = r end
@@ -342,7 +309,6 @@ function Records.fixedRows(rows, n, none)
   return out
 end
 
--- `list` held to `n` entries at the right end, `fill` before it.
 function Records.alignRight(list, n, fill)
   local out, from = {}, math.max(#list - n, 0)
   for i = 1, n - (#list - from) do out[i] = fill end
@@ -350,7 +316,6 @@ function Records.alignRight(list, n, fill)
   return out
 end
 
--- One page of a list of `count` rows: always `perPage` entries, a row's index or false for an empty one.
 function Records.pageRows(count, page, perPage)
   local out = {}
   for i = 1, perPage do
@@ -360,7 +325,6 @@ function Records.pageRows(count, page, perPage)
   return out
 end
 
--- Play as AI's panel: its two lines from the played AI's last record.
 function Records.partnerLines(r)
   if not r then return {"Commanders -", "Bought -"} end
   local counts, order, n = {}, {}, 0
@@ -381,17 +345,13 @@ function Records.partnerLines(r)
       or string.format("Bought nothing: %s gold at recruiting", tostring(r.gold_at_buy or "?"))}
 end
 
--- The game's resources: slotResource and slotAiIncome take 0 to 13 (0 gold, 1 iron).
 Records.RESOURCES = 14
--- A resource and its income as the game's top bar writes them: "100 (+45)".
 function Records.resText(stock, income) return string.format("%d (%+d)", stock or 0, income or 0) end
--- Resources ({{name =, stock =, income =}}) as a record list, written "Gold 736|Iron 101|Hand of Glory 31":
 function Records.packRes(list, field, signed)
   local out = {}
   for _, e in ipairs(list) do out[#out + 1] = e.name .. " " .. (signed and string.format("%+d", e[field] or 0) or tostring(e[field] or 0)) end
   return out
 end
--- A packed list, or its written text, back: {{name =, value =}} in its order.
 function Records.unpackRes(text)
   local out = {}
   if type(text) == "table" then text = table.concat(text, "|") end
@@ -401,7 +361,6 @@ function Records.unpackRes(text)
   end
   return out
 end
--- A record's resources at its turn's end.
 function Records.resFromRecord(r)
   local stocks, incomes = Records.unpackRes(r.res_end), Records.unpackRes(r.res_income)
   if #stocks == 0 and #incomes == 0 then
@@ -419,24 +378,81 @@ function Records.resFromRecord(r)
   for _, e in ipairs(incomes) do entry(e.name).income = e.value end
   return out
 end
--- Resources from the `from`th on as "Gold 100 (+45), Hand of Glory 977 (+28)"; "" for none.
-function Records.resJoin(list, from)
+function Records.resJoin(list, from, noTrade)
   local out = {}
   for i = from or 1, #list do
     local e = list[i]
-    -- Trade is points spent at each turn start, never kept: the points, as the top bar shows them.
+    if noTrade and e.name == "Trade" then goto nextRes end
     out[#out + 1] = e.name == "Trade" and ("Trade " .. (e.income or 0)) or (e.name .. " " .. Records.resText(e.stock, e.income))
+    ::nextRes::
   end
   return table.concat(out, ", ")
 end
 
--- A skip's count as typed: a whole number from 1 to 50, else nil.
+Records.TRADE = 11
+function Records.iconParts(text, names)
+  local list = {}
+  for t = 0, Records.RESOURCES - 1 do
+    if t ~= Records.TRADE and names[t] and names[t] ~= "" then list[#list + 1] = {res = t, name = names[t], low = names[t]:lower()} end
+  end
+  table.sort(list, function(a, b) return #a.name > #b.name end)
+  local low = text:lower()
+  local function nameAt(i)
+    for _, e in ipairs(list) do
+      if low:sub(i, i + #e.low - 1) == e.low and not text:sub(i + #e.low, i + #e.low):match("[%w]") then return e end
+    end
+  end
+  local parts, from, i, found, carry = {}, 1, 1, false, ""
+  local function icon(e, at)
+    local before = carry .. text:sub(from, at - 1)
+    if before ~= "" then parts[#parts + 1] = before end
+    parts[#parts + 1] = {res = e.res, name = e.name}
+    found, carry = true, ""
+  end
+  while i <= #text do
+    local before = i > 1 and text:sub(i - 1, i - 1) or ""
+    local e = not before:match("[%w]") and nameAt(i)
+    if e and text:find("^ [%+%-]?%d", i + #e.name) then
+      icon(e, i)
+      i = i + #e.name + 1
+      from = i
+    else
+      local _, numEnd = text:find("^[%+%-]?%d+ ", i)
+      local after = numEnd and nameAt(numEnd + 1)
+      if after and not before:match("[%w,%.]") and not text:find("^ %u", numEnd + 1 + #after.name) then
+        icon(after, i)
+        carry = text:sub(i, numEnd - 1)
+        i = numEnd + 1 + #after.name
+        from = i
+      else
+        i = i + 1
+      end
+    end
+  end
+  if not found then return nil end
+  local rest = carry .. text:sub(from)
+  if rest ~= "" then parts[#parts + 1] = rest end
+  return parts
+end
+function Records.cutParts(parts, n, iconChars)
+  local out, used = {}, 0
+  for _, p in ipairs(parts) do
+    local w = type(p) == "table" and (iconChars or 2) or #p
+    if used + w > n then
+      out[#out + 1] = type(p) == "string" and n - used > 2 and (p:sub(1, n - used - 2) .. "..") or ".."
+      return out
+    end
+    out[#out + 1] = p
+    used = used + w
+  end
+  return out
+end
+
 function Records.skipCount(text)
   local n = tonumber(tostring(text or ""):match("^%s*(%d+)%s*$"))
   if not n or n < 1 or n > 50 then return nil end
   return n
 end
--- The stop rule of a skip set to stop early.
 function Records.skipLoss(before, now)
   for slot, b in pairs(before) do
     local n = now[slot]
@@ -446,13 +462,11 @@ function Records.skipLoss(before, now)
   return nil
 end
 
--- A score as a screen says it: -999 is the conquest step's "no square found".
 function Records.scoreText(score)
   if score == -999 then return "-999 (no square found)" end
   return tostring(score)
 end
 
--- Why a commander with plans ended its turn where it stood.
 function Records.restReason(com)
   local plan = com.plans and com.plans[#com.plans]
   if not plan or (tonumber(com.kind) or 0) ~= 0 then return nil end
@@ -473,7 +487,6 @@ function Records.restReason(com)
   return "no step scored enough (rally above 0, each later step above the best so far)"
 end
 
--- One cell of the step grid for a commander's turn.
 local GRID_STEP = {rally = "Rally", friendly = "Friendly", conquer = "Conquer", explore = "Explore", far = "Far expl."}
 function Records.gridCell(com)
   if not com then return "-", nil end
@@ -496,7 +509,6 @@ function Records.gridCell(com)
   return GRID_STEP[winner] .. " " .. best .. mark, winner
 end
 
--- The step grid of one AI, and its totals by step.
 function Records.grid(recordsByTurn, turns, commanders)
   local rows, totals = {}, {}
   for _, c in ipairs(commanders) do
@@ -517,7 +529,6 @@ function Records.grid(recordsByTurn, turns, commanders)
   return rows, totals
 end
 
--- The runner-up for "next best": the highest kept score among the other steps that found a square.
 function Records.nextBest(plan, winner)
   local score, step
   for _, s in ipairs(STEPS) do
@@ -529,7 +540,6 @@ function Records.nextBest(plan, winner)
   return score, step
 end
 
--- An answer as text, "s x y", and back; "-" for none.
 function Records.answerText(a)
   if not a then return "-" end
   return string.format("%d %d %d", a[1] or 0, a[2] or NO_SQUARE, a[3] or NO_SQUARE)
@@ -540,14 +550,12 @@ function Records.answerOf(text)
   return {tonumber(s), tonumber(x), tonumber(y)}
 end
 
--- A turn's record as an ini table, and back.
 local TURN_KEYS = {"turn", "slot", "name", "class", "level", "played_by", "gold_start", "gold_end", "iron_start", "iron_end",
                    "income_gold", "income_iron", "res_start", "res_end", "res_income", "land", "citadels", "commanders", "leader", "leader_name", "buy_step",
                    "buys", "offers_left", "gold_at_buy", "trade", "casts"}
 local COM_KEYS = {"name", "start", "finish", "start_place", "finish_place", "strength", "follows", "follows_name", "kind",
                   "target", "target_place", "target_seen", "ritual_plan", "plan_set", "casts", "played_by", "skip"}
 
--- The [about] section every record starts with.
 local RECORD_ABOUT = {
   ["1_file"] = "AI Inspector's record of one AI player's turn: tTTTT_pSS.ini, TTTT the AI turn, SS the player slot",
   ["2_turn"] = "[turn]: turn slot name class level played_by gold_start iron_start gold_end iron_end income_gold income_iron "
@@ -564,7 +572,6 @@ local RECORD_ABOUT = {
   ["6_cut"] = "a value holds at most 1000 bytes: a longer list ends with <N> more not recorded, a longer text with (cut)",
 }
 
--- One record value cut to VALUE_MAX bytes.
 local VALUE_MAX = 1000
 function Records.fitList(items)
   local out, size = {}, 0
@@ -635,7 +642,7 @@ function Records.fromIni(t)
   for name, sec in pairs(t) do
     local c = tonumber(name:match("^c(%d+)$"))
     if c then
-      local com = {c = c, plans = {}, troops = split(sec.troops), rituals = split(sec.rituals)}   ---@type table<string, any>
+      local com = {c = c, plans = {}, troops = split(sec.troops), rituals = split(sec.rituals)}
       for _, k in ipairs(COM_KEYS) do
         local v = sec[k]
         if v ~= nil then com[k] = tonumber(v) or v end
@@ -644,7 +651,7 @@ function Records.fromIni(t)
         if com[k] then com[k] = Records.plainPlace(com[k]) end
       end
       for n = 1, tonumber(sec.plans) or 0 do
-        local plan = {}   ---@type table
+        local plan = {}
         plan.comstr = tonumber(sec["p" .. n .. "_strength"])
         for _, step in ipairs(STEPS) do
           local v = sec["p" .. n .. "_" .. step]
@@ -663,18 +670,214 @@ function Records.fromIni(t)
 end
 
 -- ---- Data area -----------------------------------------------------------------------------------
--- In coe5se_data\JazzyAIObserver\ (CoE5SE's data area for this mod):
 local index, game, pendingLoad
-local sightShown   -- the AI whose sight the Observer's map shows (coe5.showSight), nil for its own
-local viewGone     -- {turn =, text =}: the viewed AI was eliminated, so the map went back to the Observer's view
-local seatKept = false   -- the seat's own sight is kept by coe5.showSight (an AI's shown, or revealed, now)
--- The inspector's settings and their defaults.
+local sightShown
+local viewGone
+local seatKept = false
 local settings = {recording = true, list = true, arrows = 1, topBar = true, tags = true, hoverCard = true, skipStop = false}
+
+-- ---- Room in the data area -----------------------------------------------------------------------
+local AREA_MB = 100
+local Store = {folders = {}, total = 0, budget = AREA_MB * 1024 * 1024 * 98 // 100, known = false, scanned = {}}
+local rawDataFolder, rawWriteIni, rawDeleteIni = coe5.dataFolder, coe5.writeIni, coe5.deleteIni
+local folderNow
+local COUNT_SLICE = 800000
+
+function Store.bytesOf(t)
+  local n, keys = 0, 0
+  for section, list in pairs(t or {}) do
+    n = n + #tostring(section) + 4
+    if type(list) == "table" then
+      for k, v in pairs(list) do n, keys = n + #tostring(k) + #tostring(v) + 2, keys + 1 end
+    end
+  end
+  return n, keys
+end
+function Store.fileBytes(name) return (Store.bytesOf(coe5.readIni(name))) end
+function Store.counting(folder) return folder ~= nil and (Store.known or Store.scanned[folder]) end
+function Store.add(folder, bytes)
+  if not Store.counting(folder) then return end
+  Store.folders[folder] = math.max((Store.folders[folder] or 0) + bytes, 0)
+  Store.total = math.max(Store.total + bytes, 0)
+  Store.dirty = true
+end
+function Store.back() if folderNow then rawDataFolder(folderNow) end end
+
+function Store.save()
+  if not Store.known or not Store.dirty then return end
+  local t = {count = {version = 1}, folders = {}}
+  for f, b in pairs(Store.folders) do if b > 0 then t.folders[f] = b end end
+  rawDataFolder("ins")
+  if rawWriteIni("sizes", t) then Store.dirty = false end
+  Store.back()
+end
+
+function Store.load()
+  if Store.loaded then return end
+  Store.loaded = true
+  rawDataFolder("ins")
+  local t = coe5.readIni("sizes")
+  if t and t.count and t.count.version == "1" then
+    for f, b in pairs(t.folders or {}) do
+      Store.folders[f] = tonumber(b) or 0
+      Store.total = Store.total + Store.folders[f]
+    end
+    Store.known = true
+  else
+    Store.queue, Store.at = {{folder = "ins"}}, 1
+    for n = 1, (tonumber(index and index.ins.next) or 1) - 1 do
+      Store.queue[#Store.queue + 1] = {folder = string.format("game_%04d", n), game = true}
+    end
+  end
+  Store.back()
+end
+
+function Store.countSome(keys)
+  if Store.known then return true end
+  local q = Store.queue
+  while Store.at <= #q do
+    local item = q[Store.at]
+    rawDataFolder(item.folder)
+    if not item.files then
+      item.files, item.i, item.bytes = coe5.listIni(), 1, 0
+      if item.game then
+        local last = -1
+        for _, name in ipairs(item.files) do
+          local t = tonumber(name:match("^t(%d+)_p%d+$"))
+          if t and t > last then last = t end
+        end
+        for t = 0, last + 1 do
+          for n = 1, 99 do
+            local f = string.format("%s_left_t%04d", item.folder, t) .. (n > 1 and ("_" .. n) or "")
+            rawDataFolder(f)
+            if #coe5.listIni() == 0 then break end
+            q[#q + 1] = {folder = f}
+          end
+        end
+        rawDataFolder(item.folder)
+      end
+    end
+    while item.i <= #item.files do
+      if keys <= 0 then Store.back() return false end
+      local bytes, n = Store.bytesOf(coe5.readIni(item.files[item.i]))
+      item.bytes, keys, item.i = item.bytes + bytes, keys - n - 1, item.i + 1
+    end
+    Store.folders[item.folder] = (Store.folders[item.folder] or 0) + item.bytes
+    Store.total = Store.total + item.bytes
+    Store.scanned[item.folder] = true
+    Store.at = Store.at + 1
+  end
+  Store.known, Store.queue, Store.dirty = true, nil, true
+  coe5.log(string.format("inspector_area_counted folders=%d bytes=%d budget=%d", #q, Store.total, Store.budget))
+  Store.save()
+  Store.back()
+  return true
+end
+
+function Store.dropOldest(folder, need, current)
+  rawDataFolder(folder)
+  local from = current and (coe5.turn() - HISTORY_TURNS) or math.huge
+  local files, bytes = 0, 0
+  for _, name in ipairs(coe5.listIni()) do
+    if Store.total + need <= Store.budget then break end
+    local t, s = name:match("^t(%d+)_p(%d+)$")
+    t, s = tonumber(t), tonumber(s)
+    if t and t < from and not (current and game.lastTurnOf[s] == t) then
+      local b = Store.fileBytes(name)
+      if rawDeleteIni(name) then
+        Store.add(folder, -b)
+        files, bytes = files + 1, bytes + b
+        if current then
+          game.cache[name] = nil
+          game.rolledBefore = math.max(game.rolledBefore or 0, t + 1)
+        end
+      end
+    end
+  end
+  if current and files > 0 then
+    local info = coe5.readIni("game")
+    if info and info.game then
+      local old = Store.bytesOf(info)
+      info.game.rolled_before = tostring(game.rolledBefore)
+      if rawWriteIni("game", info) then Store.add(folder, Store.bytesOf(info) - old) end
+    end
+  elseif not current then
+    local records = false
+    for _, name in ipairs(coe5.listIni()) do
+      if name:match("^t%d+_p%d+$") then records = true break end
+    end
+    if not records then
+      for _, name in ipairs(coe5.listIni()) do rawDeleteIni(name) end
+      Store.total = math.max(Store.total - (Store.folders[folder] or 0), 0)
+      Store.folders[folder], Store.dirty = nil, true
+    end
+  end
+  if files > 0 then
+    coe5.log(string.format("inspector_records_rolled_over folder=%s files=%d bytes=%d total=%d budget=%d", folder, files,
+      bytes, Store.total, Store.budget))
+  end
+  return Store.total + need <= Store.budget
+end
+
+function Store.makeRoom(need, keepFolder)
+  if Store.total + need <= Store.budget then return true end
+  local want = need + Store.budget // 50
+  local order, current = {}, game and game.id
+  for f in pairs(Store.folders) do
+    local n, rest = f:match("^game_(%d+)(.*)$")
+    if n and f ~= current and f ~= keepFolder then order[#order + 1] = {folder = f, n = tonumber(n), left = rest ~= ""} end
+  end
+  table.sort(order, function(a, b)
+    if a.n ~= b.n then return a.n < b.n end
+    if a.left ~= b.left then return a.left end
+    return a.folder < b.folder
+  end)
+  for _, o in ipairs(order) do
+    if Store.dropOldest(o.folder, want, false) then return true end
+  end
+  if current then Store.dropOldest(current, want, true) end
+  return Store.total + need <= Store.budget
+end
+
+function Store.dataFolder(name)
+  local ok = rawDataFolder(name)
+  if ok then folderNow = name end
+  return ok
+end
+function Store.writeIni(name, t)
+  local folder = folderNow
+  local new = Store.bytesOf(t)
+  local old = Store.counting(folder) and Store.fileBytes(name) or 0
+  if Store.known and not Store.busy and Store.total + new - old > Store.budget then
+    Store.busy = true
+    Store.makeRoom(new - old, folder)
+    Store.busy = false
+    Store.back()
+  end
+  local ok = rawWriteIni(name, t)
+  if not ok and Store.known and not Store.busy and not Store.lowered and new > old then
+    Store.lowered, Store.budget = true, Store.total
+    coe5.log(string.format("inspector_area_budget_lowered name=%s budget=%d", name, Store.budget))
+    Store.busy = true
+    local room = Store.makeRoom(new - old, folder)
+    Store.busy = false
+    Store.back()
+    if room then ok = rawWriteIni(name, t) end
+  end
+  if ok then Store.add(folder, new - old) end
+  return ok
+end
+function Store.deleteIni(name)
+  local bytes = Store.counting(folderNow) and Store.fileBytes(name) or 0
+  local ok = rawDeleteIni(name)
+  if ok then Store.add(folderNow, -bytes) end
+  return ok
+end
 
 local function baseName(path) return (tostring(path or ""):match("([^\\/]+)$") or ""):lower() end
 
 local function readIndex()
-  coe5.dataFolder("ins")
+  Store.dataFolder("ins")
   index = coe5.readIni("index") or {}
   index.ins, index.saves, index.playas = index.ins or {}, index.saves or {}, index.playas or {}
   local s = (coe5.readIni("settings") or {}).settings or {}
@@ -687,18 +890,17 @@ local function readIndex()
   settings.skipStop = s.skip_stop == "1"
 end
 local function writeIndex()
-  coe5.dataFolder("ins")
-  coe5.writeIni("index", index)
+  Store.dataFolder("ins")
+  Store.writeIni("index", index)
 end
 local function writeSettings()
-  coe5.dataFolder("ins")
-  coe5.writeIni("settings", {settings = {recording = settings.recording and 1 or 0, list = settings.list and 1 or 0,
+  Store.dataFolder("ins")
+  Store.writeIni("settings", {settings = {recording = settings.recording and 1 or 0, list = settings.list and 1 or 0,
     arrows = settings.arrows, top_bar = settings.topBar and 1 or 0, tags = settings.tags and 1 or 0, hover_card = settings.hoverCard and 1 or 0, skip_stop = settings.skipStop and 1 or 0}})
 end
 
 local function recordName(turn, slot) return string.format("t%04d_p%02d", math.max(turn, 0), slot) end
 
--- The players of the game being played: {[slot] = "name|class"} for every slot with a class.
 local function livePlayers()
   local out = {}
   for s = 0, 31 do
@@ -708,9 +910,8 @@ local function livePlayers()
   return out
 end
 
--- A game folder's players.
 local function storedPlayers(id)
-  coe5.dataFolder(id)
+  Store.dataFolder(id)
   local info = coe5.readIni("game")
   if info and info.players then
     local out = {}
@@ -728,7 +929,6 @@ local function storedPlayers(id)
   return out
 end
 
--- The folder of a loaded save whose file name the index doesn't hold.
 local function findLoadedGame(name)
   local base = name:match("^(aitestkit g%d+ t%-?%d+) .+$")
   if base and index.saves[base] then return index.saves[base] end
@@ -739,7 +939,6 @@ local function findLoadedGame(name)
   end
 end
 
--- A save loaded into a folder that holds later turns: those turns move out.
 function Records.laterThan(name, turn, active)
   local t, s = name:match("^t(%d+)_p(%d+)$")
   t, s = tonumber(t), tonumber(s)
@@ -756,7 +955,7 @@ end
 function Ins.setAsideLaterTurns(id)
   local turn = math.max(coe5.turn(), 0)
   local active = math.max(coe5.get("activePlayer") or 0, 0)
-  coe5.dataFolder(id)
+  Store.dataFolder(id)
   local later = {}
   for _, name in ipairs(coe5.listIni()) do
     if Records.laterThan(name, turn, active) then later[#later + 1] = {name = name, t = coe5.readIni(name)} end
@@ -766,28 +965,30 @@ function Ins.setAsideLaterTurns(id)
     local kept = Records.offTurnsBefore(info.game.off_turns, turn)
     if (info.game.off_turns or "") ~= kept then
       info.game.off_turns = kept
-      coe5.writeIni("game", info)
+      Store.writeIni("game", info)
     end
   end
   if #later == 0 then return end
   local aside = string.format("%s_left_t%04d", id, turn)
   for n = 2, 99 do
-    coe5.dataFolder(aside)
+    Store.dataFolder(aside)
     if #coe5.listIni() == 0 then break end
     aside = string.format("%s_left_t%04d_%d", id, turn, n)
   end
   local moved = 0
   for _, f in ipairs(later) do
-    if f.t and coe5.writeIni(f.name, f.t) then moved = moved + 1 end
+    if f.t and Store.writeIni(f.name, f.t) then moved = moved + 1 end
   end
-  coe5.dataFolder(id)
-  for _, f in ipairs(later) do coe5.deleteIni(f.name) end
+  Store.dataFolder(id)
+  for _, f in ipairs(later) do Store.deleteIni(f.name) end
   coe5.log(string.format("inspector_later_turns_set_aside game=%s turn=%d from_slot=%d files=%d moved=%d folder=%s", id, turn, active,
     #later, moved, aside))
 end
 
 local function startGame()
   readIndex()
+  Store.load()
+  Store.countSome(COUNT_SLICE)
   local id = pendingLoad and index.saves[pendingLoad]
   if not id and pendingLoad then
     id = findLoadedGame(pendingLoad)
@@ -805,20 +1006,20 @@ local function startGame()
   writeIndex()
   if pendingLoad then Ins.setAsideLaterTurns(id) end
   game = {id = id, cache = {}, lastTurnOf = {}}
-  coe5.dataFolder(id)
+  Store.dataFolder(id)
   local info = coe5.readIni("game")
   if not info then
     info = {game = {id = id, loaded = pendingLoad or ""}}
     if settings.recording then info.game.first_recorded = tostring(math.max(coe5.turn(), 0)) end
   end
-  if not info.players then   -- the players, so a later load under another file name finds this folder
+  if not info.players then
     info.players = {}
     for s, v in pairs(livePlayers()) do info.players[string.format("p%02d", s)] = v end
-    coe5.writeIni("game", info)
+    Store.writeIni("game", info)
   end
   game.firstRecorded = tonumber(info.game and info.game.first_recorded)
+  game.rolledBefore = tonumber(info.game and info.game.rolled_before)
   game.offTurns = info.game and info.game.off_turns or ""
-  -- Each slot's newest recorded turn, eliminated AIs' too.
   for _, name in ipairs(coe5.listIni()) do
     local tt, s = name:match("^t(%d+)_p(%d+)$")
     tt, s = tonumber(tt), tonumber(s)
@@ -827,11 +1028,10 @@ local function startGame()
   pendingLoad = nil
 end
 
--- Recording turned off or on: the turns it was off go in game.ini (off_turns "20-21,30-30").
 local function noteRecordingSwitch(on)
   if not game then return end
   local turn = math.max(coe5.turn(), 0)
-  coe5.dataFolder(game.id)
+  Store.dataFolder(game.id)
   local info = coe5.readIni("game") or {game = {id = game.id}}
   if on and info.game.off_from then
     local from = tonumber(info.game.off_from) or turn
@@ -843,39 +1043,37 @@ local function noteRecordingSwitch(on)
   elseif not on then
     info.game.off_from = tostring(turn)
   end
-  coe5.writeIni("game", info)
+  Store.writeIni("game", info)
 end
 
 local function noteRecordingStarts()
   if not game or game.firstRecorded then return end
   game.firstRecorded = math.max(coe5.turn(), 0)
-  coe5.dataFolder(game.id)
+  Store.dataFolder(game.id)
   local info = coe5.readIni("game") or {game = {id = game.id}}
   info.game.first_recorded = tostring(game.firstRecorded)
-  coe5.writeIni("game", info)
+  Store.writeIni("game", info)
 end
 
--- Player slot's record of `turn`, read once (nil: not recorded).
 local function readRecord(turn, slot)
   if not game or turn < 0 then return nil end
   local key = recordName(turn, slot)
   local hit = game.cache[key]
   if hit == nil then
-    coe5.dataFolder(game.id)
+    Store.dataFolder(game.id)
     hit = Records.fromIni(coe5.readIni(key)) or false
     game.cache[key] = hit
   end
   return hit or nil
 end
 
--- The newest recorded turn of slot at or before `turn`, and its record.
 local function latestRecord(slot, turn)
   turn = turn or coe5.turn()
   for t = turn, math.max(turn - 3, 0), -1 do
     local rec = readRecord(t, slot)
     if rec then return t, rec end
   end
-  local last = game and game.lastTurnOf[slot]   -- an AI with no recent turn: eliminated, or recording off
+  local last = game and game.lastTurnOf[slot]
   if last and last <= turn then
     local rec = readRecord(last, slot)
     if rec then return last, rec end
@@ -883,12 +1081,11 @@ local function latestRecord(slot, turn)
 end
 
 -- ---- Play as AI ----------------------------------------------------------------------------------
--- Play as AI: the player plays an AI player's turns, the game's AI finishing each.
 local ID_BACK, ID_CANCEL, ID_PLAYER_FIRST = 9, 8, 100
 local runAiTurn = coe5.runAiTurn
-local playAs   -- {slot =, seat =, active =, returning =} from the pick to Return to AI
+local playAs
 
-local function nextMover(after)   -- the next slot after `after` to move this month, or nil
+local function nextMover(after)
   for s = after + 1, 31 do
     local controller = coe5.get("slotController", s)
     if controller == coe5.controller.human or controller == coe5.controller.ai or controller == coe5.controller.independent then
@@ -897,7 +1094,6 @@ local function nextMover(after)   -- the next slot after `after` to move this mo
   end
 end
 
--- X's stocks and its commanders' action points left, for the log: "Gold 120,Iron 3 ap=c12:3,c40:2".
 function Ins.resNow(s)
   local out = {}
   for res = 0, Records.RESOURCES - 1 do
@@ -908,6 +1104,14 @@ function Ins.resNow(s)
     end
   end
   return out
+end
+local resNames
+function Ins.resNames()
+  if not resNames then
+    resNames = {}
+    for res = 0, Records.RESOURCES - 1 do resNames[res] = clean(coe5.get("resourceName", res) or "") end
+  end
+  return resNames
 end
 local function stocksAndAp(s)
   local stocks, ap = {}, {}
@@ -924,7 +1128,6 @@ local function stocksAndAp(s)
   return table.concat(stocks, ","), table.concat(ap, ",")
 end
 
--- The seat back to human, then X back to the AI unless the game took X out meanwhile.
 local function endReview(reason)
   if playAs.active and isController(playAs.seat, coe5.controller.ai) then
     coe5.set("slotController", playAs.seat, coe5.controller.human)
@@ -938,22 +1141,21 @@ end
 
 local function addPlayedEntry(entry)
   if not game then return end
-  coe5.dataFolder(game.id)
+  Store.dataFolder(game.id)
   local played = coe5.readIni("played") or {}
   local n = 1
   while played["review" .. n] do n = n + 1 end
   played["review" .. n] = entry
-  coe5.writeIni("played", played)
+  Store.writeIni("played", played)
 end
 
--- At the end of the turn before X's first played one: X human, the seat the AI's.
 local function maybeStartReview(after)
   if not playAs or playAs.returning then return end
   if not isController(playAs.slot, coe5.controller.ai) and not isController(playAs.slot, coe5.controller.human) then
     return endReview("not_in_game")
   end
   if playAs.active or nextMover(after) ~= playAs.slot then return end
-  sightShown = nil   -- the seat's own sight is back since its turn ended (Ins.endObserverTurn)
+  sightShown = nil
   coe5.set("slotController", playAs.slot, coe5.controller.human)
   playAs.active = true
   if isController(playAs.seat, coe5.controller.human) then coe5.set("slotController", playAs.seat, coe5.controller.ai) end
@@ -962,10 +1164,8 @@ local function maybeStartReview(after)
   coe5.log(string.format("play_as_started slot=%d seat=%d turn=%d", playAs.slot, playAs.seat, coe5.turn()))
 end
 
--- X's turn start: X is AI while the game starts its turn, so it gets an AI's turn start.
 local turnStartAsAi, seatHumanMeanwhile = false, false
 
--- The seat human while X is an AI between its turns' human parts.
 local function seatHumanWhile()
   if playAs and playAs.active and not playAs.returning and isController(playAs.seat, coe5.controller.ai) then
     coe5.set("slotController", playAs.seat, coe5.controller.human)
@@ -998,9 +1198,8 @@ local function reviewTurnStartAfter(player)
   turnStartAsAi = false
 end
 
--- What the player touched in X's turn.
-local turnStartState   -- {[commander] = {used, x, y, followers}} of the played turn, or nil
-local touched = {}     -- {[commander] = true}: the commanders the AI leaves alone at the hand-over
+local turnStartState
+local touched = {}
 local function commanderState(c, unit)
   local x, y, followers = coe5.get("unitX", unit), coe5.get("unitY", unit), 0
   for _, u in ipairs(coe5.squareUnits(x, y)) do
@@ -1008,7 +1207,6 @@ local function commanderState(c, unit)
   end
   return {used = coe5.get("unitApUsed", unit), x = x, y = y, followers = followers}
 end
--- How many times player s has cast each ritual (slotRitualCasts, what maxcast counts), those cast at all.
 function Ins.castCounts(s)
   local out = {}
   for ritual = 0, coe5.get("ritualLastIndex") or -1 do
@@ -1018,8 +1216,7 @@ function Ins.castCounts(s)
   return out
 end
 
--- The played turn's start for the record: its stocks, each commander's square, and the player's buys.
-local partnerTurn   -- {turn =, gold =, iron =, starts = {[c] = "x y"}, buys = {}}
+local partnerTurn
 local function notePlayedTurnStart(player)
   touched = {}
   if not (playAs and playAs.active and playAs.slot == player) then turnStartState = nil; return end
@@ -1032,7 +1229,6 @@ local function notePlayedTurnStart(player)
     partnerTurn.starts[c] = coe5.get("unitX", unit) .. " " .. coe5.get("unitY", unit)
   end
 end
--- Whether commander c moved, used action points or changed its army.
 function Ins.handTouched(c)
   if not (playAs and playAs.active and turnStartState and turnStartState[c]) then return false end
   local unit = coe5.get("commanderUnit", c)
@@ -1041,7 +1237,6 @@ function Ins.handTouched(c)
   return now.used ~= was.used or now.x ~= was.x or now.y ~= was.y or now.followers ~= was.followers
 end
 
--- At the turn's end: the touched commanders, each with no action points left.
 local function restTouched(player)
   touched = {}
   local list, marked = {}, {}
@@ -1069,10 +1264,9 @@ local function restTouched(player)
   turnStartState = nil
 end
 
--- The end of X's turn: the game's AI moves X from there.
 local handingOver = false
-local plansAtStart   -- {slot =, [commander] = ritual plan}: an AI's plans when its turn starts (AI_RECRUIT compares)
-local ritualPlansOf  -- set with the recorders below
+local plansAtStart
+local ritualPlansOf
 local function reviewTurnEnd(player)
   if not (playAs and playAs.active and playAs.slot == player) then return end
   local stocks, ap = stocksAndAp(player)
@@ -1081,14 +1275,13 @@ local function reviewTurnEnd(player)
   seatHumanWhile()
   handingOver = true
   plansAtStart = ritualPlansOf(player)
-  runAiTurn(player)   -- false when refused: CoE5SE logged why
+  runAiTurn(player)
   handingOver = false
   seatAiAgain()
   touched = {}
   if playAs and playAs.returning then endReview("returned") end
 end
 
--- The seat as the AI's stays where it is.
 local REST_PRIORITY = 1000
 local function touchedNow(c) return handingOver and touched[c] == true end
 local function restingCommander(c)
@@ -1103,7 +1296,6 @@ for _, step in ipairs(STEPS) do
     return next(c, comstr)
   end, REST_PRIORITY)
 end
--- A touched commander's army stays as the player left it, and it plans no ritual this turn.
 coe5.wrap("AI_GATHER_TROOPS", function(next, c)
   if touchedNow(c) then return end
   next(c)
@@ -1121,42 +1313,39 @@ coe5.wrap("AI_RITUAL_CANDIDATE", function(next, c, ritual)
   return next(c, ritual)
 end, REST_PRIORITY)
 
--- ai_move's start for X at the hand-over: its stocks and action points as the player left them.
 local function reviewAiTurnStart(player)
   if not (handingOver and playAs and playAs.slot == player) then return end
   local stocks, ap = stocksAndAp(player)
   coe5.log(string.format("play_as_ai_move slot=%d turn=%d stocks=%s ap=%s", player, coe5.turn(), stocks, ap))
 end
 
--- X's buys on the Recruit screen go through the game's AI buy.
 local recruitScreen = coe5.recruitScreen
-local OFFER_ROW_FIRST, SHOP_OFFERS = 100, 160   -- the Recruit screen's offer rows; a shop's 160 offers
-local STOCK_LAST = 13   -- the stocks a player has (resource types 0 Gold to 13 Lifeforce, RVA_PLAYER_INTS)
-local function shopOffer(s, offer)   -- the offer's coe5.shopOffers entry, nil for an item or one bought
+local OFFER_ROW_FIRST, SHOP_OFFERS = 100, 160
+local STOCK_LAST = 13
+local function shopOffer(s, offer)
   for _, o in ipairs(coe5.shopOffers(s)) do
     if o.offer == offer then return o end
   end
 end
-local function stocksOf(s)   -- every stock, Gold first: "gold,iron,...,lifeforce"
+local function stocksOf(s)
   local out = {}
   for r = 0, STOCK_LAST do out[#out + 1] = coe5.get("slotResource", s, r) end
   return table.concat(out, ",")
 end
--- The reasons coe5.aiBuyOffer gives that are the Recruit screen's own checks.
 local GAME_REFUSES = {square_used = true, not_enough_gold = true, not_enough_iron = true, not_enough_units = true, cannot_pay = true,
   wrong_plane = true, no_upgrade_units = true, sold_out = true, not_here = true, not_possible = true}
-local function costsOf(o)   -- an offer's costs other than 0, "type:amount,..." by cost type ("-" for none)
+local function costsOf(o)
   local out = {}
   for t = 0, 18 do
     if (o.costs[t] or 0) ~= 0 then out[#out + 1] = t .. ":" .. o.costs[t] end
   end
   return #out > 0 and table.concat(out, ",") or "-"
 end
-local function countOf(s, offer)   -- the offer's count as coe5.shopOffers has it, 0 when it isn't there
+local function countOf(s, offer)
   local o = shopOffer(s, offer)
   return o and o.count or 0
 end
-local wentOn   -- the click that went on to the game, checked at the screen's next wait
+local wentOn
 local function checkWentOn()
   local w = wentOn
   wentOn = nil
@@ -1171,33 +1360,63 @@ local function checkWentOn()
       w.slot, coe5.turn(), w.offer, w.x, w.y, w.stocks, stocks, w.units, units, w.count, count))
   end
 end
+local recruitPress
+Ins.LONG_PRESS_MS, Ins.LONG_PRESS_MOVED = 500, 25
+function Ins.recruitFrame(id)
+  local press = recruitPress
+  local buttons = coe5.get("mouseButtons") or 0
+  if press then
+    local px, py = coe5.get("uiPointerX"), coe5.get("uiPointerY")
+    if px and press.px then press.moved = press.moved + math.abs(px - press.px) + math.abs(py - press.py) end
+    press.px, press.py = px, py
+    if buttons == 1 then
+      coe5.set("mouseButtons", 0)
+      if not press.long and (coe5.get("ticksMs") or 0) - press.at >= Ins.LONG_PRESS_MS then
+        press.long = true
+        if press.moved < Ins.LONG_PRESS_MOVED then return -press.id end
+      end
+      return 0
+    end
+    recruitPress = nil
+    if press.long or buttons ~= 0 then return 0 end
+    return press.id, true
+  end
+  if id < OFFER_ROW_FIRST or id >= OFFER_ROW_FIRST + SHOP_OFFERS then return id end
+  if buttons == 0 then return id, true end
+  if buttons ~= 1 then return id end
+  local screen = recruitScreen()
+  if not screen or screen.player ~= playAs.slot or screen.ctrl or screen.latch ~= 1 then return id end
+  coe5.set("mouseButtons", 0)
+  recruitPress = {id = id, at = coe5.get("ticksMs") or 0, px = coe5.get("uiPointerX"), py = coe5.get("uiPointerY"), moved = 0}
+  return 0
+end
 coe5.wrap("RECRUIT_WAIT", function(next, block, mode)
   checkWentOn()
   local id = next(block, mode)
-  if not (recruitScreen and playAs and playAs.active) or id < OFFER_ROW_FIRST or id >= OFFER_ROW_FIRST + SHOP_OFFERS then return id end
-  local buttons = coe5.get("mouseButtons")
-  if buttons ~= 0 and buttons ~= 1 then return id end
+  if not (recruitScreen and playAs and playAs.active) then recruitPress = nil return id end
+  local buy
+  id, buy = Ins.recruitFrame(id)
+  if not buy then return id end
   local screen = recruitScreen()
   if not screen or screen.player ~= playAs.slot or screen.ctrl or screen.latch ~= 1 or screen.x < 0 then return id end
   local s, offer, x, y = playAs.slot, id - OFFER_ROW_FIRST, screen.x, screen.y
   local o = shopOffer(s, offer)
   local stocks, units = stocksOf(s), #coe5.squareUnits(x, y)
-  -- Whether a listed row is a magic item for sale.
   if not o then
     coe5.log(string.format("play_as_buy_to_game slot=%d turn=%d offer=%d path=item_human x=%d y=%d", s, coe5.turn(), offer, x, y))
     wentOn = {slot = s, offer = offer, x = x, y = y, stocks = stocks, units = units, count = 0, item = true}
+    coe5.set("mouseButtons", 1)
     return id
   end
   local had = commandersOf(s)
   local bought, why = coe5.aiBuyOffer(s, offer, x, y)
   local count = countOf(s, offer)
   if why and GAME_REFUSES[why] then
-    -- The Recruit screen's own check refused it: the game's buy says why.
     coe5.log(string.format("play_as_buy_to_game slot=%d turn=%d offer=%d monster=%d x=%d y=%d reason=%s", s, coe5.turn(), offer, o.monster, x, y, why))
     wentOn = {slot = s, offer = offer, x = x, y = y, stocks = stocks, units = units, count = o.count}
+    coe5.set("mouseButtons", 1)
     return id
   elseif why then
-    -- CoE5SE refused it for its own reason: the click goes nowhere.
     coe5.log(string.format("play_as_buy_refused slot=%d turn=%d offer=%d monster=%d x=%d y=%d reason=%s", s, coe5.turn(), offer, o.monster, x, y, why))
     return 0
   end
@@ -1216,11 +1435,10 @@ coe5.wrap("RECRUIT_WAIT", function(next, block, mode)
     .. "stocks_before=%s stocks_after=%s costs=%s units_before=%d units_after=%d count_before=%d count_after=%d bought=%s",
     s, coe5.turn(), offer, o.monster, o.commander and "commander" or "troops", #new > 0 and table.concat(new, ",") or "-", x, y,
     stocks:match("^[^,]*"), after:match("^[^,]*"), stocks, after, costsOf(o), units, #coe5.squareUnits(x, y), o.count, count, tostring(bought)))
-  return 0   -- the game's own buy never runs: 0 is no click
+  return 0
 end)
 
 -- ---- The recorders -------------------------------------------------------------------------------
--- `rec` is the record of the AI turn running now (AI_TURN before to after), nil between AI turns.
 local rec
 
 local function newCommander(c, unit)
@@ -1245,7 +1463,7 @@ local function startRecord(player)
   rec = nil
   if not (game and settings.recording) then return end
   if not isController(player, coe5.controller.ai) then return end
-  if playAs and playAs.active and player == playAs.seat then return end   -- the seat resting as the AI's
+  if playAs and playAs.active and player == playAs.seat then return end
   noteRecordingStarts()
   local name, class, level = playerLabel(player)
   rec = {turn = math.max(coe5.turn(), 0), slot = player, name = name, class = class, level = level, coms = {},
@@ -1254,7 +1472,6 @@ local function startRecord(player)
          res_start = Records.packRes(Ins.resNow(player), "stock"),
          castsAtStart = Ins.castCounts(player), plansAtMove = {}}
   for c, unit in pairs(commandersOf(player)) do rec.coms[c] = newCommander(c, unit) end
-  -- A played turn: its start is the player's turn start, before the player's moves and buys.
   local pt = partnerTurn
   if handingOver and pt and pt.turn == coe5.turn() then
     rec.gold_start, rec.iron_start, rec.partnerBuys = pt.gold, pt.iron, pt.buys
@@ -1270,7 +1487,6 @@ local function startRecord(player)
   end
 end
 
--- The plan a step of commander c belongs to.
 local function planFor(com, step, comstr)
   local plan = com.plans[#com.plans]
   local fresh = not plan or step == "rally"
@@ -1293,8 +1509,7 @@ end
 
 local pack, unpack = table.pack, table.unpack
 
--- The mods whose wraps changed this site's answer or arguments, or nil.
-local MOD_NAME = "JazzyAIObserver"   -- the install name, as coe5.changedBy lists a mod
+local MOD_NAME = "JazzyAIObserver"
 local changedBy = rawget(coe5, "changedBy")
 local function changers(c)
   if not changedBy then return nil end
@@ -1311,7 +1526,7 @@ local function changers(c)
   end
   return #names > 0 and table.concat(names, ",") or nil
 end
-local current = {}   -- {[step] = the step entry the outermost recorder opened, for the innermost one}
+local current = {}
 for _, step in ipairs(STEPS) do
   coe5.wrap(STEP_SITE[step], function(next, c, comstr)
     local com = comOf(c)
@@ -1332,7 +1547,6 @@ for _, step in ipairs(STEPS) do
       local x, y = f[2], f[3]
       if x >= 0 then entry.place, entry.seen = placeOf(x, y), seenText(rec.slot, x, y) end
       if by or not entry.game or g[1] ~= f[1] or g[2] ~= f[2] or g[3] ~= f[3] then
-        -- Who changed it, by mod.
         entry.by = by or (touchedNow(c) and "you" or (restingCommander(c) and "Play as AI" or "a script"))
         coe5.log(string.format("inspector_override turn=%d player=%d commander=%d step=%s game=%s kept=%d,%d,%d by=%s", rec.turn,
           rec.slot, c, step, entry.game and (g[1] .. "," .. g[2] .. "," .. g[3]) or "-", f[1], f[2], f[3], entry.by))
@@ -1348,7 +1562,6 @@ for _, step in ipairs(STEPS) do
   end, INNER)
 end
 
--- Rituals: each candidate the game's checks reached, with the game's answer and the one kept.
 local ritualGame
 coe5.wrap("AI_RITUAL_CANDIDATE", function(next, c, ritual)
   ritualGame = nil
@@ -1369,7 +1582,6 @@ coe5.wrap("AI_RITUAL_CANDIDATE", function(next, c, ritual)
   return unpack(r, 1, r.n)
 end, INNER)
 
--- Troops: what the pick-up took or left, a lone commander picked up, a split.
 local gatherRan, lonerGame, splitRan
 coe5.wrap("AI_GATHER_TROOPS", function(next, c)
   local com = comOf(c)
@@ -1430,15 +1642,20 @@ coe5.wrap("AI_SPLIT_ARMY", function(next, c, minUnits)
   return next(c, minUnits)
 end, INNER)
 
--- Buys: the offers and gold before and after the AI's recruiting step.
 local function offerCounts(s)
   local out = {}
   for _, o in ipairs(coe5.shopOffers(s)) do
-    out[o.offer] = {count = o.count, name = clean(coe5.get("monsterName", o.monster) or "?"), gold = o.gold or 0}
+    out[o.offer] = {count = o.count, name = clean(coe5.get("monsterName", o.monster) or "?"), gold = o.gold or 0, monster = o.monster}
   end
   return out
 end
--- The rituals cast between two castCounts, as "Raise Dead x2".
+function Ins.buyState(s)
+  local units = {}
+  for _, sq in ipairs(coe5.recruitSquares(s)) do
+    for _, u in ipairs(coe5.squareUnits(sq.x, sq.y)) do units[u] = {m = coe5.get("unitMonster", u), sq = sq.x .. "," .. sq.y} end
+  end
+  return {offers = offerCounts(s), units = units}
+end
 function Records.castsBetween(before, after, nameOf)
   local out = {}
   for ritual, n in pairs(after) do
@@ -1449,34 +1666,57 @@ function Records.castsBetween(before, after, nameOf)
   return out
 end
 
--- The buys between two offerCounts, "2 Spearman (50 gold each)", and how many units in all.
-function Records.buysBetween(before, after)
-  local buys, units = {}, 0
-  for offer, b in pairs(before) do
-    local a = after[offer]
-    local n = b.count > 0 and (b.count - (a and a.count or 0)) or (a and 0 or 1)
-    if n > 0 then
-      buys[#buys + 1] = {offer = offer, n = n, text = string.format("%d %s (%d gold each)", n, b.name, b.gold)}
-      units = units + n
+function Records.buyText(units, name, gold) return string.format("%d %s (%d gold)", units, name, gold) end
+function Records.buysBetween(before, afterUnits)
+  local new = {}
+  for u, now in pairs(afterUnits) do
+    local was = before.units[u]
+    if not was or was.m ~= now.m then
+      new[now.sq] = new[now.sq] or {}
+      new[now.sq][now.m] = (new[now.sq][now.m] or 0) + 1
     end
+  end
+  local per = {}
+  for _, here in pairs(new) do
+    for m, k in pairs(here) do
+      local pick, best
+      for offer, o in pairs(before.offers) do
+        if o.monster == m then
+          local c = math.max(o.count, 1)
+          local score = (c == k and 3 or (k % c == 0 and 2 or 1)) * 100000 + c * 10 - offer / 1000
+          if not best or score > best then pick, best = offer, score end
+        end
+      end
+      if pick then
+        local c = math.max(before.offers[pick].count, 1)
+        local p = per[pick] or {units = 0, buys = 0}
+        per[pick] = p
+        p.units, p.buys = p.units + k, p.buys + math.max(k // c, 1)
+      end
+    end
+  end
+  local buys, units = {}, 0
+  for offer, p in pairs(per) do
+    local o = before.offers[offer]
+    buys[#buys + 1] = {offer = offer, units = p.units, buys = p.buys, name = o.name, gold = o.gold,
+                       text = Records.buyText(p.units, o.name, p.buys * o.gold)}
+    units = units + p.units
   end
   table.sort(buys, function(x, y) return x.text < y.text end)
   return buys, units
 end
--- The buys of the whole step against the game's own.
 function Records.splitBuys(all, gameBuys, who)
   local fromGame, out = {}, {}
-  for _, b in ipairs(gameBuys) do fromGame[b.offer] = b.n end
+  for _, b in ipairs(gameBuys) do fromGame[b.offer] = b end
   for _, b in ipairs(all) do
-    local g = math.min(fromGame[b.offer] or 0, b.n)
-    local name = b.text:match("^%d+ (.*)$")
-    if g > 0 then out[#out + 1] = g .. " " .. name end
-    if b.n > g then out[#out + 1] = (b.n - g) .. " " .. name .. ", bought by " .. who end
+    local g = fromGame[b.offer]
+    local gu, gb = math.min(g and g.units or 0, b.units), math.min(g and g.buys or 0, b.buys)
+    if gu > 0 then out[#out + 1] = Records.buyText(gu, b.name, gb * b.gold) end
+    if b.units > gu then out[#out + 1] = Records.buyText(b.units - gu, b.name, (b.buys - gb) * b.gold) .. ", bought by " .. who end
   end
   return out
 end
 local recruitGameRan, recruitGame
--- Each commander's ritual plan at the player's turn start, against the same when its AI move begins:
 function ritualPlansOf(s)
   local out = {slot = s}
   for c in pairs(commandersOf(s)) do out[c] = coe5.get("commanderRitualPlan", c) or 0 end
@@ -1484,8 +1724,7 @@ function ritualPlansOf(s)
 end
 coe5.wrap("AI_RECRUIT", function(next, player)
   local recording = rec and rec.slot == player
-  local before = recording and offerCounts(player)
-  -- Who made this turn's script buys and plans (coe5.aiActions; an older CoE5SE without it: "a script").
+  local before = recording and Ins.buyState(player)
   local actions = rawget(coe5, "aiActions") and coe5.aiActions(player) or nil
   if recording and plansAtStart and plansAtStart.slot == player then
     for c, was in pairs(plansAtStart) do
@@ -1498,7 +1737,7 @@ coe5.wrap("AI_RECRUIT", function(next, player)
     end
   end
   plansAtStart = nil
-  if recording then   -- the plans as the AI move begins, every script's at AI_TURN included: who casts what
+  if recording then
     for c in pairs(commandersOf(player)) do rec.plansAtMove[c] = coe5.get("commanderRitualPlan", c) or 0 end
   end
   local gold = coe5.get("slotResource", player, 0)
@@ -1509,8 +1748,8 @@ coe5.wrap("AI_RECRUIT", function(next, player)
     local buyers = Records.actorsOf(rawget(coe5, "aiActions") and coe5.aiActions(player) or nil, "aiBuyOffer")
     buyers = buyers and (buyers:gsub(",", ", ")) or nil
     local after = offerCounts(player)
-    local all, units = Records.buysBetween(before, after)
-    local gameBuys, gameUnits = {}, 0   -- the game's own step never ran: every buy is a script's
+    local all, units = Records.buysBetween(before, Ins.buyState(player).units)
+    local gameBuys, gameUnits = {}, 0
     if recruitGame then gameBuys, gameUnits = recruitGame.buys, recruitGame.units end
     local buys = Records.splitBuys(all, gameBuys, buyers or by or "a script")
     local left = {}
@@ -1527,16 +1766,15 @@ coe5.wrap("AI_RECRUIT", function(next, player)
 end, OUTER)
 coe5.wrap("AI_RECRUIT", function(next, player)
   recruitGameRan = true
-  local before = rec and rec.slot == player and offerCounts(player)
+  local before = rec and rec.slot == player and Ins.buyState(player)
   local r = pack(next(player))
   if before then
-    local buys, units = Records.buysBetween(before, offerCounts(player))
+    local buys, units = Records.buysBetween(before, Ins.buyState(player).units)
     recruitGame = {buys = buys, units = units}
   end
   return unpack(r, 1, r.n)
 end, INNER)
 
--- The world's squares owned by and citadels of player s.
 local tradeItems
 local function landOf(s)
   local land, citadels = 0, 0
@@ -1551,32 +1789,34 @@ local function landOf(s)
   return land, citadels
 end
 
--- What the next turn start's trade step moves for player s.
+function Ins.tradePower(s)
+  for _, e in ipairs(Ins.resNow(s)) do if e.name == "Trade" then return e.income or 0 end end
+  return 0
+end
 function tradeItems(s)
   local out = {}
   for res = 0, 13 do
     local ok, n = pcall(coe5.get, "slotAiTrade", s, res)
     local name = clean(coe5.get("resourceName", res) or ("resource " .. res))
-    if ok and n and n ~= 0 and name ~= "Trade" then out[#out + 1] = name .. " " .. n end   -- the trade points it spends: left out
+    if ok and n and n ~= 0 and name ~= "Trade" then out[#out + 1] = name .. " " .. n end
   end
   return out
 end
 
--- AI_TURN's after: what the AI's move left of each commander.
-local pending = {}   -- the records whose battles are still to come, oldest first
+local pending = {}
 function Ins.closeAiMove(player)
   local r = rec
   rec = nil
   if not (r and game and r.slot == player) then return end
   local alive = commandersOf(player)
   for c, unit in pairs(alive) do
-    if not r.coms[c] then r.coms[c] = newCommander(c, unit) end   -- new this turn: bought or joined
+    if not r.coms[c] then r.coms[c] = newCommander(c, unit) end
   end
   for c, com in pairs(r.coms) do
     local unit = alive[c]
     if unit then
       local x, y = coe5.get("unitX", unit), coe5.get("unitY", unit)
-      com.moved_to = x .. " " .. y   -- where its move ended, before the battles
+      com.moved_to = x .. " " .. y
       com.kind = coe5.get("commanderAiMoveKind", c) or -1
       local tx, ty = coe5.get("commanderAiTargetX", c) or -1, coe5.get("commanderAiTargetY", c) or -1
       com.target = tx .. " " .. ty
@@ -1616,7 +1856,6 @@ function Ins.closeAiMove(player)
   pending[#pending + 1] = r
 end
 
--- A record whose turn's battles are over, written into the data area.
 function Ins.writeSettled(r)
   local player = r.slot
   local alive = commandersOf(player)
@@ -1648,7 +1887,6 @@ function Ins.writeSettled(r)
     com.moved_to = nil
   end
   r.commanders = n
-  -- The rituals the turn cast, each on the commander that planned it.
   local casts = Records.castsBetween(r.castsAtStart or {}, Ins.castCounts(player),
     function(ritual) return clean(coe5.get("ritualName", ritual) or ("ritual " .. ritual)) end)
   r.casts = {}
@@ -1659,25 +1897,26 @@ function Ins.writeSettled(r)
       if plan == cast.ritual and com then com.casts = (com.casts and (com.casts .. ", ") or "") .. cast.text end
     end
   end
-  coe5.dataFolder(game.id)
+  Store.dataFolder(game.id)
   local key = recordName(r.turn, r.slot)
-  if not coe5.writeIni(key, Records.toIni(r)) then   -- CoE5SE logged why (lua_refused)
+  if not Store.writeIni(key, Records.toIni(r)) then
     coe5.log(string.format("inspector_record_not_written turn=%d player=%d", r.turn, r.slot))
   end
   game.cache[key] = nil
 end
 
--- At a player's turn start and the month's start: the AI turns before it are over, battles included.
 function Ins.settleRecords()
+  if not game then pending = {} return end
+  if not Store.countSome(COUNT_SLICE) then return end
   local list = pending
   pending = {}
-  if not game then return end
   for _, r in ipairs(list) do Ins.writeSettled(r) end
+  Store.save()
 end
 
 -- ---- What the screens show -----------------------------------------------------------------------
-local viewSlot   -- the AI whose records the screens show first
-local lastCommander   -- {slot, c}: the commander screen opened last, for its arrows
+local viewSlot
+local lastCommander
 
 local function aiSlots()
   local out = {}
@@ -1688,7 +1927,6 @@ local function aiSlots()
   return out
 end
 
--- The AIs with records that are no longer in the game (eliminated), by slot.
 local function goneSlots()
   local out = {}
   if not game or (playAs and playAs.active) then return out end
@@ -1700,7 +1938,6 @@ local function goneSlots()
   return out
 end
 
--- The Observer's map shows `slot`'s sight (nil: the seat's own). Only on the Observer's own turn:
 function Ins.observerSeatNow()
   local seat = coe5.get("activePlayer")
   if not seat or seat < 0 or (playAs and playAs.active) then return nil end
@@ -1709,7 +1946,6 @@ function Ins.observerSeatNow()
   return seat
 end
 
--- The Observer's map shows `slot`'s sight (nil: its own view).
 local function showView(slot)
   local seat = Ins.observerSeatNow()
   if not seat then return end
@@ -1719,7 +1955,7 @@ local function showView(slot)
   end
   sightShown = nil
   if Ins.revealOn and rawget(coe5, "revealMap") then
-    if not seatKept then   -- keep the seat's own sight first: any AI's sight shown, then revealed over
+    if not seatKept then
       local other = nil
       for s2 = 0, 31 do
         if s2 ~= seat and isController(s2, coe5.controller.ai) then other = s2 break end
@@ -1733,10 +1969,8 @@ local function showView(slot)
   end
 end
 
--- The Observer's own view is the whole map, every plane (coe5.revealMap), during its turns only.
 Ins.revealOn = true
 
--- The view of the Observer's turn, at its start.
 function Ins.applyView(turnStart)
   if not Ins.observerSeatNow() then return end
   if Ins.appliedTurn == coe5.turn() and not turnStart then return end
@@ -1748,7 +1982,6 @@ function Ins.applyView(turnStart)
   showView(sightShown)
 end
 
--- The Observer's turn ends: its own sight back for the AI turns (sightShown is kept for the next turn).
 function Ins.endObserverTurn()
   local seat = Ins.observerSeatNow()
   if seat and seatKept then
@@ -1758,17 +1991,16 @@ function Ins.endObserverTurn()
   end
 end
 
--- The scope line while an AI is played ("Play as AI: X only"); nil otherwise.
 local function scopeName()
   if playAs and playAs.active then
     return "Play as AI: " .. (playerLabel(playAs.slot)) .. " only"
   end
 end
 
--- The two fixed status lines every screen shows.
 local function statusLines()
   local recording
   local gaps = game and game.offTurns ~= "" and (" (off: " .. Records.spansText(game.offTurns) .. ")") or ""
+  if game and game.rolledBefore then gaps = gaps .. string.format(" (before turn %d deleted for room)", game.rolledBefore) end
   if not settings.recording then
     recording = "Recording off (Settings)"
   elseif game and game.firstRecorded then
@@ -1779,8 +2011,8 @@ local function statusLines()
   return "Read only: the AIs play as they would without the AI Inspector.", recording .. "." .. (scopeName() and (" " .. scopeName() .. ".") or "")
 end
 
--- Why there is no record of `turn`.
 local function missingReason(turn)
+  if game and game.rolledBefore and turn < game.rolledBefore then return "deleted for room (records full)" end
   if game and game.firstRecorded and turn < game.firstRecorded then
     return string.format("before turn %d, the first with recording on", game.firstRecorded)
   end
@@ -1790,30 +2022,31 @@ local function missingReason(turn)
   return "not recorded (recording off, or no AI turn)"
 end
 
--- Every key, the same on every screen.
-
 local ID_K_BACK, ID_K_NEXT_AI, ID_K_NEXT_COM, ID_K_PREV_COM, ID_K_OLDER, ID_K_LATER, ID_K_NEXT_PAGE, ID_K_PREV_PAGE,
   ID_K_OFFERS, ID_K_SETTINGS = 9, 11, 12, 13, 14, 15, 16, 17, 18, 19
 local ID_AI_FIRST, ID_COM_FIRST = 100, 1000
-local ID_TURN_FIRST = 50000   -- the commander screen's history lines: 50000 + the turn
-local ID_VIEW_ARMY, ID_VIEW_FIRST = 64, 40000   -- View army: the commander screen's; commanders here's, 40000 + the row
--- A living commander's square now, or nil: where its army stands for View army.
+local ID_TURN_FIRST = 50000
+local ID_VIEW_ARMY, ID_VIEW_FIRST = 64, 40000
+Ins.ID_GO_TO = 65
 function Ins.armySquare(c)
   local unit = coe5.get("commanderUnit", c) or -1
   if unit < 0 or (coe5.get("unitHp", unit) or 0) <= 0 then return nil end
   return coe5.get("unitX", unit), coe5.get("unitY", unit)
 end
--- The game's army view of commander c's army.
 function Ins.viewArmy(c)
   local x, y = Ins.armySquare(c)
   local view = rawget(coe5, "viewArmy")
   if x and view then view(x, y) end
 end
 
--- A screen line cut at spaces into lines that fit its box.
 local SAY_CHARS = 150
-function Ins.say(id, text)
-  for _, piece in ipairs(Records.wrapText(text, SAY_CHARS)) do coe5.ui.text(id, piece) end
+function Ins.say(id, text, cut)
+  local pieces = cut and {text} or Records.wrapText(text, SAY_CHARS)
+  for _, piece in ipairs(pieces) do
+    local parts = Records.iconParts(piece, Ins.resNames())
+    if parts then Ins.partsLine(id, cut and Records.cutParts(parts, cut) or parts)
+    else coe5.ui.text(id, cut and Ins.chars(piece, cut) or piece) end
+  end
 end
 
 local function button(id, label, key)
@@ -1821,72 +2054,87 @@ local function button(id, label, key)
   if key == "Esc" then coe5.ui.bindEscape(id) elseif key then coe5.ui.bindKey(id, string.byte(key)) end
 end
 
--- A key with no button line: the key strip names it (the button row stacks one line per button).
 local function bindOnly(id, key) coe5.ui.bindKey(id, string.byte(key)) end
 
 local function keyStrip(keys) coe5.ui.text(0, "Keys: " .. keys .. ", Esc back") end
 
-local SCREEN_WIDTH = 860   -- of the game's 914 UI units; text wraps a little past the sections, so less than 880
-local ROW_WIDTH = 800      -- a coloured row, inside its section
-local ID_TIP = 21   -- a line with hover text: clicking it does nothing
+local SCREEN_WIDTH = 860
+local ROW_WIDTH = 800
+local ID_TIP = 21
 local function frame(title)
+  Ins.fromScreen = true
   coe5.ui.screenBegin(title)
   coe5.ui.screenWidth(SCREEN_WIDTH)
   local a, b = statusLines()
-  if not settings.recording then   -- the one status a screen can't show otherwise
+  if not settings.recording then
     coe5.ui.text(ID_TIP, "Recording off (Settings)")
     coe5.ui.tooltip(a .. " " .. b)
   end
 end
 
--- A row of cells at fixed columns, on a gold background when highlighted.
-local function tableRow(id, columns, cells, highlighted, tip, tipCol)   -- tipCol: the hover text on that cell only
+function Ins.drawParts(id, parts, tip)
+  if type(parts) == "string" then parts = Records.iconParts(parts, Ins.resNames()) or {parts} end
+  local icon = rawget(coe5.ui, "resourceIcon")
+  for k, p in ipairs(parts) do
+    if type(p) == "string" and icon and type(parts[k + 1]) == "table" then p = p:gsub(" $", "") end
+    if type(p) == "table" and icon then
+      icon(id, p.res)
+      coe5.ui.tooltip(p.name)
+    elseif type(p) == "table" then
+      coe5.ui.text(id, p.name .. " ")
+    elseif p ~= "" then
+      coe5.ui.text(id, p)
+      if tip then coe5.ui.tooltip(tip) end
+    end
+  end
+end
+function Ins.partsLine(id, parts)
+  coe5.ui.rowBegin(id, ROW_WIDTH)
+  Ins.drawParts(id, parts)
+  coe5.ui.rowEnd()
+end
+
+local function tableRow(id, columns, cells, highlighted, tip, tipCol)
   if highlighted then coe5.ui.rowBegin(id, ROW_WIDTH, 0.878, 0.690, 0.282, 0.55) else coe5.ui.rowBegin(id, ROW_WIDTH) end
   for i, cell in ipairs(cells) do
     coe5.ui.columnX(columns[i])
-    coe5.ui.text(id, cell)
-    if tip and (not tipCol or tipCol == i) then coe5.ui.tooltip(tip) end
+    Ins.drawParts(id, cell, tip and (not tipCol or tipCol == i) and tip or nil)
   end
   coe5.ui.rowEnd()
 end
 
--- Go to a square: the map centred there, and every inspector screen closes.
-Ins.goRows = {}   -- this frame's rows that go to a square: id -> {x, y, columns =, col =} or {x, y, span = {from, to}}
+Ins.goRows = {}
 function Ins.goToSquare(x, y)
   Ins.goTo = {x = x, y = y}
   local centerMap = rawget(coe5, "centerMap")
   if centerMap then centerMap(x, y) end
   coe5.log(string.format("inspector_go_to x=%d y=%d", x, y))
 end
--- A row (id) that goes to square (x, y).
-function Ins.goRow(id, x, y, columns, col)
-  if x and y then Ins.goRows[id] = {x, y, columns = columns, col = col} end
-end
--- A screen's rows start this far left of the UI's middle (the screen is centred; 50 at the 914 wide UI).
+function Ins.goRow(_id, _x, _y, _columns, _col) end
 Ins.ROW_FROM_MIDDLE = 407
 function Ins.rowLeft() return (coe5.get("screenW") or 914) / 2 - Ins.ROW_FROM_MIDDLE end
--- After a screen's wait: a click on a place goes to its square; true when it did.
 function Ins.clickGo(id)
   local rows = Ins.goRows
   Ins.goRows = {}
-  local row = rows[math.abs(id)]
-  if not row or id == 0 then return false end
-  if id > 0 then
-    local px = coe5.get("uiPointerX")
-    local hit
-    if not row.columns then hit = true   -- the place's own element
-    else hit = Records.columnAt(row.columns, Ins.rowLeft(), ROW_WIDTH, px) == row.col end
-    coe5.log(string.format("inspector_go_click id=%d px=%s hit=%s", id, tostring(px), tostring(hit)))
-    if not hit then return false end
-  end
+  local row = rows[id]
+  if not row or id <= 0 then return false end
+  local px = coe5.get("uiPointerX")
+  local hit
+  if not row.columns then hit = true
+  else hit = Records.columnAt(row.columns, Ins.rowLeft(), ROW_WIDTH, px) == row.col end
+  coe5.log(string.format("inspector_go_click id=%d px=%s hit=%s", id, tostring(px), tostring(hit)))
+  if not hit then return false end
   Ins.goToSquare(row[1], row[2])
   return true
+end
+function Ins.rowClick(id, first)
+  if id < 0 and -id >= first then return -id end
+  return id
 end
 
 
 local function names(by) return (tostring(by):gsub(",", ", ")) end
 
--- What the commander did, in words: where it holds or heads, or why it made no move.
 local function resultLine(com)
   local kind = tonumber(com.kind) or -1
   local where = com.finish_place or "?"
@@ -1908,7 +2156,6 @@ local function resultLine(com)
   return (moved and "Moved to " or "Rested at ") .. where .. (why and ("; " .. why) or "")
 end
 
--- The step grid of one AI over its last HISTORY_TURNS turns up to `turn`.
 local function aiGrid(slot, turn)
   local turns, byTurn = {}, {}
   for t = math.max(turn - HISTORY_TURNS + 1, 0), turn do
@@ -1928,7 +2175,6 @@ local function aiGrid(slot, turn)
     if fa ~= fb then return fa < fb end
     return a.c < b.c
   end)
-  -- Commanders of the earlier turns that died or left: after the living, newest first.
   for i = #turns, 1, -1 do
     local tr = byTurn[turns[i]]
     local more = {}
@@ -1947,7 +2193,6 @@ local function aiGrid(slot, turn)
   return turns, rows, totals, list, byTurn
 end
 
--- The flags the mod counts for a turn, as facts.
 local function flagsOf(r)
   local flags = {}
   if (r.leader or -1) < 0 then flags[#flags + 1] = "leader dead, still playing" end
@@ -1966,8 +2211,7 @@ local function flagsOf(r)
   return flags
 end
 
--- The AI table's cells for one AI, and the turn box's lines.
-local landNow = {}   -- {["turn:slot"] = {land, citadels}} for AIs with no record yet
+local landNow = {}
 local function aiInfo(s)
   local name, class = playerLabel(s)
   local turn, r = latestRecord(s)
@@ -1976,7 +2220,6 @@ local function aiInfo(s)
   local function income(res) return coe5.get("slotAiIncome", s, res) or coe5.get("slotIncome", s, res) or 0 end
   if not r then
     if gone then return {name .. ", " .. class, "not recorded"}, nil end
-    -- No record yet (a fresh folder, a first played turn): the numbers now (land counted once a turn).
     local key = coe5.turn() .. ":" .. s
     landNow[key] = landNow[key] or {landOf(s)}
     local land, citadels = landNow[key][1], landNow[key][2]
@@ -1984,7 +2227,7 @@ local function aiInfo(s)
     for _ in pairs(commandersOf(s)) do n = n + 1 end
     local cells = {name .. ", " .. class, string.format("%d (%+d)", coe5.get("slotResource", s, 0), income(0)),
       string.format("%d (%+d)", coe5.get("slotResource", s, 1), income(1)), tostring(land), tostring(citadels), tostring(n), ""}
-    return cells, {"No AI turn yet: the numbers above are the current ones.", Records.tradeText(tradeItems(s))}, nil
+    return cells, {"No AI turn yet: the numbers above are the current ones.", Records.tradeText(tradeItems(s), Ins.tradePower(s))}, nil
   end
   local flags = flagsOf(r)
   if gone then table.insert(flags, 1, string.format("eliminated after turn %d", turn)) end
@@ -2015,20 +2258,17 @@ local function aiInfo(s)
     string.format("End of turn %d, after its battles: %s.", turn, Records.resJoin(Records.resFromRecord(r))) .. (human and string.format(" As a human now: %+d, with no AI bonus.",
       coe5.get("slotIncome", s, 0) or 0) or ""),
   }
-  -- The trade: now for a living AI (its next turn start is ahead); none for an eliminated one.
   if not gone then
-    lines[#lines + 1] = Records.tradeText(tradeItems(s)) .. " Trade and the AI's own moves change the gold after income."
+    lines[#lines + 1] = Records.tradeText(tradeItems(s), Ins.tradePower(s)) .. " Trade and the AI's own moves change the gold after income."
   end
   return cells, lines, turn
 end
 
 local openReasoning, openOffers, openSettings, openOverview
 
-do   -- the overview: its locals end with it
--- A text cut to `n` characters with "..".
+do
 function Ins.chars(text, n) return #text > n and (text:sub(1, n - 2) .. "..") or text end
-local overviewPages   -- the grid's pages as last drawn
--- The overview: every AI in one table, then the shown AI's summary and grid.
+local overviewPages
 local OV_COLUMNS = {0, 95, 195, 265, 330, 380, 430, 495, 540, 705}
 local GRID_COLUMNS = {0, 230, 320, 410, 500, 590, 680, 760}
 function Ins.aiRow(s)
@@ -2038,7 +2278,8 @@ function Ins.aiRow(s)
   if not alive then return {name, class, r and string.format("eliminated after turn %d", turn) or "eliminated"} end
   local res = Ins.resNow(s)
   local cells = {name, class, Records.resText(res[1].stock, res[1].income), Records.resText(res[2].stock, res[2].income)}
-  cells[9] = Ins.chars(Records.resJoin(res, 3), 28)
+  local others = Records.resJoin(res, 3, true)
+  cells[9] = Records.cutParts(Records.iconParts(others, Ins.resNames()) or {others}, 28)
   if not r then
     cells[5] = "no AI turn yet"
     for i = 6, 8 do cells[i] = "" end
@@ -2059,9 +2300,9 @@ function openOverview()
   Ins.goTo = nil
   local page = 0
   while true do
-    if Ins.closeScreens then return end   -- a sub-screen ended the turn
+    if Ins.closeScreens then return end
     local slots = aiSlots()
-    for _, s in ipairs(goneSlots()) do slots[#slots + 1] = s end   -- eliminated AIs after the living
+    for _, s in ipairs(goneSlots()) do slots[#slots + 1] = s end
     local at = 1
     for i, s in ipairs(slots) do if s == viewSlot then at = i end end
     viewSlot = slots[at]
@@ -2073,7 +2314,6 @@ function openOverview()
     for _, s in ipairs(slots) do tableRow(ID_AI_FIRST + s, OV_COLUMNS, Ins.aiRow(s), s == viewSlot) end
     if #slots == 0 then Ins.say(0, "No AI players") end
     coe5.ui.sectionEnd()
-    -- The shown AI's section, at a fixed size.
     local grid = 0
     local turn, r, lines
     if viewSlot then
@@ -2086,14 +2326,13 @@ function openOverview()
     end
     if r then
       local alive = isController(viewSlot, coe5.controller.ai) or isController(viewSlot, coe5.controller.human)
-      -- The other resources, in one line.
-      local others = Records.resJoin(alive and Ins.resNow(viewSlot) or Records.resFromRecord(r), 3)
-      Ins.say(0, Ins.chars(string.format("Turn %d: %s (%s gold at recruiting).%s %s", turn,
+      local others = Records.resJoin(alive and Ins.resNow(viewSlot) or Records.resFromRecord(r), 3, true)
+      Ins.say(0, string.format("Turn %d: %s (%s gold at recruiting).%s %s", turn,
         #r.buys > 0 and ("bought " .. Records.whoText(table.concat(r.buys, ", "))) or "bought nothing", tostring(r.gold_at_buy or "?"),
         others ~= "" and (" " .. others .. ".") or "",
-        isController(viewSlot, coe5.controller.ai) and Records.tradeText(tradeItems(viewSlot)) or ""), 140))
-      Ins.say(0, Ins.chars((lines and lines[1] or ""):gsub("^Turn %d+", ""):gsub("^[,%s]*", ""):gsub("^%l", string.upper)
-        .. " " .. (lines and lines[2] or ""), 140))   -- one line, as the first
+        isController(viewSlot, coe5.controller.ai) and Records.tradeText(tradeItems(viewSlot), Ins.tradePower(viewSlot)) or ""), 140)
+      Ins.say(0, (lines and lines[1] or ""):gsub("^Turn %d+", ""):gsub("^[,%s]*", ""):gsub("^%l", string.upper)
+        .. " " .. (lines and lines[2] or ""), 140)
     else
       Ins.say(0, lines and lines[1] or "No AI players")
       Ins.say(0, lines and lines[2] or "")
@@ -2102,7 +2341,7 @@ function openOverview()
     if r then turns, rows, totals, list = aiGrid(viewSlot, turn) end
     local perPage = math.max(3, 19 - #slots)
     local pages = math.max(1, math.ceil(#rows / perPage))
-    if page >= pages then page = 0 end   -- the page line's click wraps to the first
+    if page >= pages then page = 0 end
     overviewPages = pages
     local heads = {}
     for i, t in ipairs(turns) do heads[i] = "Turn " .. t end
@@ -2137,7 +2376,6 @@ function openOverview()
     end
     local totalsText = r and string.format("Totals over %d turns: %s.", #turns, #parts > 0 and table.concat(parts, ", ") or "none")
       or "Totals: none."
-    -- The line clicks to the next page when there is one; a row either way, so its height never changes.
     coe5.ui.rowBegin(0, ROW_WIDTH)
     coe5.ui.text(ID_TIP, totalsText)
     if pages > 1 then
@@ -2151,7 +2389,7 @@ function openOverview()
     coe5.ui.rowEnd()
     coe5.ui.sectionEnd()
     Ins.say(0, partner and "Click a commander: its reasoning.   v offers and buys   e settings"
-      or "Click a player: its commanders below and its view on the map. Click a commander: its reasoning.   g next AI   v offers   e settings")
+      or ("Click a player: its commanders below. Click a commander: its reasoning." .. (#slots > 1 and "   g next AI" or "") .. "   v offers   e settings"))
     coe5.ui.buttonRow()
     if #slots > 1 then bindOnly(ID_K_NEXT_AI, "g") end
     bindOnly(ID_K_PREV_PAGE, "z")
@@ -2162,16 +2400,15 @@ function openOverview()
     local id = coe5.ui.wait()
     if Ins.closeScreens then return end
     if id == ID_K_BACK or Ins.clickGo(id) then return end
+    id = Ins.rowClick(id, ID_AI_FIRST)
     if id == ID_K_NEXT_AI and #slots > 0 then
       viewSlot, page = slots[at % #slots + 1], 0
-      if sightShown and isController(viewSlot, coe5.controller.ai) then showView(viewSlot) end
     elseif id == ID_K_NEXT_PAGE then page = (page + 1) % math.max(overviewPages or 1, 1)
     elseif id == ID_K_PREV_PAGE then page = (page - 1) % math.max(overviewPages or 1, 1)
     elseif id == ID_K_OFFERS then openOffers()
     elseif id == ID_K_SETTINGS then openSettings()
     elseif id >= ID_AI_FIRST and id < ID_AI_FIRST + 32 then
       viewSlot, page = id - ID_AI_FIRST, 0
-      if isController(viewSlot, coe5.controller.ai) then showView(viewSlot) end
     elseif id >= ID_COM_FIRST then openReasoning(viewSlot, id - ID_COM_FIRST)
     end
     if Ins.goTo then return end
@@ -2183,13 +2420,13 @@ end
 local OFFERS_PER_LINE = 5
 function openOffers()
   while true do
-    if Ins.closeScreens then return end   -- a sub-screen ended the turn
+    if Ins.closeScreens then return end
     local turn, r = latestRecord(viewSlot or -1)
     local name = viewSlot and (playerLabel(viewSlot)) or "?"
     frame("AI Inspector: offers")
     coe5.ui.sectionBegin(string.format("%s, %s", name, turn and ("turn " .. turn) or "not recorded"))
     if r then
-      Ins.say(0, string.format("Gold at recruiting %s. Recruiting: %s.", tostring(r.gold_at_buy or "?"), r.buy_step or "not reached"))
+      Ins.say(0, string.format("Gold %s at recruiting. Recruiting: %s.", tostring(r.gold_at_buy or "?"), r.buy_step or "not reached"))
       Ins.say(0, "Bought: " .. (#r.buys > 0 and Records.whoText(table.concat(r.buys, ", ")) or "nothing"))
       coe5.ui.text(ID_TIP, "Recruitment offers left (count, unit, gold each):" .. (#r.offers_left == 0 and " none" or ""))
       coe5.ui.tooltip("The offers change at each player's turn start: these are turn " .. turn .. "'s. The list holds every offer, "
@@ -2214,7 +2451,6 @@ function openOffers()
   end
 end
 
--- The "changed by" of a commander's turn, for the history: the mods (or you) that changed any step.
 local function changedByOf(com)
   local seen, out = {}, {}
   for _, p in ipairs(com.plans or {}) do
@@ -2230,7 +2466,6 @@ local function changedByOf(com)
   return #out > 0 and table.concat(out, ", ") or "none"
 end
 
--- Why commander c has no entry in slot's record of `turn`.
 local function absentReason(slot, c, turn)
   for t = turn - 1, math.max(turn - 20, 0), -1 do
     local r = readRecord(t, slot)
@@ -2245,27 +2480,32 @@ local function absentReason(slot, c, turn)
   return "not in this AI's army yet"
 end
 
-do   -- the commander screen: its locals end with it
--- A table's head row: dark, the column names.
+do
 function Ins.headRow(columns, cells, tip)
   coe5.ui.rowBegin(0, ROW_WIDTH, 0.23, 0.17, 0.11, 0.16)
+  local resNamesNow = Ins.resNames()
   for i, cell in ipairs(cells) do
     coe5.ui.columnX(columns[i])
-    coe5.ui.text(ID_TIP, cell)
-    if tip then coe5.ui.tooltip(tip) end
+    local res
+    for t = 0, Records.RESOURCES - 1 do if resNamesNow[t] == cell then res = t end end
+    if res and rawget(coe5.ui, "resourceIcon") then
+      coe5.ui.resourceIcon(ID_TIP, res)
+      coe5.ui.tooltip(cell .. (tip and (". " .. tip) or ""))
+    else
+      coe5.ui.text(ID_TIP, cell)
+      if tip then coe5.ui.tooltip(tip) end
+    end
   end
   coe5.ui.rowEnd()
 end
 
--- A place without its plane: "39,19 Silver Mine".
 function Ins.short(place) return (tostring(place or ""):gsub(" %b()$", "")) end
 
--- One commander's turn: what it did, its move steps, its turns and its AI's commanders.
 local STEP_COLUMNS = {0, 130, 200, 440, 580}
 local TURN_COLUMNS = {0, 60, 190, 250, 450, 650, 730}
 local COM_COLUMNS = {0, 300, 420, 620}
-local HEAD_REST_X = 180   -- the header sentence's x, after its place
-local ID_GO_HEAD, ID_GO_STEP = 22, 23   -- the header's place; the move steps' rows, 23 + the step's index
+local HEAD_REST_X = 180
+local ID_GO_HEAD, ID_GO_STEP = 22, 23
 function openReasoning(slot, c)
   Ins.goTo = nil
   lastCommander = {slot = slot, c = c}
@@ -2278,25 +2518,23 @@ function openReasoning(slot, c)
     local slotName = (playerLabel(slot))
     frame("AI Inspector: commander")
     local shownName = com and com.name
-    for back = turn - 1, math.max(turn - 20, 0), -1 do   -- a dead commander's name, from its last record
+    for back = turn - 1, math.max(turn - 20, 0), -1 do
       if shownName then break end
       local br = readRecord(back, slot)
       shownName = br and br.coms[c] and br.coms[c].name
     end
     coe5.ui.sectionBegin(string.format("%s, %s's commander, turn %d", shownName or commanderLabel(c), slotName, turn))
-    if not r or not com then   -- the same three lines as a recorded turn, so the screen keeps its size
+    if not r or not com then
       Ins.say(0, string.format("Turn %d: %s.", turn, r and absentReason(slot, c, turn) or missingReason(turn)))
       Ins.say(0, "Troops picked up or split off: -.")
       Ins.say(0, "Rituals considered for a plan: -.")
     else
       local moved = com.start and com.finish and com.start ~= com.finish and com.finish ~= "-1 -1"
-      -- The header's place: the target it heads or explores toward, else where it ended.
       local toTarget = (tonumber(com.kind) or -1) == 1 or (tonumber(com.kind) or -1) == 2
       local hx, hy = Records.squareAt(toTarget and com.target or com.finish)
       local headText = string.format("%s.%s%s Played by %s.", resultLine(com), moved and (" Moved from " .. Ins.short(com.start_place) .. ".") or "",
         (tonumber(com.strength) or -1) >= 0 and (" Strength " .. com.strength .. ".") or "",
         Records.whoText(com.played_by or "AI"))
-      -- The place, an element of its own at the line's start.
       local headPlace = tostring(toTarget and com.target_place or com.finish_place or "")
       local from, to = headText:find(headPlace, 1, true)
       if not from then from, to = headText:find(Ins.short(headPlace), 1, true) end
@@ -2311,10 +2549,9 @@ function openReasoning(slot, c)
         coe5.ui.text(0, Ins.chars(headText, 140))
       end
       coe5.ui.rowEnd()
-      -- Each header line is cut to one line, so the screen keeps its three (a long buy list wrapped it).
-      Ins.say(0, Ins.chars(string.format("Troops picked up or split off: %s. %s bought: %s. Gold %s at recruiting, %s at the turn's end.",
+      Ins.say(0, string.format("Troops picked up or split off: %s. %s bought: %s. Gold %s at recruiting, %s at the turn's end.",
         #com.troops > 0 and Records.whoText(Records.counted(com.troops)) or "none", slotName,
-        #r.buys > 0 and Records.whoText(table.concat(r.buys, ", ")) or "nothing", tostring(r.gold_at_buy or "?"), tostring(r.gold_end or "?")), 140))
+        #r.buys > 0 and Records.whoText(table.concat(r.buys, ", ")) or "nothing", tostring(r.gold_at_buy or "?"), tostring(r.gold_end or "?")), 140)
       local bits = {}
       if #com.rituals > 0 then
         local counts, order, parts = {}, {}, {}
@@ -2336,7 +2573,6 @@ function openReasoning(slot, c)
       Ins.say(0, Ins.chars(table.concat(bits, " "), 140))
     end
     coe5.ui.sectionEnd()
-    -- The move steps, at a fixed size.
     local plans = com and com.plans or {}
     local last = plans[#plans]
     local winner, best, nextScore, nextStep
@@ -2347,7 +2583,6 @@ function openReasoning(slot, c)
     local noPlan = not r and "not recorded" or not com and "-" or (Records.gridCell(com):gsub("^%u", string.lower))
     coe5.ui.sectionBegin(last and string.format("Move steps, plan %d of %d", #plans, #plans) or ("Move steps: " .. noPlan))
     do
-      -- Planned again: the earlier plans go in the head row's hover text, so the rows stay put.
       local earlierText = ""
       if #plans > 1 then
         local earlier = {}
@@ -2366,12 +2601,12 @@ function openReasoning(slot, c)
         local cells = {STEP_NAME[step], "-", "", "", ""}
         local goId, tip = 0, nil
         if not last then
-          cells[5] = "-"   -- the section's title says why
+          cells[5] = "-"
         elseif why then
           cells[5] = why
         elseif e then
           local f = e.final or {}
-          cells[2] = tostring(f[1] or 0)   -- the Square column says "no square" for -999
+          cells[2] = tostring(f[1] or 0)
           cells[3] = (f[2] or -1) >= 0 and Ins.short(e.place) or "no square"
           cells[4] = e.seen or ""
           if step == winner then cells[5] = "won"
@@ -2379,7 +2614,7 @@ function openReasoning(slot, c)
           elseif (f[2] or -1) < 0 then cells[5] = "no square"
           else cells[5] = "lower" end
           if e.by then cells[5] = cells[5] .. " (" .. Records.whoText("by " .. names(e.by)) .. "; the game: " .. (e.game and Records.answerWords(e.game) or "not run") .. ")" end
-          if (f[2] or -1) >= 0 and (f[3] or -1) >= 0 then   -- the Square column goes there
+          if (f[2] or -1) >= 0 and (f[3] or -1) >= 0 then
             goId, tip = ID_GO_STEP + i, Records.goText(e.place)
             Ins.goRow(goId, f[2], f[3], STEP_COLUMNS, 3)
           end
@@ -2388,9 +2623,8 @@ function openReasoning(slot, c)
       end
       coe5.ui.sectionEnd()
     end
-    -- The turns around the one on screen, one row each.
     local first = math.max(game and game.firstRecorded or 0, 0)
-    local newest = math.max(latest or turn, coe5.turn() - 1)   -- a turn not recorded since says why
+    local newest = math.max(latest or turn, coe5.turn() - 1)
     local window = Records.window(turn, math.min(first, turn), newest, 5)
     table.sort(window)
     coe5.ui.sectionBegin(string.format("Turns %d to %d: click one to show it (o / l)", window[1] or turn, window[#window] or turn))
@@ -2405,22 +2639,20 @@ function openReasoning(slot, c)
       else
         local w, b
         if hc.plans[#hc.plans] then w, b = Records.pick(hc.plans[#hc.plans], "final") end
-        cells = {tostring(t), w and STEP_NAME[w] or (Records.gridCell(hc):gsub("^%u", string.lower)),   -- the grid's word
+        cells = {tostring(t), w and STEP_NAME[w] or (Records.gridCell(hc):gsub("^%u", string.lower)),
           b and tostring(b) or "", hc.target and hc.target ~= "-1 -1" and Ins.short(hc.target_place) or "",
           hc.finish == "-1 -1" and "died" or Ins.short(hc.finish_place), hc.played_by == "you" and "human" or "AI",
           #hc.plans > 1 and (#hc.plans .. " (planned again)") or tostring(#hc.plans)}
       end
       local tx, ty = Records.squareAt(hc and hc.target)
-      Ins.goRow(ID_TURN_FIRST + t, tx, ty, TURN_COLUMNS, 4)   -- the Target column
+      Ins.goRow(ID_TURN_FIRST + t, tx, ty, TURN_COLUMNS, 4)
       tableRow(ID_TURN_FIRST + t, TURN_COLUMNS, cells, t == turn, tx and Records.goText(hc.target_place), 4)
       ::nextTurn::
     end
     coe5.ui.sectionEnd()
-    -- Its AI's commanders that turn.
     local list = {}
     if r then list = select(4, aiGrid(slot, turn)) end
     do
-      -- Always 6 rows, around the shown commander (empty ones fill a short list); n and j reach the rest.
       local at = 1
       for i, other in ipairs(list) do if other.c == c then at = i end end
       local from = math.max(1, math.min(at - 2, #list - 5))
@@ -2439,12 +2671,11 @@ function openReasoning(slot, c)
         elseif (tonumber(other.strength) or -1) >= 0 then note = "strength " .. other.strength
         else note = "" end
         local ox, oy = Records.squareAt(other.finish)
-        Ins.goRow(ID_COM_FIRST + other.c, ox, oy, COM_COLUMNS, 3)   -- the Ended at column
+        Ins.goRow(ID_COM_FIRST + other.c, ox, oy, COM_COLUMNS, 3)
         tableRow(ID_COM_FIRST + other.c, COM_COLUMNS, {other.name or commanderLabel(other.c), (cell:gsub("^%u", string.lower)),
           other.finish == "-1 -1" and "died" or Ins.short(other.finish_place), note}, other.c == c, ox and Records.goText(other.finish_place), 3)
         ::nextCommander::
       end
-      -- The list's two controls, each a click of its own (n and j too); a row either way.
       coe5.ui.rowBegin(0, ROW_WIDTH)
       if #list > 1 then
         coe5.ui.text(ID_K_PREV_COM, "< Previous commander (j)")
@@ -2453,11 +2684,17 @@ function openReasoning(slot, c)
       else
         coe5.ui.text(0, "")
       end
-      if Ins.armySquare(c) and rawget(coe5, "viewArmy") then   -- the shown commander's army, where it stands now
+      if Ins.armySquare(c) and rawget(coe5, "viewArmy") then
         coe5.ui.columnX(420)
         coe5.ui.text(ID_VIEW_ARMY, "View army (v)")
         coe5.ui.tooltip("Its army on the battlefield, as a right click on it shows it")
         coe5.ui.bindKey(ID_VIEW_ARMY, string.byte("v"))
+      end
+      if Ins.armySquare(c) then
+        coe5.ui.columnX(560)
+        coe5.ui.text(Ins.ID_GO_TO, "Go to (t)")
+        coe5.ui.tooltip("Closes the screens: the map on this commander, in its AI's view")
+        coe5.ui.bindKey(Ins.ID_GO_TO, string.byte("t"))
       end
       coe5.ui.rowEnd()
       coe5.ui.sectionEnd()
@@ -2471,7 +2708,17 @@ function openReasoning(slot, c)
     local id = coe5.ui.wait()
     if Ins.closeScreens then return end
     if id == ID_K_BACK or Ins.clickGo(id) then return end
-    if id == ID_VIEW_ARMY then Ins.viewArmy(c)   -- back on this screen after
+    id = Ins.rowClick(id, ID_COM_FIRST)
+    if id == Ins.ID_GO_TO and Ins.armySquare(c) then
+      local x, y = Ins.armySquare(c)
+      if isController(slot, coe5.controller.ai) then
+        viewSlot = slot
+        showView(slot)
+      end
+      Ins.goToSquare(x, y)
+      return
+    end
+    if id == ID_VIEW_ARMY then Ins.viewArmy(c)
     elseif id >= ID_TURN_FIRST then turn = id - ID_TURN_FIRST
     elseif id >= ID_COM_FIRST then c = id - ID_COM_FIRST; lastCommander = {slot = slot, c = c}
     elseif id == ID_K_OLDER and turn > 0 then turn = turn - 1
@@ -2490,7 +2737,6 @@ end
 
 end
 
--- The commanders of every AI on square (x, y): {{c =, slot =}}.
 function Ins.aiCommandersAt(x, y)
   local found = {}
   for c = 0, coe5.get("commanderLastIndex") do
@@ -2503,9 +2749,8 @@ function Ins.aiCommandersAt(x, y)
   return found
 end
 
--- The commanders of every AI on square (x, y), to pick one.
 local CHOOSER_COLUMNS = {0, 280, 380, 480, 640, 745}
-local CHOOSER_ROWS = 6   -- rows always drawn, empty ones included
+local CHOOSER_ROWS = 6
 local function openChooser(x, y)
   Ins.goTo = nil
   local found = Ins.aiCommandersAt(x, y)
@@ -2527,7 +2772,7 @@ local function openChooser(x, y)
         tip = tx and Records.goText(com.target_place)}
     end
     for _, row in ipairs(Records.fixedRows(rows, CHOOSER_ROWS, {id = ID_TIP, cells = {"None"}})) do
-      if row and row.c and Ins.armySquare(row.c) and rawget(coe5, "viewArmy") then   -- the row, then its View army cell
+      if row and row.c and Ins.armySquare(row.c) and rawget(coe5, "viewArmy") then
         coe5.ui.rowBegin(row.id, ROW_WIDTH)
         for k, cell in ipairs(row.cells) do
           coe5.ui.columnX(CHOOSER_COLUMNS[k])
@@ -2546,8 +2791,9 @@ local function openChooser(x, y)
     local id = coe5.ui.wait()
     if Ins.closeScreens then return end
     if id == ID_K_BACK or Ins.clickGo(id) then return end
+    id = Ins.rowClick(id, ID_COM_FIRST)
     local v = found[id - ID_VIEW_FIRST]
-    if id > ID_VIEW_FIRST and v then Ins.viewArmy(v.c)   -- back on this screen after
+    if id > ID_VIEW_FIRST and v then Ins.viewArmy(v.c)
     else
       local f = id < ID_VIEW_FIRST and found[id - ID_COM_FIRST]
       if f then openReasoning(f.slot, f.c) end
@@ -2556,7 +2802,6 @@ local function openChooser(x, y)
   end
 end
 
--- A confirmation: the title, its lines, Ok (Enter) or Cancel (Esc); true on Ok.
 local ID_OK, ID_NO = 61, 62
 function Ins.confirm(title, lines)
   while true do
@@ -2571,18 +2816,16 @@ function Ins.confirm(title, lines)
     coe5.ui.text(ID_NO, "Cancel (Esc)")
     coe5.ui.bindEscape(ID_NO)
     local id = coe5.ui.wait()
-    if id ~= 0 then return id == ID_OK end   -- Ok; anything else (Cancel, Esc) leaves it as it was
+    if id > 0 then return id == ID_OK end
   end
 end
 
--- After a confirmed pick or Return: the turn ends at once.
 function Ins.startHandover(mode)
   Ins.skip = {untilTurn = math.huge, total = 0, mode = mode, looks = Ins.lookAtAis(), frames = 0}
   Ins.skipNote, Ins.closeScreens = nil, true
   coe5.log(string.format("inspector_handover_start mode=%s turn=%d", mode, coe5.turn()))
 end
 
--- Play as AI's picker (the same ids since AI Test Kit: ai/lib/playas.sh clicks 100 + the slot, then Ok, 61).
 local function openPlayAs()
   while true do
     coe5.ui.screenBegin("Play as AI")
@@ -2623,7 +2866,6 @@ local function openPlayAs()
 end
 
 local returnToAi
--- Play as Observer (returnToAi) asks first, then ends the played turn at once: true when it did.
 function Ins.confirmReturn()
   local name = (playerLabel(playAs.slot))
   if not Ins.confirm("AI Inspector: Play as Observer", {"Play as Observer: " .. name .. " back to the AI",
@@ -2644,7 +2886,6 @@ end
 local function canPickPlayAs()
   return runAiTurn ~= nil and game ~= nil and not (playAs and playAs.active) and isController(coe5.get("activePlayer"), coe5.controller.human)
 end
--- Whether the Observer's seat is still in the game. The game can remove it while it is the AI's (seen:
 function Ins.seatInGame()
   return playAs ~= nil and (isController(playAs.seat, coe5.controller.ai) or isController(playAs.seat, coe5.controller.human))
 end
@@ -2679,9 +2920,10 @@ function openSettings()
     coe5.ui.tooltip("A few milliseconds a turn. The same save and seed with the inspector on and off play the same game.")
     coe5.ui.bindKey(ID_S.RECORDING, string.byte("c"))
     coe5.ui.text(ID_TIP, string.format("Records: %%APPDATA%%\\coe5\\coe5se_data\\JazzyAIObserver\\%s\\ (since turn %s)", game and game.id or "game_NNNN",
-      tostring(game and game.firstRecorded or "?")))
+      tostring(game and game.firstRecorded and math.max(game.firstRecorded, game.rolledBefore or 0) or "?")))
     coe5.ui.tooltip("One file per AI turn: tTTTT_pSS.ini, TTTT the AI turn and SS the player slot; each file's [about] lists its fields. "
-      .. "Loading an earlier save moves the later turns' records to a folder of their own (game_NNNN_left_tTTTT).")
+      .. "Loading an earlier save moves the later turns' records to a folder of their own (game_NNNN_left_tTTTT). "
+      .. "At " .. AREA_MB .. " MB the oldest records are deleted for room: other games' first, then this game's oldest turns.")
     coe5.ui.sectionEnd()
     coe5.ui.sectionBegin("On the map")
     coe5.ui.checkbox(ID_S.LIST, settings.list, "The AI list (l)")
@@ -2693,7 +2935,7 @@ function openSettings()
     coe5.ui.checkbox(ID_S.TOP_BAR, settings.topBar, "Play as AI: the AI's income on the top bar (t)")
     coe5.ui.bindKey(ID_S.TOP_BAR, string.byte("t"))
     coe5.ui.text(ID_S.ARROWS, ARROW_CHOICES[settings.arrows] or ARROW_CHOICES[1])
-    coe5.ui.tooltip("A click or a goes to the next of the three")
+    coe5.ui.tooltip("Click or (a): the next of the three")
     coe5.ui.bindKey(ID_S.ARROWS, string.byte("a"))
     coe5.ui.sectionEnd()
     coe5.ui.buttonRow()
@@ -2725,7 +2967,7 @@ coe5.addGameMenuLine{
   visible = function() return game ~= nil end,
   onClick = function()
     openOverview()
-    return (Ins.closeScreens or Ins.goTo) and coe5.gameMenu.close or coe5.gameMenu.stay   -- closed when a screen in it ended the turn or went to a square
+    return (Ins.closeScreens or Ins.goTo) and coe5.gameMenu.close or coe5.gameMenu.stay
   end,
 }
 coe5.addGameMenuLine{
@@ -2758,19 +3000,17 @@ coe5.addGameMenuLine{
 }
 
 -- ---- The map -------------------------------------------------------------------------------------
--- The map's keys and the clicks kept from the map.
 local MAP_ID = {OPEN = 31001, NEXT_AI = 31003, PREV_AI = 31005, OWN_VIEW = 31006, PICK = 31007, SKIP = 31008, CANCEL = 31009}
 local SQUARE_INFO_IDS = {[96] = true, [0x2a] = true}
 for id = 0x50, 0x58 do SQUARE_INFO_IDS[id] = true end
 local swallowing = false
-local glanceBox   -- where the list was last drawn, for a click on a line: Records.lineAt's box and lines
+local glanceBox
 local function observerSeat()
   local s = coe5.get("activePlayer")
   if not s or s < 0 or (playAs and playAs.active) then return false end
   local cls = coe5.get("slotClass", s)
   return cls and cls > 0 and coe5.get("className", cls) == "Observer"
 end
--- Centres the map on an AI's leader, or its home once the leader is dead.
 local function centerOn(slot)
   local centerMap = rawget(coe5, "centerMap")
   if not centerMap then return end
@@ -2784,16 +3024,12 @@ local function centerOn(slot)
   if not x or x < 0 then x, y = coe5.get("slotHomeX", s), coe5.get("slotHomeY", s) end
   if x and x >= 0 then centerMap(x, y) end
 end
--- The Observer's map shows an AI's view, centred on it.
 local function viewAI(slot)
   viewSlot = slot
   showView(slot)
   centerOn(slot)
 end
-
--- The map's own commands, for its keys and the quick commands in the commander panel.
 local function stepView(dir)
-  -- The next (dir 1) or previous (dir -1) AI; on the Observer's map, past either end its own view.
   local slots = aiSlots()
   local shown = sightShown or (not observerSeat() and viewSlot)
   local at = dir > 0 and 0 or #slots + 1
@@ -2815,7 +3051,6 @@ local function ownView()
   end
 end
 
--- The pick list (Tab on the map): every AI, living and eliminated; a click shows its view.
 local ID_PICK_FIRST = 100
 local function openPick()
   while true do
@@ -2825,13 +3060,13 @@ local function openPick()
     local slots = aiSlots()
     for _, s in ipairs(goneSlots()) do slots[#slots + 1] = s end
     local shown = sightShown
-    if not observerSeat() then shown = viewSlot end   -- the map's view, or off the Observer's map the overview's AI
+    if not observerSeat() then shown = viewSlot end
     for _, s in ipairs(slots) do
       local name, class = playerLabel(s)
       local turn, r = latestRecord(s)
       local alive = isController(s, coe5.controller.ai) or isController(s, coe5.controller.human)
       local res = alive and Ins.resNow(s) or (r and Records.resFromRecord(r)) or {{name = "Gold", stock = 0, income = 0}}
-      Ins.say(ID_PICK_FIRST + s, string.format("%s%s, %s: gold %s%s", s == shown and "> " or "", name, class,
+      Ins.say(ID_PICK_FIRST + s, string.format("%s%s, %s: Gold %s%s", s == shown and "> " or "", name, class,
         Records.resText(res[1].stock, res[1].income), alive and "" or string.format(", eliminated after turn %d", turn or -1)))
     end
     if #slots == 0 then Ins.say(0, "No AI players") end
@@ -2856,8 +3091,7 @@ local function openPick()
 end
 
 -- ---- Skip turns -----------------------------------------------------------------------------------
--- A skip ends the Observer's turns for it until N turns have passed.
-Ins.skip = nil   -- {untilTurn =, total =, looks =, frames =} while skipping
+Ins.skip = nil
 function Ins.lookAtAis()
   local out = {}
   for s2 = 0, 31 do
@@ -2875,7 +3109,7 @@ end
 function Ins.stopSkip(why)
   if not Ins.skip then return end
   Ins.showBattlesAgain()
-  if Ins.skip.mode then   -- a hand-over stopped by hand: the turn stays with the player
+  if Ins.skip.mode then
     coe5.log(string.format("inspector_handover_end mode=%s turn=%d reason=%s", Ins.skip.mode, coe5.turn(), why))
     Ins.skip = nil
     return
@@ -2884,7 +3118,6 @@ function Ins.stopSkip(why)
   Ins.skipNote = {turn = coe5.turn(), text = "Skip ended: " .. why .. "."}
   Ins.skip = nil
 end
--- At a turn of the seat (or the played AI): stop at the end, or early on a loss when set.
 function Ins.skipTurnStart()
   local sk = Ins.skip
   if not sk then return end
@@ -2908,8 +3141,7 @@ function Ins.skipTurnStart()
   sk.looks = now
   if loss then Ins.stopSkip(loss) end
 end
--- While a skip runs, battles are reported, not shown.
-Ins.reportsKept = nil   -- the player's own value while the skip has it on
+Ins.reportsKept = nil
 function Ins.reportBattles()
   if Ins.reportsKept ~= nil then return end
   Ins.reportsKept = coe5.get("battleReports") or 0
@@ -2926,11 +3158,11 @@ function Ins.showBattlesAgain()
   end
   Ins.reportsKept = nil
 end
--- One frame of the map while skipping: a key or click stops it; else, after a moment to stop it, End Turn.
+local function isClick(buttons) return buttons == 1 or buttons == 2 end
 function Ins.skipFrame(id)
   local buttons = coe5.get("mouseButtons") or 0
-  local step = Records.skipStep(Ins.skip, id ~= 0 or buttons ~= 0, 45)   -- 45 frames: about a second and a half to stop it
-  if buttons ~= 0 then coe5.set("mouseButtons", 0) swallowing = true end   -- the map never takes a click meanwhile
+  local step = Records.skipStep(Ins.skip, id ~= 0 or isClick(buttons), 45)
+  if buttons ~= 0 and (swallowing or isClick(buttons)) then coe5.set("mouseButtons", 0) swallowing = true end
   if step == "stop" then
     Ins.stopSkip("a key or click")
     return 0
@@ -2948,7 +3180,7 @@ coe5.wrap("WARN_WAIT", function(next, block, mode)
 end)
 coe5.wrap("MESSAGE_BOX_WAIT", function(next, block, mode)
   local text = Ins.skip and coe5.get("messageBoxText")
-  if not (text and text:find("AP left")) then return next(block, mode) end   -- only the End Turn Warning
+  if not (text and text:find("AP left")) then return next(block, mode) end
   return coe5.box.firstButton
 end)
 
@@ -2988,15 +3220,20 @@ function Ins.openSkip()
 end
 
 -- ---- Commanders here ----------------------------------------------------------------------------
--- Commanders here: a click on the line, then on a map square.
-Ins.picking = nil      -- {player =} while the line waits for a square
-Ins.pickButtons = 0    -- the mouse buttons at the last map frame, so a press is told from a hold
-Ins.pickHold = false   -- a used click held: kept from the map until let go
+Ins.picking = nil
+Ins.pickButtons = 0
+Ins.pickHold = false
+Ins.heldOpen = nil
+function Ins.openHeld()
+  local open = Ins.heldOpen
+  Ins.heldOpen = nil
+  if open then open() end
+  return open ~= nil
+end
 function Ins.stopPicking(reason)
   coe5.log(string.format("inspector_pick_stopped slot=%d reason=%s", Ins.picking.player, reason))
   Ins.picking = nil
 end
--- One map frame while waiting: the id to return, or nil for the map's usual handling.
 function Ins.pickFrame(id, x, y)
   local buttons = coe5.get("mouseButtons") or 0
   local pressed = buttons ~= 0 and Ins.pickButtons == 0
@@ -3013,21 +3250,20 @@ function Ins.pickFrame(id, x, y)
     Ins.stopPicking("game_menu")
     return id
   end
-  if buttons == 0 then return nil end
-  -- A right button stops it and never reaches the map.
-  if buttons % 4 >= 2 then
+  if not isClick(buttons) then return nil end
+  if buttons == 2 then
     Ins.stopPicking("right_click")
     coe5.set("mouseButtons", 0)
     Ins.pickHold = true
     return 0
   end
-  if id ~= 0 then return id end   -- the map's own lines keep their clicks
-  coe5.set("mouseButtons", 0)     -- no other button on the map reaches it while picking
-  if not pressed or buttons ~= 1 or not x or x < 0 or y < 0 then return 0 end
+  if id ~= 0 then return id end
+  coe5.set("mouseButtons", 0)
+  if not pressed or not x or x < 0 or y < 0 then return 0 end
   Ins.pickHold = true
   coe5.log(string.format("inspector_pick_square slot=%d x=%d y=%d", Ins.picking.player, x, y))
   Ins.picking = nil
-  openChooser(x, y)
+  Ins.heldOpen = function() openChooser(x, y) end
   return 0
 end
 
@@ -3035,61 +3271,77 @@ coe5.wrap("MAP_SCREEN_WAIT", function(next, block, mode)
   Ins.addQuickLines()
   Ins.closeScreens = false
   if not game then return next(block, mode) end
-  Ins.applyView()   -- a loaded game's first frame: the Observer's turn start ran before the load
+  Ins.applyView()
   if not viewSlot then viewSlot = aiSlots()[1] end
   coe5.ui.bindKey(MAP_ID.OPEN, coe5.key.enter)
   if Ins.picking then coe5.ui.bindKey(MAP_ID.CANCEL, coe5.key.esc) end
-  coe5.ui.bindKey(MAP_ID.NEXT_AI, string.byte("g"))
-  coe5.ui.bindKey(MAP_ID.PREV_AI, coe5.key.f7)    -- F7, F8 and Tab: no map shortcut of the game's
+  if observerSeat() then
+    coe5.ui.bindKey(MAP_ID.NEXT_AI, string.byte("g"))
+    coe5.ui.bindKey(MAP_ID.PREV_AI, coe5.key.f7)
+    coe5.ui.bindKey(MAP_ID.PICK, coe5.key.tab)
+  end
   coe5.ui.bindKey(MAP_ID.OWN_VIEW, coe5.key.f8)
-  coe5.ui.bindKey(MAP_ID.PICK, coe5.key.tab)
   coe5.ui.bindKey(MAP_ID.SKIP, coe5.key.endKey)
   local id = next(block, mode)
   if Ins.skip and Records.skipEnds(coe5.get("activePlayer"), Ins.observerSeatNow(), playAs) then
     return Ins.skipFrame(id)
   end
-  if Ins.skipNote then   -- "Skip ended" goes at the next key or click, once the one that stopped it is let go
-    local down = id ~= 0 or (coe5.get("mouseButtons") or 0) ~= 0
+  if Ins.skipNote then
+    local down = id ~= 0 or isClick(coe5.get("mouseButtons") or 0)
     if not down then Ins.skipNote.armed = true elseif Ins.skipNote.armed then Ins.skipNote = nil end
   end
-  if Ins.pickHold then   -- the click Commanders here used is kept from the map until it is let go
+  if Ins.pickHold then
     if (coe5.get("mouseButtons") or 0) ~= 0 then coe5.set("mouseButtons", 0) return 0 end
     Ins.pickHold = false
+    if Ins.openHeld() then return 0 end
   end
-  if Ins.goTo then   -- back from a go: the click that went is kept from the map until it is let go
+  if Ins.goTo then
     if (coe5.get("mouseButtons") or 0) ~= 0 then coe5.set("mouseButtons", 0) return 0 end
     Ins.goTo = nil
   end
+  if Ins.fromScreen then Ins.fromScreen, Ins.screenHold = nil, true end
+  if Ins.screenHold then
+    if (coe5.get("mouseButtons") or 0) % 4 ~= 0 then coe5.set("mouseButtons", 0) return 0 end
+    Ins.screenHold = false
+  end
   local x, y = coe5.get("mapPointerX"), coe5.get("mapPointerY")
-  Ins.hover = (x and x >= 0) and {x = x, y = y} or nil   -- the hover card's square (drawn next frame)
+  Ins.hover = (x and x >= 0) and {x = x, y = y} or nil
   if Ins.picking then
     local back = Ins.pickFrame(id, x, y)
     if back then return back end
   end
-  local pb = Ins.partnerBox
-  if pb and playAs and playAs.active and id == 0 and coe5.get("mouseButtons") == 1 then
-    local px, py = coe5.get("uiPointerX"), coe5.get("uiPointerY")
-    if px and px >= pb.left and px < pb.left + pb.width and py >= pb.arrowsY - 3 and py < pb.arrowsY + pb.pitch - 3 then
+  local buttons = coe5.get("mouseButtons") or 0
+  if swallowing then
+    if buttons ~= 0 then coe5.set("mouseButtons", 0) buttons = 0
+    else swallowing = false if Ins.openHeld() then return 0 end end
+  end
+  local px, py = coe5.get("uiPointerX"), coe5.get("uiPointerY")
+  if playAs and playAs.active and isClick(buttons) and id == 0 and px then
+    local pb, sb = Ins.partnerBox, Ins.stripBox
+    if pb and Records.inBox(pb, px, py) then
       coe5.set("mouseButtons", 0)
-      settings.arrows = (settings.arrows + 1) % 3
-      writeSettings()
+      swallowing = true
+      if buttons == 1 and py >= pb.arrowsY - 3 and py < pb.arrowsY + pb.pitch - 3 then
+        settings.arrows = (settings.arrows + 1) % 3
+        writeSettings()
+      end
+      return 0
+    elseif sb and Records.inBox(sb, px, py) then
+      coe5.set("mouseButtons", 0)
+      swallowing = true
       return 0
     end
   end
   if observerSeat() then
-    local buttons = coe5.get("mouseButtons")
-    if swallowing then
-      if buttons ~= 0 then coe5.set("mouseButtons", 0) else swallowing = false end
-    elseif buttons ~= 0 and id == 0 then
-      -- Clicks on the map's own lines: left shows, right opens.
-      local right = buttons % 4 >= 2
-      local px, py = coe5.get("uiPointerX"), coe5.get("uiPointerY")
+    if isClick(buttons) and id == 0 then
+      Ins.heldOpen = nil
+      local right = buttons == 2
       local sb = Ins.stripBox
       local at = glanceBox and Records.lineAt(glanceBox, px, py)
       if sb and px and px >= sb.left and px < sb.left + sb.width and py >= sb.bottom and py < sb.bottom + sb.height then
         coe5.set("mouseButtons", 0)
         swallowing = true
-        if not right and sb.emptyLine and py < sb.bottom + 19 then centerOn(sightShown) else openOverview() end
+        if not right and sb.emptyLine and py < sb.bottom + 19 then centerOn(sightShown) else Ins.heldOpen = openOverview end
         return 0
       elseif at then
         coe5.set("mouseButtons", 0)
@@ -3097,7 +3349,7 @@ coe5.wrap("MAP_SCREEN_WAIT", function(next, block, mode)
         local line = glanceBox.lines[at]
         if line.kind == "slot" and right then
           viewSlot = line.slot
-          openOverview()
+          Ins.heldOpen = openOverview
         elseif line.kind == "slot" and isController(line.slot, coe5.controller.ai) then
           viewAI(line.slot)
         elseif line.kind == "footer" and px < line.mid then
@@ -3107,15 +3359,20 @@ coe5.wrap("MAP_SCREEN_WAIT", function(next, block, mode)
           ownView()
         end
         return 0
+      elseif px and (Records.inBox(glanceBox, px, py) or Records.inBox(Ins.cardBox, px, py)) then
+        coe5.set("mouseButtons", 0)
+        swallowing = true
+        return 0
       elseif right and x and x >= 0 then
         coe5.set("mouseButtons", 0)
         swallowing = true
         local found = Ins.aiCommandersAt(x, y)
-        if #found == 1 then openReasoning(found[1].slot, found[1].c) elseif #found > 1 then openChooser(x, y) end
+        if #found == 1 then Ins.heldOpen = function() openReasoning(found[1].slot, found[1].c) end
+        else Ins.heldOpen = function() openChooser(x, y) end end
         return 0
       end
     end
-    if not swallowing and buttons ~= 0 and id == 0 and x and x >= 0 then
+    if not swallowing and isClick(buttons) and id == 0 and x and x >= 0 then
       coe5.set("mouseButtons", 0)
       swallowing = true
     end
@@ -3124,7 +3381,7 @@ coe5.wrap("MAP_SCREEN_WAIT", function(next, block, mode)
   if id == MAP_ID.OPEN then openOverview() return 0 end
   if id == MAP_ID.NEXT_AI then stepView(1) return 0 end
   if id == MAP_ID.PREV_AI then stepView(-1) return 0 end
-  if id == MAP_ID.OWN_VIEW and playAs and playAs.active then   -- in Play as AI, F8 is Play as Observer
+  if id == MAP_ID.OWN_VIEW and playAs and playAs.active then
     if canReturn() then Ins.confirmReturn() end
     return 0
   end
@@ -3134,7 +3391,6 @@ coe5.wrap("MAP_SCREEN_WAIT", function(next, block, mode)
   return id
 end)
 
--- The quick commands: lines at the end of the game's commander panel.
 local QUICK = {0.95, 0.8, 0.35}
 local quickLines, quickAdded = {}, false
 function Ins.quickLine(label, tip, onClick, visible, color)
@@ -3155,37 +3411,51 @@ Ins.quickLine("Own view (F8)", "Back to the Observer's own view, centred on its 
 Ins.quickLine("Commanders here", "The AI commanders on a square: click this, then the square",
   function()
     Ins.picking = {player = coe5.get("activePlayer")}
-    Ins.pickButtons = 1   -- the click on this line may still be held
+    Ins.pickButtons = 1
     coe5.log(string.format("inspector_pick_started slot=%d", Ins.picking.player))
   end, function() return Ins.picking == nil end)
-Ins.quickLine("Commanders: pick a square", "Left click a square to see its AI commanders. Right click cancels.",
+Ins.quickLine("Commanders: pick a square", "Left click a square: its AI commanders. Right click: cancel",
   function() if Ins.picking then Ins.stopPicking("line") end end, function() return Ins.picking ~= nil end, {1, 0.85, 0.3})
 Ins.quickLine("Skip turns (End)", "End turns until N have passed: 5, 10 or 1 to 50; a key or a click on the map stops it", function() Ins.openSkip() end)
--- One slot before Settings: Play as AI, or while an AI is played, Play as Observer.
 Ins.quickLine("Play as AI", "An AI player played by hand, with every AI bonus: the Observer's turn ends now and the game runs on to that player's turn",
   function() openPlayAs() end, canPickPlayAs)
 Ins.quickLine("Play as Observer (F8)", "Ends this turn now; the Observer's seat returns to human control",
   function() Ins.confirmReturn() end, function() return partnerNow() and canReturn() end)
 Ins.quickLine("Settings (Enter, e)", "The inspector's settings", function() openSettings() end, observerSeat)
 -- ---- Drawn over the map (MAP_DRAW) ---------------------------------------------------------------
--- The map as the inspector: tags, the hover card, the strip and the AI list.
-do   -- the map section: its locals end with it (the main chunk holds at most 200)
+do
 local C = {LAMP = {0.106, 0.086, 0.071}, VELLUM = {0.847, 0.780, 0.627}, GILT = {0.878, 0.690, 0.282},
            VERD = {0.373, 0.639, 0.604}, CINN = {0.784, 0.333, 0.239}, ASH = {0.549, 0.518, 0.459}}
-Ins.CHAR = 0.36   -- a character's average width, times the text size (guifont; measured on screen)
--- Sizes: tags, the list and its heads, the strip's name and line, the card's name and lines.
+Ins.CHAR = 0.36
 C.TAG, C.LIST, C.HEAD, C.NAME, C.SMALL, C.CARD, C.CARDNAME = 12.5, 13.5, 11.5, 16, 13, 13.5, 15
 function Ins.rect(x, y, w, h, c, a) coe5.ui.drawRect(x, y, w, h, c[1], c[2], c[3], a or 1) end
 function Ins.text(x, y, size, text, c, a) coe5.ui.drawText(x, y, size, text, c[1], c[2], c[3], a or 1) end
 function Ins.line(x1, y1, x2, y2, c, a, w) coe5.ui.drawLine(x1, y1, x2, y2, c[1], c[2], c[3], a or 1, w or 1) end
 function Ins.width(text, size) return #text * size * Ins.CHAR end
-function Ins.cut(text, size, room)   -- text cut with ".." to fit `room` units
+function Ins.cut(text, size, room)
   local n = math.floor(room / (size * Ins.CHAR))
   if #text <= n then return text end
   return text:sub(1, math.max(n - 2, 1)) .. ".."
 end
+Ins.ICON_DROP, Ins.ICON_CHARS = 0.2, 3
+function Ins.richText(x, y, size, text, c, a, room)
+  local draw = rawget(coe5.ui, "drawResourceIcon")
+  local parts = draw and Records.iconParts(text, Ins.resNames())
+  if not parts then return Ins.text(x, y, size, room and Ins.cut(text, size, room) or text, c, a) end
+  if room then parts = Records.cutParts(parts, math.floor(room / (size * Ins.CHAR)), Ins.ICON_CHARS) end
+  for k, p in ipairs(parts) do
+    if type(p) == "table" then
+      draw(x, y - size * Ins.ICON_DROP, size, p.res)
+      x = x + Ins.ICON_CHARS * size * Ins.CHAR
+    else
+      local beforeIcon = type(parts[k + 1]) == "table"
+      if beforeIcon then p = p:gsub(" $", "") end
+      Ins.text(x, y, size, p, c, a)
+      x = x + Ins.width(p, size) + (beforeIcon and size * 0.3 or 0)
+    end
+  end
+end
 
--- The UI point at the centre of square (x, y), nil when it isn't on the shown plane.
 function Ins.squarePoint(v, x, y)
   if not x or x < 0 or coe5.get("squarePlane", x, y) ~= v.plane then return nil end
   return v.originX + (x + 0.5) * v.zoom, v.originY - (y + 0.5) * v.zoom
@@ -3215,7 +3485,6 @@ function Ins.xy(text)
 end
 
 C.STEP_LETTER = {rally = "R", friendly = "F", conquer = "C", explore = "X", far = "XX"}
--- A commander's tag and its colour.
 function Ins.cellOf(com)
   if com.played_by == "you" then return "human", C.VERD end
   if #com.plans == 0 then return (com.skip and com.skip ~= "") and "stays" or "no plan", C.ASH end
@@ -3224,12 +3493,13 @@ function Ins.cellOf(com)
   return C.STEP_LETTER[winner] .. " " .. best, (winner == "explore" or winner == "far") and C.VERD or C.GILT
 end
 
--- The shown AI's tags, made once per AI, turn and record.
+Ins.tagCaches = {}
 function Ins.tagsFor(slot)
   if not slot then return nil end
   local turn, r = latestRecord(slot)
   local key = slot .. ":" .. tostring(turn) .. ":" .. coe5.turn() .. ":" .. Ins.handKey()
-  if Ins.tagCache and Ins.tagCache.key == key then return Ins.tagCache end
+  local cached = Ins.tagCaches[slot]
+  if cached and cached.key == key then return cached end
   local followers, bySquare, squares = {}, {}, {}
   for _, com in pairs(r and r.coms or {}) do
     if com.follows then followers[com.follows] = (followers[com.follows] or 0) + 1 end
@@ -3263,22 +3533,38 @@ function Ins.tagsFor(slot)
     sq.lead = sq.coms[1]
     sq.plus = sq.lead.followers + #sq.coms - 1
   end
-  Ins.tagCache = {key = key, slot = slot, turn = turn, squares = squares, bySquare = bySquare}
-  return Ins.tagCache
+  Ins.tagCaches[slot] = {key = key, slot = slot, turn = turn, squares = squares, bySquare = bySquare}
+  return Ins.tagCaches[slot]
+end
+function Ins.allTags()
+  local parts, keys = {}, {}
+  for _, s in ipairs(aiSlots()) do
+    local t = Ins.tagsFor(s)
+    if t then parts[#parts + 1] = t; keys[#keys + 1] = t.key end
+  end
+  local key = table.concat(keys, "|")
+  if Ins.allTagCache and Ins.allTagCache.key == key then return Ins.allTagCache end
+  local squares, bySquare = {}, {}
+  for _, t in ipairs(parts) do
+    for _, sq in ipairs(t.squares) do
+      squares[#squares + 1] = sq
+      bySquare[sq.x .. " " .. sq.y] = sq
+    end
+  end
+  Ins.allTagCache = {key = key, squares = squares, bySquare = bySquare}
+  return Ins.allTagCache
 end
 
--- The AI whose tags and card the map shows: the played AI, the shown view, else none (own view).
 function Ins.mapSlot() return (playAs and playAs.active) and playAs.slot or sightShown end
 
 function Ins.drawTags(v, tags)
   local onScreen = 0
   for _, sq in ipairs(tags.squares) do
     if sq.x >= v.firstX and sq.x <= v.lastX and sq.y >= v.firstY and sq.y <= v.lastY and coe5.get("squarePlane", sq.x, sq.y) == v.plane then
-      for _, e in ipairs(sq.coms) do onScreen = onScreen + 1 + e.followers end   -- followers too, as the commander count
+      for _, e in ipairs(sq.coms) do onScreen = onScreen + 1 + e.followers end
       local lead, z = sq.lead, v.zoom
       local sx, sy = v.originX + sq.x * z, v.originY - sq.y * z
       local com = lead.com
-      -- Its move this turn, start to finish, dashed in vellum.
       local ax, ay = Ins.xy(com.start)
       local fx, fy = Ins.xy(com.finish)
       if ax and fx and com.start ~= com.finish then
@@ -3290,7 +3576,7 @@ function Ins.drawTags(v, tags)
           end
         end
       end
-      if z < 24 then   -- zoomed out: a dot, so the plates don't hide the map
+      if z < 24 then
         Ins.rect(sx + z / 2 - 1.5, sy - z / 2 - 1.5, 3, 3, lead.colour, 1)
       else
         local text = lead.text
@@ -3305,7 +3591,7 @@ function Ins.drawTags(v, tags)
           Ins.rect(sx + z - pw, sy - z + 1, pw, 15, C.LAMP, 0.82)
           Ins.text(sx + z - pw + 3, sy - z + 3.5, C.TAG, plus, C.VELLUM, 1)
         end
-        if lead.hand or (com.target and com.target ~= "-1 -1" and com.finish == com.target) then   -- on its target, or moved by hand
+        if lead.hand or (com.target and com.target ~= "-1 -1" and com.finish == com.target) then
           Ins.line(sx, sy, sx + z, sy, lead.colour, 1, 1.5)
           Ins.line(sx, sy - z, sx + z, sy - z, lead.colour, 1, 1.5)
           Ins.line(sx, sy, sx, sy - z, lead.colour, 1, 1.5)
@@ -3317,20 +3603,21 @@ function Ins.drawTags(v, tags)
   return onScreen
 end
 
--- Arrows to the shown AI's targets.
-function Ins.drawArrows(v)
+function Ins.drawArrows(v, own)
+  local shown = Ins.mapSlot()
   if settings.arrows == 1 then
-    local slot = Ins.mapSlot() or viewSlot
-    local _, r = latestRecord(slot or -1)
-    for _, com in pairs(r and r.coms or {}) do
-      local kind = tonumber(com.kind) or 0
-      if kind > 0 and not com.follows then
-        local fx, fy = Ins.xy(com.finish)
-        local tx, ty = Ins.xy(com.target)
-        if kind == 1 then Ins.arrow(v, fx, fy, tx, ty, C.GILT, 0.9, 2) else Ins.arrow(v, fx, fy, tx, ty, C.VERD, 0.9, 2, true) end
+    for _, slot in ipairs(own and aiSlots() or {shown}) do
+      local _, r = latestRecord(slot)
+      for _, com in pairs(r and r.coms or {}) do
+        local kind = tonumber(com.kind) or 0
+        if kind > 0 and not com.follows then
+          local fx, fy = Ins.xy(com.finish)
+          local tx, ty = Ins.xy(com.target)
+          if kind == 1 then Ins.arrow(v, fx, fy, tx, ty, C.GILT, 0.9, 2) else Ins.arrow(v, fx, fy, tx, ty, C.VERD, 0.9, 2, true) end
+        end
       end
     end
-  elseif settings.arrows == 2 and lastCommander then
+  elseif settings.arrows == 2 and lastCommander and (own or lastCommander.slot == shown) then
     local _, r = latestRecord(lastCommander.slot)
     local com = r and r.coms[lastCommander.c]
     local last = com and com.plans[#com.plans]
@@ -3346,13 +3633,12 @@ function Ins.drawArrows(v)
           end
         end
         local w = winner and plan[winner]
-        if w then sx, sy = w.final[2], w.final[3] end   -- the next plan starts where this one's target was
+        if w then sx, sy = w.final[2], w.final[3] end
       end
     end
   end
 end
 
--- When the shown AI's sight has no square on the screen, say so.
 function Ins.emptyViewText(v)
   local key = table.concat({tostring(sightShown), v.firstX, v.lastX, v.firstY, v.lastY, v.plane, coe5.turn()}, ":")
   if Ins.emptyView and Ins.emptyView.key == key then return Ins.emptyView.text end
@@ -3370,7 +3656,7 @@ function Ins.emptyViewText(v)
       local unit = leader >= 0 and coe5.get("commanderUnit", leader) or -1
       if unit >= 0 then
         text = "Sees nothing here. Its leader: " .. placeOf(coe5.get("unitX", unit), coe5.get("unitY", unit)) .. " (click: go there)."
-      else   -- the leader is dead: a living commander's square, else its home
+      else
         local c, u = next(commandersOf(sightShown))
         if c then
           text = string.format("Sees nothing here; leader dead. %s: %s (click: go there).", commanderLabel(c), placeOf(coe5.get("unitX", u), coe5.get("unitY", u)))
@@ -3384,7 +3670,6 @@ function Ins.emptyViewText(v)
   return text
 end
 
--- The view strip, top centre.
 function Ins.drawStrip(v, slot, tags, onScreen)
   local w, h = 520, 40
   local left, bottom = (v.screenW - w) / 2, v.screenH - 76
@@ -3398,14 +3683,14 @@ function Ins.drawStrip(v, slot, tags, onScreen)
   if partner then name = "Playing " .. (playerLabel(playAs.slot))
   elseif slot then name = (playerLabel(slot)) .. "'s view"
   else name = "The Observer's own view" end
-  local lift = arrival and 14 or 0   -- the arrival line goes under the two
+  local lift = arrival and 14 or 0
   Ins.text(left + 8, bottom + 22 + lift, C.NAME, name, accent, 1)
   local x = left + 8 + Ins.width(name, C.NAME) + 12
   if slot then
     local _, class = playerLabel(slot)
     local n = 0
     for _, sq in ipairs(tags and tags.squares or {}) do n = n + #sq.coms end
-    local _, last = latestRecord(slot)   -- the commanders as the overview counts them (tags leave followers out)
+    local _, last = latestRecord(slot)
     if last and last.commanders then n = last.commanders end
     local facts = string.format("%s   %s   %s%s", class, tags and tags.turn and ("turn " .. tags.turn) or "no AI turn yet",
       Records.count(n, "commander"), onScreen and onScreen < n and string.format(", %d on this screen", onScreen) or "")
@@ -3414,13 +3699,13 @@ function Ins.drawStrip(v, slot, tags, onScreen)
   end
   local line2, colour, emptyLine = "Right click a square or a name to open", C.ASH, false
   if partner and not Ins.seatInGame() then
-    line2, colour = "The Observer is out of the game: Play as Observer would end it.", C.CINN
+    line2, colour = "Observer out of the game: Play as Observer would end the game", C.CINN
   elseif Ins.skip and Ins.skip.mode then
     line2, colour = (Ins.skip.mode == "pick" and playAs and ("Ending this turn, on to " .. (playerLabel(playAs.slot)) .. "'s turn")
       or "Ending this turn, back to the Observer") .. "; a key or a click on the map stops it", C.CINN
   elseif partner then
     local items = tradeItems(playAs.slot)
-    line2 = Records.tradeText(items)   -- the stocks and incomes are in the panel
+    line2 = Records.tradeText(items, Ins.tradePower(playAs.slot))
   else
     local empty = Ins.emptyViewText(v)
     if Ins.skip then
@@ -3430,18 +3715,18 @@ function Ins.drawStrip(v, slot, tags, onScreen)
     elseif empty then line2, colour, emptyLine = empty, C.VELLUM, true
     elseif not sightShown and viewGone and viewGone.turn == coe5.turn() then line2, colour = viewGone.text, C.CINN end
   end
-  Ins.text(left + 8, bottom + 6 + lift, C.SMALL, Ins.cut(line2, C.SMALL, w - 14), colour, 1)
+  Ins.richText(left + 8, bottom + 6 + lift, C.SMALL, line2, colour, 1, w - 14)
   if arrival then Ins.text(left + 8, bottom + 6, C.SMALL, Ins.cut(arrival, C.SMALL, w - 14), C.GILT, 1) end
   Ins.stripBox = {left = left, bottom = bottom + lift, width = w, height = h - lift, emptyLine = emptyLine}
 end
 
--- The hover card beside the square under the pointer.
 function Ins.drawCard(v, tags)
   local hv = Ins.hover
   if not (hv and tags and settings.hoverCard ~= false) then return end
   local sq = tags.bySquare[hv.x .. " " .. hv.y]
   if not sq or coe5.get("squarePlane", sq.x, sq.y) ~= v.plane then return end
-  local lines = {}   -- {text, size, colour, right}
+  local lines = {}
+  local partner = playAs and playAs.active
   local first = sq.coms[1].com
   if #sq.coms == 1 then
     local com = first
@@ -3455,21 +3740,20 @@ function Ins.drawCard(v, tags)
       local score, step = Records.nextBest(plan, winner)
       lines[#lines + 1] = {score and string.format("Next best: %s %s at %s, %d lower", STEP_NAME[step]:lower(), Records.scoreText(score),
         plan[step].place or "?", best - score) or "Next best: none (no other step found a square)", C.CARD, C.VELLUM}
-    else   -- the same two lines without a pick, so the card keeps its size
+    else
       lines[#lines + 1] = {plan and "No step found a square" or "No plan", C.CARD, C.VELLUM}
       lines[#lines + 1] = {"Next best: -", C.CARD, C.ASH}
     end
     lines[#lines + 1] = {resultLine(com), C.CARD, C.VELLUM}
-    lines[#lines + 1] = {"Right click: its reasoning", C.CARD, C.ASH}
+    if not partner then lines[#lines + 1] = {"Right click: its reasoning", C.CARD, C.ASH} end
   else
     lines[1] = {string.format("%d commanders on %s", #sq.coms, placeOf(sq.x, sq.y)), C.CARDNAME, C.GILT}
-    -- Always 5 commander lines and the "more" line, empty ones included, so the card keeps its size.
     for i = 1, 5 do
       local entry = sq.coms[i]
       lines[#lines + 1] = {entry and string.format("%s: %s", entry.com.name or commanderLabel(entry.com.c), entry.text) or "", C.CARD, C.VELLUM}
     end
     lines[#lines + 1] = {#sq.coms > 5 and ("+" .. (#sq.coms - 5) .. " more") or "", C.CARD, C.ASH}
-    lines[#lines + 1] = {"Right click: choose one", C.CARD, C.ASH}
+    if not partner then lines[#lines + 1] = {"Right click: choose one", C.CARD, C.ASH} end
   end
   local w = 0
   for _, l in ipairs(lines) do w = math.max(w, Ins.width(l[1], l[2]) + (l[4] and Ins.width(l[4], C.SMALL) + 14 or 0)) end
@@ -3479,20 +3763,24 @@ function Ins.drawCard(v, tags)
   local sx, sy = v.originX + sq.x * z, v.originY - sq.y * z
   local left = sx + z + 4
   if left + w > v.screenW - 160 then left = sx - 4 - w end
-  local top = math.min(sy, v.screenH - 84)   -- never over the strip
+  local top = math.min(sy, v.screenH - 84)
   local bottom = math.max(top - h, 4)
   Ins.rect(left, bottom, w, h, C.LAMP, 0.92)
   Ins.rect(left, bottom + h - 1.5, w, 1.5, C.GILT, 1)
+  Ins.cardBox = {left = left, bottom = bottom, width = w, height = h}
   for i, l in ipairs(lines) do
     local y = bottom + h - 4 - i * 16
-    Ins.text(left + 7, y, l[2], Ins.cut(l[1], l[2], w - 14 - (l[4] and Ins.width(l[4], C.SMALL) + 8 or 0)), l[3], 1)
+    Ins.richText(left + 7, y, l[2], l[1], l[3], 1, w - 14 - (l[4] and Ins.width(l[4], C.SMALL) + 8 or 0))
     if l[4] then Ins.text(left + w - 7 - Ins.width(l[4], C.SMALL), y, C.SMALL, l[4], C.ASH, 1) end
   end
 end
 
--- The AI list on the map.
-C.LIST_W, C.LIST_SIZE, C.LIST_PITCH = 430, C.LIST, 16
-C.LIST_COLS = {16, 120, 204, 250, 292, 334}
+C.LIST_W, C.LIST_SIZE, C.LIST_PITCH = 480, C.LIST, 16
+C.LIST_COLS = {16, 170, 254, 300, 342, 384}
+function Ins.listName(s)
+  local name, class = playerLabel(s)
+  return class ~= "" and (name .. "(" .. class .. ")") or name
+end
 function Ins.listRows()
   local slots = aiSlots()
   local key = coe5.turn() .. ":" .. #slots .. ":" .. tostring(playAs and playAs.active)
@@ -3500,7 +3788,7 @@ function Ins.listRows()
   local rows = {}
   for _, s in ipairs(slots) do
     local turn, r = latestRecord(s)
-    local row = {kind = "slot", slot = s, name = (playerLabel(s))}
+    local row = {kind = "slot", slot = s, name = Ins.listName(s)}
     if r then
       local prev = readRecord(turn - 1, s)
       row.land = r.land and tostring(r.land) or ""
@@ -3516,7 +3804,7 @@ function Ins.listRows()
     end
     rows[#rows + 1] = row
   end
-  for _, s in ipairs(goneSlots()) do rows[#rows + 1] = {kind = "slot", slot = s, name = (playerLabel(s)), out = true} end
+  for _, s in ipairs(goneSlots()) do rows[#rows + 1] = {kind = "slot", slot = s, name = Ins.listName(s), out = true} end
   Ins.listCache = {key = key, rows = rows}
   return rows
 end
@@ -3526,7 +3814,6 @@ function Ins.drawList(v)
   local cards = 0
   for _ in pairs(commandersOf(seat)) do cards = cards + 1 end
   local height = (#rows + 2) * C.LIST_PITCH + 12
-  -- With more than 4 commander cards, the list goes left of the commander panel.
   local left = cards <= 4 and 10 or (v.screenW - 160 - C.LIST_W)
   local bottom = cards <= 4 and 6 or 66
   Ins.rect(left, bottom, C.LIST_W, height, C.LAMP, 0.84)
@@ -3561,7 +3848,7 @@ function Ins.drawList(v)
       end
       Ins.text(left + C.LIST_COLS[4], y, C.LIST_SIZE, row.cmdrs, colour, 1)
       Ins.text(left + C.LIST_COLS[5], y, C.LIST_SIZE, row.bought, colour, 1)
-      if row.flag then Ins.text(left + C.LIST_COLS[6], y, C.HEAD, Ins.cut(row.flag, C.HEAD, C.LIST_W - C.LIST_COLS[6] - 4), C.CINN, 1) end
+      if row.flag then Ins.richText(left + C.LIST_COLS[6], y, C.HEAD, row.flag, C.CINN, 1, C.LIST_W - C.LIST_COLS[6] - 4) end
     end
   end
   local fy = top - (#rows + 2) * C.LIST_PITCH
@@ -3573,10 +3860,9 @@ function Ins.drawList(v)
     Ins.text(left + C.LIST_W - 10 - Ins.width(own, C.HEAD), fy, C.HEAD, own, sightShown and C.VELLUM or C.ASH, 1)
   end
   lines[#lines + 1] = {kind = "footer", mid = left + C.LIST_W / 2}
-  glanceBox = {left = left, width = C.LIST_W, top = top, line = C.LIST_PITCH, count = #lines, lines = lines}
+  glanceBox = {left = left, width = C.LIST_W, top = top, line = C.LIST_PITCH, count = #lines, lines = lines, bottom = bottom, height = height}
 end
 
--- What the player's hand changed this played turn, as a key: the tags are made again when it changes.
 function Ins.handKey()
   if not (playAs and playAs.active and turnStartState) then return "" end
   local out = {}
@@ -3585,7 +3871,6 @@ function Ins.handKey()
   return table.concat(out, ",")
 end
 
--- Play as AI: the played AI's panel, in place of the list.
 function Ins.drawPartnerPanel()
   local slot = playAs.slot
   local turn, r = latestRecord(slot)
@@ -3611,36 +3896,36 @@ function Ins.drawPartnerPanel()
   Ins.rect(left, bottom, w, h, C.LAMP, 0.86)
   Ins.rect(left, bottom + h - 1.5, w, 1.5, C.VERD, 1)
   for i, l in ipairs(lines) do
-    Ins.text(left + 10, bottom + h - 4 - i * pitch, l[2], Ins.cut(l[1], l[2], w - 20), l[3], 1)
+    Ins.richText(left + 10, bottom + h - 4 - i * pitch, l[2], l[1], l[3], 1, w - 20)
   end
-  Ins.partnerBox = {left = left, width = w, arrowsY = bottom + h - 4 - #lines * pitch, pitch = pitch}
+  Ins.partnerBox = {left = left, width = w, arrowsY = bottom + h - 4 - #lines * pitch, pitch = pitch, bottom = bottom, height = h}
 end
 
--- A new or loaded game: the map's caches are another game's.
-function Ins.resetMapCaches() Ins.tagCache, Ins.listCache, Ins.emptyView = nil, nil, nil end
+function Ins.resetMapCaches() Ins.tagCaches, Ins.allTagCache, Ins.listCache, Ins.emptyView = {}, nil, nil, nil end
 
 coe5.wrap("MAP_DRAW", function(next)
   if game then
     local v = coe5.mapView()
     if v then
       local slot = Ins.mapSlot()
-      local tags = Ins.tagsFor(slot)   -- the strip counts from them whether they are drawn or not
-      if settings.arrows > 0 then Ins.drawArrows(v) end
-      local onScreen = (tags and settings.tags ~= false) and Ins.drawTags(v, tags) or nil
-      glanceBox, Ins.stripBox = nil, nil
+      local tags = Ins.tagsFor(slot)
+      local own = not slot and observerSeat()
+      local shownTags = tags or (own and Ins.allTags()) or nil
+      if settings.arrows > 0 then Ins.drawArrows(v, own) end
+      local onScreen = (shownTags and settings.tags ~= false) and Ins.drawTags(v, shownTags) or nil
+      glanceBox, Ins.stripBox, Ins.cardBox = nil, nil, nil
       Ins.drawStrip(v, slot, tags, onScreen)
       Ins.partnerBox = nil
       if playAs and playAs.active then Ins.drawPartnerPanel()
       elseif settings.list then Ins.drawList(v) end
-      if settings.hoverCard ~= false then Ins.drawCard(v, tags) end
+      if settings.hoverCard ~= false then Ins.drawCard(v, shownTags) end
     end
   end
   return next()
 end)
 
-end   -- the map section
+end
 
--- Play as AI: the top bar's income is what the game pays the played AI.
 coe5.wrap("TOP_BAR_INCOME", function(next, player, resource, income)
   local drawn = next(player, resource, income)
   if settings.topBar and playAs and playAs.active and player == playAs.slot then
@@ -3650,7 +3935,6 @@ coe5.wrap("TOP_BAR_INCOME", function(next, player, resource, income)
   return drawn
 end)
 
--- The map's menu button text names the AI the inspector shows and its key.
 coe5.wrap("MAP_MENU_BUTTON_TEXT", function(next, text)
   if not game then return next(text) end
   if Ins.picking then return next("Commanders here: pick a square (right click cancels)") end
@@ -3673,15 +3957,14 @@ coe5.observe("GAME_SAVE", nil, function(result, path)
   end
 end)
 coe5.observe("GAME_START", nil, function()
-  Ins.reportsKept = nil   -- the game just set up or loaded has its own Battle reports value
+  Ins.reportsKept = nil
   local loaded = pendingLoad
   playAs, rec, viewSlot, sightShown, lastCommander, glanceBox, viewGone, seatKept = nil, nil, nil, nil, nil, nil, nil, false
-  swallowing = false   -- a click latch from before the load must not take the first click
+  swallowing = false
   Ins.resetMapCaches()
   Ins.appliedTurn = nil
-  pending = {}   -- another game's turns: never written
+  pending = {}
   startGame()
-  -- A save made while an AI was played: X played on.
   local slot, seat = (loaded and index.playas[loaded] or ""):match("^(%d+),(%d+)$")
   slot, seat = tonumber(slot), tonumber(seat)
   if slot and seat then
@@ -3690,7 +3973,6 @@ coe5.observe("GAME_START", nil, function()
       playAs.returning = true
       endReview("loaded")
     else
-      -- A save made after Return to AI: the seat goes back to the AI.
       local seatToAi = isController(slot, coe5.controller.human) and isController(seat, coe5.controller.human)
         and coe5.get("activePlayer") ~= seat
       if seatToAi then coe5.set("slotController", seat, coe5.controller.ai) end
@@ -3721,11 +4003,10 @@ end, function(_, player)
   reviewTurnEnd(player)
 end)
 coe5.wrap("MAIN_MENU_WAIT", function(next, block, mode)
-  playAs, game, rec, pending = nil, nil, nil, {}   -- the game it was for is over
+  playAs, game, rec, pending = nil, nil, nil, {}
   return next(block, mode)
 end)
 
--- Battle reports for the Observer: one per battle an AI faction fights.
 local function findObserverSeat()
   for s = 0, 31 do
     local cls = coe5.get("slotClass", s)
@@ -3740,5 +4021,3 @@ coe5.observe("GAME_START", nil, function()
   local ok = reportBattlesTo(seat)
   coe5.log(string.format("inspector_battle_report_seat seat=%d ok=%s", seat, tostring(ok)))
 end)
-
--- The unit test's Lua is added after this line, in the same chunk: it reads Records.
