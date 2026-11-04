@@ -48,7 +48,7 @@ local AI_LEVEL_LAST = 10           -- Note 10: the AI level names are 0-10
 local AI_LEVEL_DEFAULT = 2         -- Note 11: Jester, the game's default
 local CLASS_NAME_MAX = 63          -- Note 12: a class name is stored up to 63 characters
 
--- Note 13: The "Load a preset?" screen's ids: the "No preset" line is
+-- Note 13: The "New Game Preset" screen's ids: "No preset" is
 -- PRESET_CHOICE_BASE, preset i's line PRESET_CHOICE_BASE + i. Every clickable line on a screen has
 -- an id, a number the script picks when it draws the line. coe5.ui.wait hands back the id of the line clicked, which is how the
 -- script knows what the player did.
@@ -56,6 +56,9 @@ local PRESET_CHOICE_BASE = 100
 -- Note 14: One `local` line can make several names at once: the values after = go to the names
 -- before it, in order, so PROMPT_OK is 9, PROMPT_CANCEL 8, and PROMPT_DELETE 7.
 local PROMPT_OK, PROMPT_CANCEL, PROMPT_DELETE = 9, 8, 7
+local START_ROW_WIDTH = 300        -- the row holding Previous Game Settings on the left and No preset on the right
+local START_ROW_LEFT = 20          -- where Previous Game Settings starts in that row: in line with the radio lines' text
+local START_ROW_RIGHT = 236        -- where No preset starts in that row: as far from the frame's right edge
 local SAVE_PRESET_ID = 900         -- Note 15: above every id the participants screen uses (the highest is 600 + 31)
 
 -- Note 16: coe5.dataFolder names the folder the script's data files live in (Note 1). Without this
@@ -377,7 +380,7 @@ local function applySlots()
   return true
 end
 
--- ---- "Load a preset?" screen --------------------------------------------------------------------
+-- ---- "New Game Preset" screen --------------------------------------------------------------------
 -- Note 57: The screen uses the same widgets as Random Map Settings, so it looks like a vanilla
 -- screen.
 
@@ -404,43 +407,62 @@ local function presetDisplayName(name)
   return (name:gsub("_", " "))
 end
 
--- Note 61: Shows the "Load a preset?" screen just before Random Map Settings, and arms the chosen
--- preset. Returns true to go on to the map screen, or false to go back to the menu.
+-- Note 61: Shows the "New Game Preset" screen just before Random Map Settings, and arms the chosen
+-- preset. Previous Game Settings and No preset go straight on when clicked; a named preset is picked
+-- first and goes on at Ok. Returns true to go on to the map screen, or false to go back to the menu.
 local function promptPreset()
   armedPreset = nil
   local names = listPresets()
   if #names == 0 then return true end   -- Note 62: nothing is saved yet, so the game goes on as vanilla
-  local choice = 0              -- Note 63: 0 for no preset, i for names[i]
+  local choice = 0              -- Note 63: i for the named preset names[i], 0 while none is picked
   local confirmDelete = false   -- Note 64: true after the first Delete click; the second click deletes
   coe5.ui.screenMusic()   -- Note 65: the menu screens' music, as the game starts it before a screen
   log("preset_prompt_opened presets=%d", #names)
   -- Note 66: A screen is a loop. Each pass draws the whole screen once, then coe5.ui.wait shows it
   -- and returns the id clicked (0 when nothing was). `while true do` repeats forever, so the loop only
-  -- ends at a `return`, here on Ok or Cancel.
+  -- ends at a `return`, here on Cancel, Ok, or a click on the top row.
   while true do
-    -- Note 67: "Previous Game Settings" is rewritten every game, so only named presets can be deleted.
-    local deletable = choice > 0 and names[choice] ~= LAST_GAME
+    -- Note 67: listPresets puts last_game first, so the named presets start at names[2] when it is
+    -- there. The top section draws last_game, and the section under it only the named ones.
+    local hasLastGame = names[1] == LAST_GAME
     coe5.ui.screenBegin("New Game Preset")
-    coe5.ui.sectionBegin("Load a preset?")
-    -- Note 68: coe5.ui.choice draws a radio line; its second input says whether it shows as picked.
+    coe5.ui.sectionBegin("Start New Game")
+    -- Note 68: Lines in a row sit side by side, and coe5.ui.columnX moves the next one along. A row with
+    -- id 0 has no click of its own, so each line keeps its own id. A CoE5SE too old for rows, which has
+    -- no coe5.ui.rowBegin or refuses it, draws the two lines one under the other, and they work the same.
+    if coe5.ui.rowBegin then coe5.ui.rowBegin(0, START_ROW_WIDTH) end
+    coe5.ui.columnX(START_ROW_LEFT)
+    if hasLastGame then coe5.ui.text(PRESET_CHOICE_BASE + 1, presetDisplayName(LAST_GAME)) end
+    coe5.ui.columnX(START_ROW_RIGHT)
+    coe5.ui.text(PRESET_CHOICE_BASE, "No preset")
+    if coe5.ui.rowEnd then coe5.ui.rowEnd() end
+    coe5.ui.sectionEnd()
+    -- Note 69: coe5.ui.choice draws a radio line; its second input says whether it shows as picked.
     -- `choice == i` gives true for the picked line only. The screen remembers nothing itself: the
     -- script redraws the pick from `choice` on every pass.
-    coe5.ui.choice(PRESET_CHOICE_BASE, choice == 0, "No preset")
-    for i, name in ipairs(names) do coe5.ui.choice(PRESET_CHOICE_BASE + i, choice == i, presetDisplayName(name)) end
-    coe5.ui.sectionEnd()
+    if #names > (hasLastGame and 1 or 0) then
+      coe5.ui.sectionBegin("Load a preset?")
+      for i, name in ipairs(names) do
+        if name ~= LAST_GAME then coe5.ui.choice(PRESET_CHOICE_BASE + i, choice == i, presetDisplayName(name)) end
+      end
+      coe5.ui.sectionEnd()
+    end
     coe5.ui.buttonRow()
-    coe5.ui.text(PROMPT_OK, "Ok")
-    -- Note 69: The `a and x or y` choice again (Note 31): after one Delete click the line asks again.
-    if deletable then coe5.ui.text(PROMPT_DELETE, confirmDelete and "Really delete?" or "Delete") end
+    -- Note 70: Ok and Delete act on the picked preset, so they show only once one is picked. The
+    -- `a and x or y` choice again (Note 31): after one Delete click the line asks again. Enter clicks
+    -- Ok, and Esc clicks Cancel.
+    if choice > 0 then
+      coe5.ui.text(PROMPT_OK, "Ok")
+      coe5.ui.text(PROMPT_DELETE, confirmDelete and "Really delete?" or "Delete")
+      coe5.ui.bindKey(PROMPT_OK, coe5.key.enter)
+    end
     coe5.ui.text(PROMPT_CANCEL, "Cancel")
-    coe5.ui.bindKey(PROMPT_OK, coe5.key.enter)   -- Note 70: Enter clicks Ok, and Esc clicks Cancel
     coe5.ui.bindEscape(PROMPT_CANCEL)
     local id = coe5.ui.wait()
     -- Note 71: Any click but Delete takes back a first Delete click.
     if id ~= 0 and id ~= PROMPT_DELETE then confirmDelete = false end
-    if id == PROMPT_DELETE and deletable then
-      -- Note 72: The second click deletes the file, picks "No preset", and reads the list
-      -- again.
+    if id == PROMPT_DELETE and choice > 0 then
+      -- Note 72: The second click deletes the file, picks nothing, and reads the list again.
       if confirmDelete then
         local deleted = coe5.deleteIni(names[choice])
         log("%s name=%s", deleted and "preset_deleted" or "preset_delete_failed", names[choice])
@@ -453,25 +475,27 @@ local function promptPreset()
     elseif id == PROMPT_CANCEL then
       log("preset_prompt_closed result=cancel")
       return false
-    elseif id == PROMPT_OK then
-      -- Note 73: Ok reads the picked preset's file (Note 41). A file that can't be read leaves
-      -- armedPreset nil, and the game goes on with no preset.
-      if choice > 0 then
-        armedPreset = loadPreset(names[choice])
-        if not armedPreset then log("preset_load_failed name=%s", names[choice]) end
-      end
-      log("preset_prompt_closed result=ok preset=%s armed=%d", choice > 0 and names[choice] or "none", armedPreset and 1 or 0)
+    elseif id == PRESET_CHOICE_BASE then
+      log("preset_prompt_closed result=ok preset=none armed=0")
       return true
-    -- Note 74: A click on one of the preset lines (ids 100 to 100 + the number of presets, Note 13)
+    -- Note 73: Ok, or a click on Previous Game Settings, reads that preset's file (Note 41). A file that
+    -- can't be read leaves armedPreset nil, and the game goes on with no preset.
+    elseif (id == PROMPT_OK and choice > 0) or (id == PRESET_CHOICE_BASE + 1 and hasLastGame) then
+      local name = id == PROMPT_OK and names[choice] or LAST_GAME
+      armedPreset = loadPreset(name)
+      if not armedPreset then log("preset_load_failed name=%s", name) end
+      log("preset_prompt_closed result=ok preset=%s armed=%d", name, armedPreset and 1 or 0)
+      return true
+    -- Note 74: A click on a named preset's line (ids 101 to 100 + the number of presets, Note 13)
     -- picks that line.
-    elseif id >= PRESET_CHOICE_BASE and id <= PRESET_CHOICE_BASE + #names then
+    elseif id > PRESET_CHOICE_BASE and id <= PRESET_CHOICE_BASE + #names then
       choice = id - PRESET_CHOICE_BASE
     end
     -- Note 75: Any other id (0 for no click) changes nothing, and the loop draws the next frame.
   end
 end
 
--- Note 76: Runs Random Map Settings. In single player it first asks "Load a preset?". The screen
+-- Note 76: Runs Random Map Settings. In single player it first shows "New Game Preset". The screen
 -- copies its start values into locals on entry, so the preset has to be in place before next(). The
 -- preset borrows some values the screen opens with (the command line's exact map size, the start
 -- positions, Wilder), and this puts them back afterwards, so later new games without a preset behave
@@ -492,8 +516,9 @@ local mapScreenWrapped = coe5.wrap("NEW_WORLD_MAP_SCREEN", function(next)
   randomOff = {}   -- a new setup starts with every class rolled; a preset brings its own (Note 140)
   -- Note 79: Vanilla starts on Medium, or on the exact command-line size when one was given. The
   -- `a and x or y` choice (Note 31) works with -1 because -1 is a value: only nil and false count as
-  -- "no" in Lua.
-  mapSizeChoice = (coe5.get("cliMapW") > 0 or coe5.get("cliMapH") > 0) and -1 or 1
+  -- "no" in Lua. `coe5.get(...) or 0` stands in 0 when coe5.get gives nil, which it does for a value
+  -- this game build can't read yet; comparing nil with a number is an error.
+  mapSizeChoice = ((coe5.get("cliMapW") or 0) > 0 or (coe5.get("cliMapH") or 0) > 0) and -1 or 1
   -- Note 80: Cancel goes back to the main menu, like the map screen's Cancel. Lua stops an `and` at
   -- the first test that fails, so in a network game's setup ("setupNetwork" true) promptPreset never
   -- runs, and no prompt shows. Returning 0 tells the game Cancel was clicked.
