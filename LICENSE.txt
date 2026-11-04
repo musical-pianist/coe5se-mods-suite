@@ -1,4 +1,4 @@
-The Jazzy mods (JazzyGamePresets, JazzyHotkeys, JazzyRestart, JazzyUITweaks, JazzyCheats, JazzyAIObserver)
+The Jazzy mods (JazzyGamePresets, JazzyHotkeys, JazzyRestart, JazzyUITweaks)
 
 Free for anyone to use, copy, change, share and sell, with no permission and no credit needed:
 public domain under CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
@@ -8,3 +8,6 @@ https://github.com/musical-pianist/coe5se
 CoE5SE's license has moved to https://github.com/musical-pianist/coe5se/blob/main/LICENSE.txt
 This repository's older commits still hold CoE5SE's files. Those files are CoE5SE, and that
 license covers them, wherever they are found.
+
+JazzyCheats and JazzyAIObserver have moved to https://github.com/musical-pianist/coe5se-modding-tools
+This repository's older commits still hold them, under the same CC0 1.0 terms.

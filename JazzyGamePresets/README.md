@@ -1,6 +1,6 @@
 # Jazzy Game Presets
 
-[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
+[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](https://github.com/musical-pianist/coe5se-modding-tools/blob/main/JazzyCheats/README.md) | [Jazzy AI Observer](https://github.com/musical-pianist/coe5se-modding-tools/blob/main/JazzyAIObserver/README.md)
 
 ## Set up your perfect game once. Load it in one click. Tweak it mid-game.
 

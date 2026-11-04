@@ -1,6 +1,6 @@
 # Jazzy UI Tweaks
 
-[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
+[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy Cheats](https://github.com/musical-pianist/coe5se-modding-tools/blob/main/JazzyCheats/README.md) | [Jazzy AI Observer](https://github.com/musical-pianist/coe5se-modding-tools/blob/main/JazzyAIObserver/README.md)
 
 Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. You can turn each one back to vanilla in Mod Settings, Jazzy UI Tweaks.  
 **Needs [CoE5SE](https://github.com/musical-pianist/coe5se) from Nexus Mods.**

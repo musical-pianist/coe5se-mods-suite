@@ -1,6 +1,6 @@
 # Jazzy Hotkeys
 
-[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
+[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Restart](../JazzyRestart/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](https://github.com/musical-pianist/coe5se-modding-tools/blob/main/JazzyCheats/README.md) | [Jazzy AI Observer](https://github.com/musical-pianist/coe5se-modding-tools/blob/main/JazzyAIObserver/README.md)
 
 Change any key of the game's Keyboard Shortcuts list: 196 actions on 10 screens, picked in Mod Settings.  
 **Needs [CoE5SE](https://github.com/musical-pianist/coe5se) from Nexus Mods.**

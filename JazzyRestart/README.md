@@ -1,6 +1,6 @@
 # Jazzy Restart
 
-[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](../JazzyCheats/README.md) | [Jazzy AI Observer](../JazzyAIObserver/README.md)
+[All mods](../README.md#mods) | [CoE5SE](https://github.com/musical-pianist/coe5se) | [Jazzy Game Presets](../JazzyGamePresets/README.md) | [Jazzy Hotkeys](../JazzyHotkeys/README.md) | [Jazzy UI Tweaks](../JazzyUITweaks/README.md) | [Jazzy Cheats](https://github.com/musical-pianist/coe5se-modding-tools/blob/main/JazzyCheats/README.md) | [Jazzy AI Observer](https://github.com/musical-pianist/coe5se-modding-tools/blob/main/JazzyAIObserver/README.md)
 
 Restart in the Game Menu. It ends the game and starts a new world with the same settings, no relaunch.  
 **Needs [CoE5SE](https://github.com/musical-pianist/coe5se) from Nexus Mods.**

@@ -1,6 +1,6 @@
 # Jazzy Mods for Conquest of Elysium 5
 
-Mods for Conquest of Elysium 5 built on [CoE5SE](https://github.com/musical-pianist/coe5se), the script extender.
+Mods for Conquest of Elysium 5 built on [CoE5SE](https://github.com/musical-pianist/coe5se), the script extender. Jazzy Cheats and Jazzy AI Observer are in [CoE5SE Modding Tools](https://github.com/musical-pianist/coe5se-modding-tools).
 
 ## Install
 
@@ -35,6 +35,4 @@ Click a mod for its Readme.
 - [Jazzy Hotkeys](JazzyHotkeys/README.md): Change any key of the game's Keyboard Shortcuts list: 196 actions on 10 screens, picked in Mod Settings.
 - [Jazzy Restart](JazzyRestart/README.md): Restart in the Game Menu. It ends the game and starts a new world with the same settings, no relaunch.
 - [Jazzy UI Tweaks](JazzyUITweaks/README.md): Delete saves from Load Game, hide the Read Tip button, shrink or hide the mod banners on the menu screens, and see what a ritual needs to cast. You can turn each one back to vanilla in Mod Settings, Jazzy UI Tweaks.
-- [Jazzy Cheats](JazzyCheats/README.md): Give yourself resources, drop units anywhere you've seen, get your movement back, and see every plane for a turn. All from the Game Menu.
-- [Jazzy AI Observer](JazzyAIObserver/README.md): Watch every AI player at once: what each one did last turn and why, its income, its view of the map, and its battles. Then take over one AI and play its turns.
 <!-- mods end -->
