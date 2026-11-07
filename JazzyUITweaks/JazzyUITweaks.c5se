@@ -1,5 +1,8 @@
 # Jazzy UI Tweaks' Mod Settings. CoE5SE reads this file right after JazzyUITweaks.c5m.
 
+# The player's own: in a network game it may differ per player, and no other player needs it.
+personalmod
+
 # JazzyUITweaks.lua reads each of these with coe5.setting and follows it live.
 newsettingheader "Main menu"
 

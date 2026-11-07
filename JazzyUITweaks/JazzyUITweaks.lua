@@ -92,13 +92,17 @@ local banners = coe5.wrap("MOD_BANNER_DRAW", function(next, path, x, y, w, h, al
   -- row = (screenH - 60 - y) / 60. In Lua, / can give a number with a fractional part (5 / 2 is 2.5),
   -- which is fine for screen positions. Then the banner moves right by half its width and shrinks to
   -- half, so its right edge stays put, and its distance from the top halves to 30 + 30 * row.
+  -- coe5.get gives nil for a value this game build can't read yet (a game update CoE5SE hasn't caught
+  -- up with), and arithmetic on nil is an error, so without screenH the banner keeps its usual size.
   if size == BANNERS_HALF then
     local screenH = coe5.get("screenH")
-    local row = (screenH - BANNER_ROW_STEP - y) / BANNER_ROW_STEP
-    x = x + w / 2
-    y = screenH - BANNER_ROW_STEP / 2 - row * BANNER_ROW_STEP / 2
-    w = w / 2
-    h = h / 2
+    if screenH then
+      local row = (screenH - BANNER_ROW_STEP - y) / BANNER_ROW_STEP
+      x = x + w / 2
+      y = screenH - BANNER_ROW_STEP / 2 - row * BANNER_ROW_STEP / 2
+      w = w / 2
+      h = h / 2
+    end
   end
   -- Note 20: next draws the banner with the values as they now stand. This site gives no result, so
   -- the return passes on nothing.
@@ -175,7 +179,7 @@ local RITUAL_HOVER_MS = 2000        -- how long the pointer stays on a row befor
 local NEEDS_OFF, NEEDS_ADVANCED = 0, 2  -- ritual_needs' options (1 is the plain list)
 local ROWS_ALL = 1                    -- ritual_needs_rows' options (0 is greyed rows only)
 local BOX_BOTTOM, BOX_DROP, BOX_PAD = 16, 2, 5   -- the hover box's place in UI units (Note 43)
-local EFFECT_MAXCAST, EFFECT_PLANEREQ = 1057, 939   -- the effect ids of the .c5m words maxcast and planereq
+local EFFECT_MAXCAST, EFFECT_PLANEREQ = 1057, 939   -- the effect ids of the mod commands maxcast and planereq
 local EFFECT_NEWRIT, EFFECT_NOT_IMMORTAL = 904, 1088 -- newrit, and the effect the game's "immortal beings" reason checks
 local EFFECT_NONEARBY1 = 1003        -- nonearby1req; nonearby3req to 99req follow, then nearby1req to 99req (1008-1012)
 local NEARBY_TILES = {1, 3, 5, 7, 99} -- each rule's distance, in that order (99: anywhere on the plane)
@@ -370,7 +374,7 @@ local function planeCalled(plane)
   return name ~= "" and name or ("plane " .. plane)
 end
 
--- Note 54: The line for each of a ritual's other rules, by the effect id of its .c5m word. Each
+-- Note 54: The line for each of a ritual's other rules, by the effect id of its mod command. Each
 -- function gets the effect's value, the monster lists (Note 53), and the slot, and returns nil where
 -- the game reads no rule from that value. `[905] = function ...` puts the function in the table
 -- under the number 905. Each function's test is the range of values the game reads as a rule

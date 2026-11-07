@@ -1,5 +1,8 @@
 # Jazzy Hotkeys' Mod Settings. CoE5SE reads this file right after JazzyHotkeys.c5m.
 
+# The player's own: in a network game it may differ per player, and no other player needs it.
+personalmod
+
 # One key setting per key of each line of the game's Keyboard Shortcuts list, named after its key
 # action (map_end_turn is coe5.keyAction.mapEndTurn), on a page per list section. Each group is
 # one screen, so no two lines of a screen hold the same key. No player can pick Esc, so every

@@ -1,0 +1,4 @@
+# Jazzy Game Presets' kind of mod. CoE5SE reads this file right after JazzyGamePresets.c5m.
+
+# The script stays off in network games, and no other player needs the mod.
+nomultiplayer

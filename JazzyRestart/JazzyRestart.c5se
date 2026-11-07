@@ -1,0 +1,4 @@
+# Jazzy Restart's kind of mod. CoE5SE reads this file right after JazzyRestart.c5m.
+
+# Single player only: the script stays off in network games, and no other player needs the mod.
+nomultiplayer
