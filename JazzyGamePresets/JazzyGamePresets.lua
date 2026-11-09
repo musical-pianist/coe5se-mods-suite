@@ -1,8 +1,10 @@
 -- Note 1: Jazzy Game Presets saves new game setups and fills them back in. Before Random Map Settings
 -- it asks "Load a preset?", and a chosen preset fills in both setup screens. Setup Participants gets
 -- a "Save as preset" button above Ok (Note 93), and every Ok there saves the setup as "Previous Game Settings".
--- Under "unique random players" it adds a "random classes" line: a checklist of the classes an AI
--- player's Random can roll, kept with the preset (Note 139). The script also logs setup clicks and
+-- Under "unique random players" it adds two rows, "Random classes" and "Random events". The first
+-- opens a checklist of the classes an AI player's Random can roll (Note 139), the second a checklist
+-- of the game's dice-rolled events, to switch some off for the game (Note 153); both are kept with
+-- the preset. The script also logs setup clicks and
 -- setting changes while CoE5SE's "Enable copious logs" setting is on (off by default).
 -- Presets are data files in the game's user folder,
 -- coe5se_data\JazzyGamePresets\jazzy_campaign_presets\<name>.ini (%APPDATA%\coe5 on Windows,
@@ -28,10 +30,12 @@
 --      preset?" screen (Notes 61 to 75) and reads the chosen preset's file (Note 41).
 --   2. Random Map Settings opens with the preset's values already in place (Notes 76 to 91).
 --   3. Setup Participants opens with the preset's players (Notes 52 and 92). Its "Save as preset"
---      button saves a named preset (Note 96), and its Ok saves "Previous Game Settings" (Note 119). Its "random
---      classes" line opens the checklist (Notes 139 to 152).
+--      button saves a named preset (Note 96), and its Ok saves "Previous Game Settings" (Note 119). Its "Random
+--      classes" row opens the classes checklist (Notes 139 to 152), its "Random events" row the events
+--      checklist (Notes 153 to 160).
 --   4. At "Creating World", each AI player left on Random gets a class from the checked ones, by
---      the game's own rules where one fits, never an unchecked one (Notes 147, 148, and 152).
+--      the game's own rules where one fits, never an unchecked one (Notes 147, 148, and 152), and
+--      the unticked events are switched off for the whole game (Note 159).
 --   5. During play, "Extended Game Settings" in the Game Menu opens a screen of the four options
 --      above (Notes 121 to 136).
 --   On every frame of the setup screens, the script also writes what changed to coe5mod.log while
@@ -94,9 +98,10 @@ coe5.dataFolder("jazzy_campaign_presets")
 ---@field south integer
 ---@field uniqueRandom integer the "unique random players" tick box on Setup Participants
 ---@field randomOff string[] the names of the classes an AI's Random doesn't roll (Note 139)
+---@field eventsOff string[] the names of the random events switched off (Note 153)
 ---@field slots PresetSlot[]
 
--- Note 18: The six names below are the script's memory. A `local` at the top of the file keeps its
+-- Note 18: The seven names below are the script's memory. A `local` at the top of the file keeps its
 -- value between calls until the game closes, so what one step stores, a later step reads. nil means
 -- "nothing stored". `---@type Preset?` tells the editor the name holds a Preset or nil (the ? means
 -- "or nil").
@@ -108,6 +113,7 @@ local pendingMapClick = nil -- Note 21: the button id to hand the map screen as 
 local mapSizeChoice = 1     -- Note 22: the size button last clicked on the map screen in this setup (vanilla starts at Medium)
 local societyChoice = nil   -- Note 23: the society picked when Random Map Settings' Ok was clicked; nil before that
 local randomOff = {}        -- the classes an AI's Random doesn't roll in this setup, by name (Note 139)
+local eventsOff = {}        -- the random events switched off in this setup, by CoE5SE's name (Note 153)
 
 -- Note 24: A short helper for log lines. `...` in a function's inputs means "any number of further
 -- inputs", and `...` in the call passes them all on. So log("x=%d", 5) is the same as
@@ -115,6 +121,39 @@ local randomOff = {}        -- the classes an AI's Random doesn't roll in this s
 -- with text, in order. coe5.log writes the line to coe5mod.log, which shows what the script did,
 -- while CoE5SE's "Enable copious logs" setting is on (off by default); otherwise it writes nothing.
 local function log(fmt, ...) coe5.log(string.format(fmt, ...)) end
+
+-- ---- Random events: the list ----------------------------------------------------------------------
+-- Note 24b: The game's dice-rolled events the "Random events" checklist lists (Note 153), in the
+-- game's monthly order, then the three hero rolls of a player's turn and the Giant Ant Hills' spawns.
+-- Each item is CoE5SE's name for the event (what coe5.setRandomEventsOff takes and a preset stores),
+-- the label the checklist shows, and its hover text. EVENT_INDEX turns a name back into its place in
+-- the list: `EVENT_INDEX[e.name] = k` stores each place under its name.
+local RANDOM_EVENT_LIST = {
+  {name = "hadesshift", label = "Hades Shift", tip = "Hades draws near for some months. Dispossessed Spirits spread."},
+  {name = "monument", label = "Monument of Hades", tip = "An Unfinished Monument rises on Elysium for the Forces of Hades."},
+  {name = "foretelling", label = "Foretelling", tip = "A foretelling of the Academy. Its subject is drawn into the Void, or the land unravels."},
+  {name = "taintedmagic", label = "Tainted Magic", tip = "Magic tainted for some months. Horrors draw near."},
+  {name = "elementalanomaly", label = "Elemental Anomaly", tip = "Elemental powers far more potent for some months. Elementals appear."},
+  {name = "heatwave", label = "Heat Wave", tip = "Forest fires everywhere."},
+  {name = "bumperharvest", label = "Bumper Harvest", tip = "Income from all farms and hoburg villages is doubled."},
+  {name = "fungusyear", label = "Fungus Year", tip = "All fungus income is doubled."},
+  {name = "meteor", label = "Meteor", tip = "A meteor strikes a random site."},
+  {name = "insanefisherman", label = "Insane Fisherman", tip = "An Insane Fisherman and a Float Cat Horror appear."},
+  {name = "drought", label = "Drought", tip = "Farm income reduced for three months."},
+  {name = "strangemist", label = "Strange Mist", tip = "Mist covers the world."},
+  {name = "eviltimes", label = "Evil Times", tip = "Murderers, bandits and brigands are thriving."},
+  {name = "infernogate", label = "Inferno Gate", tip = "An old gateway to Inferno opens. Devils and demons come through."},
+  {name = "primalgate", label = "Primal Gate", tip = "A gate to the Primal Plane opens in a forest."},
+  {name = "goldmine", label = "Gold Mine", tip = "Goblins, trolls, a dragon or worse invade a gold mine."},
+  {name = "youngdvala", label = "Young Dvala", tip = "A Young Dvala in a dwarf-held mine."},
+  {name = "merchant", label = "Merchant", tip = "A wealthy merchant from a land across the sea."},
+  {name = "hero", label = "A Hero", tip = "A class hero arrives."},
+  {name = "unexpectedhero", label = "Unexpected Hero", tip = "A class hero, or an Unexpected Hero when none is left."},
+  {name = "weaponmaster", label = "Old Weapon Master", tip = "A class hero, or an Old Weapon Master at a farm."},
+  {name = "antspawn", label = "Giant Ant Hills", tip = "Giant Ants, Fire Ants and Giant Ant Queens from Giant Ant Hills."},
+}
+local EVENT_INDEX = {}
+for k, e in ipairs(RANDOM_EVENT_LIST) do EVENT_INDEX[e.name] = k end
 
 -- ---- Classes ------------------------------------------------------------------------------------
 -- Note 25: A mod class's index in the class table changes with the enabled mods, so presets store
@@ -186,11 +225,16 @@ local function capturePreset()
     -- the test, so the line never compares nil.
     uniqueRandom = (coe5.get("newWorldUniqueRandom") or 0) ~= 0 and 1 or 0,
     randomOff = {},
+    eventsOff = {},
     slots = {},
   }
   -- The classes Random doesn't roll go in by name, sorted so a preset's file keeps one order (Note 140).
   for name in pairs(randomOff) do p.randomOff[#p.randomOff + 1] = name end
   table.sort(p.randomOff)
+  -- The events switched off go in the list's order (Note 154).
+  for _, e in ipairs(RANDOM_EVENT_LIST) do
+    if eventsOff[e.name] then p.eventsOff[#p.eventsOff + 1] = e.name end
+  end
   -- Note 34: Goes through player slots 0 to 23 and keeps only those in use, a human or an AI.
   -- `#p.slots` is how many items the list holds, so p.slots[#p.slots + 1] = ... adds one at the end.
   -- Lua lists start at 1, so the players in use become items 1, 2, 3, ... with no gaps, whatever slots
@@ -243,6 +287,11 @@ local function savePreset(p, name)
     t.RandomClasses = {}
     for i, className in ipairs(p.randomOff) do t.RandomClasses["Off" .. i] = className end
   end
+  -- A [RandomEvents] section the same way, with the events switched off (Note 154).
+  if #p.eventsOff > 0 then
+    t.RandomEvents = {}
+    for i, event in ipairs(p.eventsOff) do t.RandomEvents["Off" .. i] = event end
+  end
   return coe5.writeIni(name, t)   -- Note 38: true when the file was written, false (and logged) when it wasn't
 end
 
@@ -283,12 +332,26 @@ local function loadPreset(name)
     south = readInt(t, map, "South", -1),
     uniqueRandom = readInt(t, "SetupParticipants", "UniqueRandom", 0),
     randomOff = {},
+    eventsOff = {},
     slots = {},
   }
   -- Off1, Off2, ... up to the first one missing; a preset saved before random classes has none (Note 140).
   local off, n = t.RandomClasses or {}, 1
   while off["Off" .. n] do
     p.randomOff[n] = off["Off" .. n]
+    n = n + 1
+  end
+  -- The same for [RandomEvents]: a preset saved before random events has none, so every event is on.
+  -- A name that isn't on the list (a hand edit) is left out (Note 154).
+  local events = t.RandomEvents or {}
+  n = 1
+  while events["Off" .. n] do
+    local event = events["Off" .. n]
+    if EVENT_INDEX[event] then
+      p.eventsOff[#p.eventsOff + 1] = event
+    else
+      log("preset_event_unknown preset=%s event=%s", name, event)
+    end
     n = n + 1
   end
   -- Note 45: Read players from [Player1] on, and stop at the first section without a Controller.
@@ -375,6 +438,9 @@ local function applySlots()
   -- The preset's classes that Random doesn't roll come with its players (Note 140).
   randomOff = {}
   for _, className in ipairs(p.randomOff) do randomOff[className] = true end
+  -- And its events switched off (Note 154).
+  eventsOff = {}
+  for _, event in ipairs(p.eventsOff) do eventsOff[event] = true end
   slotsPreset = nil   -- Note 56: done, so later calls (Note 113) return at once
   log("preset_applied_slots slots=%d colors=%d", #p.slots, colored)
   return true
@@ -514,6 +580,7 @@ local mapScreenWrapped = coe5.wrap("NEW_WORLD_MAP_SCREEN", function(next)
   if coe5.setupAutomated() then return next() end
   societyChoice = nil
   randomOff = {}   -- a new setup starts with every class rolled; a preset brings its own (Note 140)
+  eventsOff = {}   -- and with every event on (Note 154)
   -- Note 79: Vanilla starts on Medium, or on the exact command-line size when one was given. The
   -- `a and x or y` choice (Note 31) works with -1 because -1 is a value: only nil and false count as
   -- "no" in Lua. `coe5.get(...) or 0` stands in 0 when coe5.get gives nil, which it does for a value
@@ -921,7 +988,7 @@ log("setup_hooks_installed waits=%d of 3 map_screen=%d init_participants=%d save
 
 -- ---- Random classes -----------------------------------------------------------------------------
 -- Note 139: "Unique random players" keeps two players from rolling the same class. This part adds a
--- line under that box, "<random classes: 27 of 31>", that opens a checklist of the classes an AI
+-- row under that box, "Random classes 27 of 31" (Note 160), that opens a checklist of the classes an AI
 -- player's Random can roll; at least one class always stays checked. At "Creating World" each AI
 -- player still on Random gets one of the checked classes, by the same rules the game's own roll
 -- uses where a checked class fits them (Note 148). An unchecked class never goes to an AI player:
@@ -938,11 +1005,11 @@ log("setup_hooks_installed waits=%d of 3 map_screen=%d init_participants=%d save
 -- preset brings its set back with its players (Note 52), and a new setup with no preset starts
 -- with every class on (Note 78's wrap).
 
-local RANDOM_CLASSES_ID = 901      -- Note 141: the line's id on Setup Participants, beside SAVE_PRESET_ID (Note 15)
+local RANDOM_CLASSES_ID = 901      -- Note 141: the row's id on Setup Participants, beside SAVE_PRESET_ID (Note 15)
 local CLASS_LINE_BASE = 100        -- Note 142: the checklist's line for class c is CLASS_LINE_BASE + c (c is at most 249)
 local ALL_ON, ALL_OFF, NEXT_PAGE, PREVIOUS_PAGE = 10, 11, 12, 13   -- the checklist's other lines (Note 14's form)
 local CLASSES_PER_PAGE = 18        -- Note 143: the game's screens are 600 high, so a long list is split into pages
-local NAMES_IN_TOOLTIP = 8         -- Note 144: the line's hover text names at most this many unchecked classes
+local NAMES_IN_TOOLTIP = 8         -- Note 144: a row's hover text names at most this many unchecked classes or events
 
 -- Note 145: The checklist needs CoE5SE's classAbility (Note 147). Under an older CoE5SE, which lacks
 -- the coe5.classAbility table, `a and b` stops at the nil and the pcall never runs, so
@@ -1122,28 +1189,12 @@ local function openRandomClasses()
   end
 end
 
--- Note 152: Three wraps put the feature in. The button row wrap draws the line, with its hover
--- text, above Note 93's blank line: a wrap added later runs first (outside the earlier one), so
--- this line comes before the earlier wrap's. The participants wait wrap runs the frame through
--- next (the earlier wrap and the game) and opens the checklist when the line was clicked;
--- returning 0 makes the game draw the screen again with the new count. The Creating World wrap
--- gives each AI player on Random a checked class before next lets the game roll the humans'
--- Random. Its priority, -1, puts it inside every other script's wrap of that step, so Jazzy
--- Restart has put its saved players back (still on Random) before this runs.
-local randomLineWrapped, randomWaitWrapped, randomRollWrapped = false, false, false
+-- Note 152: The Creating World wrap gives each AI player on Random a checked class before next
+-- lets the game roll the humans' Random. Its priority, -1, puts it inside every other script's wrap
+-- of that step, so Jazzy Restart has put its saved players back (still on Random) before this runs.
+-- The row that opens the checklist is drawn with the events' row (Note 160).
+local randomRollWrapped = false
 if HAS_CLASS_ABILITY then
-  randomLineWrapped = coe5.wrap("PARTICIPANTS_BUTTON_ROW", function(next, style)
-    local classes = listedClasses()
-    coe5.ui.text(RANDOM_CLASSES_ID, string.format("<random classes: %d of %d>", countChecked(classes), #classes))
-    coe5.ui.tooltip(randomClassesTip(classes))
-    return next(style)
-  end)
-  randomWaitWrapped = coe5.wrap("PARTICIPANTS_WAIT", function(next, block, mode)
-    local clicked = next(block, mode)
-    if clicked ~= RANDOM_CLASSES_ID then return clicked end
-    openRandomClasses()
-    return 0
-  end)
   randomRollWrapped = coe5.wrap("NEW_WORLD_CREATING_WORLD", function(next, kind, text)
     if anyClassOff() then
       local classes = listedClasses()
@@ -1163,5 +1214,195 @@ if HAS_CLASS_ABILITY then
     next(kind, text)
   end, -1)
 end
+
+-- ---- Random events ------------------------------------------------------------------------------
+-- Note 153: The game rolls dice for some of its events: each month for a drought, a meteor, a
+-- merchant and the rest of RANDOM_EVENT_LIST (Note 24b), each player's turn for a hero, and each
+-- month at every Giant Ant Hill for its ants. The "Random events" row opens a checklist of those
+-- events, and an unticked one is switched off for the whole game: CoE5SE still throws its dice, and
+-- a roll that would start it does nothing, as a failed roll does, so the rest of the game rolls as
+-- it would have. An event already under way when it is switched off runs to its end. Events that a
+-- player's sites, units or broken seals start, and the events of other mods, aren't on the list.
+-- eventsOff, the seventh name in the script's memory (Note 18), holds the unticked events as a set
+-- by CoE5SE's name: eventsOff.drought is true while the Drought is off.
+--
+-- Note 154: The set travels with the setup as the classes do (Note 140): every preset saves it as a
+-- [RandomEvents] section, Off1 = drought, Off2 = ..., "Previous Game Settings" saves it on every Ok,
+-- loading a preset brings it back, and a new setup with no preset starts with every event on. A
+-- preset saved before this has no such section, so every event is on. CoE5SE keeps the set in each
+-- save of the game, so it lasts through saving and loading.
+
+local RANDOM_EVENTS_ID = 902       -- Note 155: the row's id on Setup Participants, beside RANDOM_CLASSES_ID
+local EVENT_LINE_BASE = 100        -- the checklist's line for event k of RANDOM_EVENT_LIST is EVENT_LINE_BASE + k
+local EVENT_ALL_ON, EVENT_ALL_OFF = 10, 11
+local EVENT_ROWS = 11              -- two columns of 11, each top to bottom in the list's order
+local EVENT_SCREEN_WIDTH = 600     -- the checklist screen: wider than Random Map Settings', for two columns
+local EVENT_ROW_WIDTH = 560        -- a checklist row, both columns
+local EVENT_COLUMN_RIGHT = 290     -- where the second column starts in a row
+
+-- Note 156: The checklist needs CoE5SE's coe5.setRandomEventsOff. Under an older CoE5SE, which has
+-- no such function, the row isn't drawn and every event rolls as in the game; a preset's
+-- [RandomEvents] still loads and saves, so nothing in it is lost.
+local HAS_RANDOM_EVENTS = coe5.setRandomEventsOff ~= nil
+
+-- Note 157: The count the row shows and the hover text: what the row does, then the events that are
+-- off by their labels, at most NAMES_IN_TOOLTIP of them (Note 150's form).
+local function countEventsOn(off)
+  local on = 0
+  for _, e in ipairs(RANDOM_EVENT_LIST) do
+    if not off[e.name] then on = on + 1 end
+  end
+  return on
+end
+
+local function randomEventsTip()
+  local labels = {}
+  for _, e in ipairs(RANDOM_EVENT_LIST) do
+    if eventsOff[e.name] then labels[#labels + 1] = e.label end
+  end
+  local tip = "Random events the game can roll."
+  if #labels == 0 then return tip end
+  local shown = {table.unpack(labels, 1, math.min(#labels, NAMES_IN_TOOLTIP))}
+  tip = tip .. " Off: " .. table.concat(shown, ", ")
+  if #labels > NAMES_IN_TOOLTIP then tip = tip .. string.format(", and %d more", #labels - NAMES_IN_TOOLTIP) end
+  return tip
+end
+
+-- Note 158: The checklist screen. As the classes' (Note 151), it works on a copy, `off`, so Cancel
+-- changes nothing and Ok writes the copy back. All 22 events fit on one page: each row has id 0, so
+-- the row itself is no click, and holds two checkbox lines, event k in the left column and event
+-- k + 11 in the right, each its own click with its own hover. Every event may be off: the game plays
+-- on without any of them.
+local function openRandomEvents()
+  local off = {}
+  for name in pairs(eventsOff) do off[name] = true end
+  log("random_events_opened events=%d", #RANDOM_EVENT_LIST)
+  while true do
+    coe5.ui.screenBegin("Random Events")
+    coe5.ui.screenWidth(EVENT_SCREEN_WIDTH)
+    coe5.ui.sectionBegin()
+    for row = 1, EVENT_ROWS do
+      if coe5.ui.rowBegin then coe5.ui.rowBegin(0, EVENT_ROW_WIDTH) end
+      for column = 0, 1 do
+        local k = row + column * EVENT_ROWS
+        local e = RANDOM_EVENT_LIST[k]
+        if e then
+          coe5.ui.columnX(column * EVENT_COLUMN_RIGHT)
+          coe5.ui.checkbox(EVENT_LINE_BASE + k, not off[e.name], e.label)
+          coe5.ui.tooltip(e.tip)
+        end
+      end
+      if coe5.ui.rowEnd then coe5.ui.rowEnd() end
+    end
+    coe5.ui.sectionEnd()
+    local on = countEventsOn(off)
+    coe5.ui.text(0, string.format("Allowed %d out of %d", on, #RANDOM_EVENT_LIST))
+    coe5.ui.text(EVENT_ALL_ON, "<all on>")
+    coe5.ui.text(EVENT_ALL_OFF, "<all off>")
+    coe5.ui.buttonRow()
+    coe5.ui.text(PROMPT_OK, "Ok")
+    coe5.ui.text(PROMPT_CANCEL, "Cancel")
+    coe5.ui.bindKey(PROMPT_OK, coe5.key.enter)
+    coe5.ui.bindEscape(PROMPT_CANCEL)
+    local id = coe5.ui.wait()
+    if id == PROMPT_CANCEL then
+      log("random_events_closed result=cancel")
+      return
+    elseif id == PROMPT_OK then
+      eventsOff = off
+      log("random_events_closed result=ok allowed=%d of %d", on, #RANDOM_EVENT_LIST)
+      return
+    elseif id == EVENT_ALL_ON then
+      off = {}
+    elseif id == EVENT_ALL_OFF then
+      for _, e in ipairs(RANDOM_EVENT_LIST) do off[e.name] = true end
+    else
+      -- An event's line flips it, storing true for an event turning off and nil for one turning on
+      -- (Note 151's form). EVENT_INDEX isn't needed here: the line's id gives the place in the list.
+      local e = RANDOM_EVENT_LIST[id - EVENT_LINE_BASE]
+      if e then off[e.name] = not off[e.name] or nil end
+    end
+  end
+end
+
+-- Note 159: At Creating World the set goes to CoE5SE, which switches those events off for the game
+-- and keeps them off through every save and load of it. A new game starts with every event on, so a
+-- set with nothing off needs no call. The wrap's priority, -1, puts it inside other scripts' wraps,
+-- as Note 152's.
+local randomEventsWrapped = false
+if HAS_RANDOM_EVENTS then
+  randomEventsWrapped = coe5.wrap("NEW_WORLD_CREATING_WORLD", function(next, kind, text)
+    local names = {}
+    for _, e in ipairs(RANDOM_EVENT_LIST) do
+      if eventsOff[e.name] then names[#names + 1] = e.name end
+    end
+    if #names > 0 then
+      local set = coe5.setRandomEventsOff(names)
+      log("random_events_handed off=%s set=%d", table.concat(names, ","), flag(set))
+    end
+    next(kind, text)
+  end, -1)
+end
+
+-- Note 160: The two rows under "unique random players", each opening its checklist: "Random
+-- classes" with the classes Random can roll, and "Random events" with the events allowed. A row is
+-- a line of the game's table style, its label on the left and its count on the right, clicked as one
+-- (coe5.ui.rowBegin, Note 68); the two rows take turns of two dark shades, as a table's rows do, and
+-- a blank line above sets them apart. A CoE5SE without rows draws each as a text line instead,
+-- "<random classes: 27 of 31>", which clicks the same. The button row wrap draws them above Note
+-- 93's blank line: a wrap added later runs first (outside the earlier one). The participants wait
+-- wrap runs the frame through next (the earlier wrap and the game) and opens the checklist of the
+-- row clicked; returning 0 makes the game draw the screen again with the new count.
+local ENTRY_ROW_WIDTH = 410        -- a row's width: the player table's
+local ENTRY_COUNT_X = 345          -- where a row's count starts
+local ENTRY_SHADES = {{0.141, 0.125, 0.118}, {0.102, 0.094, 0.086}}   -- the two rows' backgrounds, r, g, b
+
+local function entryRow(id, k, label, count, tip)
+  if coe5.ui.rowBegin then
+    local shade = ENTRY_SHADES[(k - 1) % 2 + 1]
+    coe5.ui.rowBegin(id, ENTRY_ROW_WIDTH, shade[1], shade[2], shade[3], 1)
+    coe5.ui.text(id, label)
+    coe5.ui.tooltip(tip)
+    coe5.ui.columnX(ENTRY_COUNT_X)
+    coe5.ui.text(id, count)
+    coe5.ui.tooltip(tip)
+    coe5.ui.rowEnd()
+  else
+    coe5.ui.text(id, string.format("<%s: %s>", label:lower(), count))
+    coe5.ui.tooltip(tip)
+  end
+end
+
+local rowsWrapped, rowsWaitWrapped = false, false
+if HAS_CLASS_ABILITY or HAS_RANDOM_EVENTS then
+  rowsWrapped = coe5.wrap("PARTICIPANTS_BUTTON_ROW", function(next, style)
+    coe5.ui.text(0, "")
+    local k = 0
+    if HAS_CLASS_ABILITY then
+      local classes = listedClasses()
+      k = k + 1
+      entryRow(RANDOM_CLASSES_ID, k, "Random classes", string.format("%d of %d", countChecked(classes), #classes), randomClassesTip(classes))
+    end
+    if HAS_RANDOM_EVENTS then
+      k = k + 1
+      entryRow(RANDOM_EVENTS_ID, k, "Random events", string.format("%d of %d", countEventsOn(eventsOff), #RANDOM_EVENT_LIST), randomEventsTip())
+    end
+    return next(style)
+  end)
+  rowsWaitWrapped = coe5.wrap("PARTICIPANTS_WAIT", function(next, block, mode)
+    local clicked = next(block, mode)
+    if clicked == RANDOM_CLASSES_ID and HAS_CLASS_ABILITY then
+      openRandomClasses()
+      return 0
+    elseif clicked == RANDOM_EVENTS_ID and HAS_RANDOM_EVENTS then
+      openRandomEvents()
+      return 0
+    end
+    return clicked
+  end)
+end
 log("random_classes_installed class_ability=%d line=%d wait=%d roll=%d",
-  flag(HAS_CLASS_ABILITY), flag(randomLineWrapped), flag(randomWaitWrapped), flag(randomRollWrapped))
+  flag(HAS_CLASS_ABILITY), flag(rowsWrapped and HAS_CLASS_ABILITY), flag(rowsWaitWrapped and HAS_CLASS_ABILITY), flag(randomRollWrapped))
+log("random_events_installed set_call=%d rows=%d line=%d wait=%d handed=%d",
+  flag(HAS_RANDOM_EVENTS), flag(coe5.ui.rowBegin ~= nil), flag(rowsWrapped and HAS_RANDOM_EVENTS), flag(rowsWaitWrapped and HAS_RANDOM_EVENTS),
+  flag(randomEventsWrapped))
