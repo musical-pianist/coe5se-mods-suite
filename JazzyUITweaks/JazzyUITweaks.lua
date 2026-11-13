@@ -14,6 +14,8 @@
 --     not (off by default; Notes 30 to 46 and 50 to 55).
 --   - The map editor's toolbox gets Show grid, and the x key does the same: faint square edges with
 --     each square's map coordinates (on by default; Notes 57 to 65).
+--   - The square's panel at the bottom of the map puts its resource icons on more lines when they
+--     reach the screen's right edge (on by default; Note 72).
 --
 -- Note 2: This file is a Lua script. CoE5SE runs it; the mod has no DLL. CoE5SE reads the file once
 -- per game launch, on the first main menu frame, and runs the lines that sit outside any function
@@ -903,6 +905,21 @@ local editorDraw = coe5.wrap("MAP_EDITOR_DRAW", function(next)
   return next()
 end)
 
+-- Note 72: The square's panel at the bottom of the map draws one icon for each unit of the square's
+-- income, all on one line, so a city with a large income runs its icons off the right edge and the
+-- resources after its gold are cut off. CoE5SE asks SQUARE_PANEL_WRAP about each icon that would end
+-- past the screen: right is where the icon would end and limit the screen's width, both in the
+-- game's screen units, and line which of the row's lines it is on (1 the first). next gives the
+-- game's answer, 0, which keeps the icon on its line; 1 starts a new line with it, and the panel
+-- grows up to make room. The row stops at 3 lines (SQUARE_WRAP_LINES):
+-- past that the third line runs on past the edge, as the game's own row does.
+local SQUARE_WRAP_LINES = 3
+local squareWrap = coe5.wrap("SQUARE_PANEL_WRAP", function(next, right, limit, line)
+  local answer = next(right, limit, line)
+  if coe5.setting("square_panel_wrap") and line < SQUARE_WRAP_LINES then return 1 end
+  return answer
+end)
+
 -- Note 47: `ok and 1 or 0` is a common Lua way to write "1 if ok, else 0". `and` gives its right side
 -- when the left side counts as yes, and `or` gives its right side when what came before counts as
 -- no. In Lua only nil and false count as no. The log line below needs whole numbers, not true and
@@ -919,8 +936,10 @@ deleteReady = browser and rowDate and wait
 -- "Enable copious logs" setting is on (off by default); otherwise it writes nothing. string.format
 -- fills each %d with a whole number, in order. ritual_needs counts the ritual readout's row wrap,
 -- its two observers, and the hover box's line wrap (Notes 31, 45, and 50). editor_grid counts the
--- grid's four toolbox lines and three wraps (Notes 59 to 67).
-coe5.log(string.format("ui_tweaks_installed save_delete=%d of 3 banners=%d read_tip=%d keep_banners=%d ritual_needs=%d of 4 editor_grid=%d of 7",
+-- grid's four toolbox lines and three wraps (Notes 59 to 67). square_wrap is the resource row's wrap
+-- (Note 72).
+coe5.log(string.format("ui_tweaks_installed save_delete=%d of 3 banners=%d read_tip=%d keep_banners=%d ritual_needs=%d of 4 editor_grid=%d of 7 square_wrap=%d",
   flag(browser) + flag(rowDate) + flag(wait), flag(banners), flag(readTip), flag(keep),
   flag(ritualRow) + flag(locationObserved) + flag(castObserved) + flag(lineColour),
-  flag(showGrid) + flag(hideGrid) + flag(linesUp) + flag(linesDown) + flag(editorOpen) + flag(editorKey) + flag(editorDraw)))
+  flag(showGrid) + flag(hideGrid) + flag(linesUp) + flag(linesDown) + flag(editorOpen) + flag(editorKey) + flag(editorDraw),
+  flag(squareWrap)))

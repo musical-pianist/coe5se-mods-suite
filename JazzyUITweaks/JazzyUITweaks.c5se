@@ -72,3 +72,11 @@ key
 default "x"
 label "Grid key"
 tip "Shows or hides the map editor's grid."
+
+newsettingheader "Map"
+
+newsetting square_panel_wrap
+onoff
+default 1
+label "Wrap resource icons"
+tip "The square's resource icons at the bottom of the map go on to a new line at the screen's edge."
