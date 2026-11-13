@@ -185,6 +185,17 @@ local EFFECT_NONEARBY1 = 1003        -- nonearby1req; nonearby3req to 99req foll
 local NEARBY_TILES = {1, 3, 5, 7, 99} -- each rule's distance, in that order (99: anywhere on the plane)
 local reasons = coe5.ritual   -- the game's reason codes (reasonMirror, ...) and row id bases, from coe5.lua
 
+-- Note 69: CoE5SE's castermaxcast: a ritual each commander can cast at most so many times. Its limit
+-- and a commander's casts so far are CoE5SE's own values (ritualCasterMaxCast, unitRitualCasts), which a
+-- CoE5SE older than 3.4 doesn't have: coe5.get of a name it lacks is an error, so pcall asks once at
+-- load (Note 55 says what pcall does) and the readout leaves the line out there. At the limit the game
+-- greys the row with its own maxcast reason, so that reason alone no longer says which of the two
+-- limits a ritual reached.
+local casterMaxCastKnown = pcall(coe5.get, "ritualCasterMaxCast", 0)
+local function casterMaxCastOf(slot)
+  return casterMaxCastKnown and coe5.get("ritualCasterMaxCast", slot) or 0
+end
+
 -- Note 31: What the game's two checks said about the row it is about to draw. For each ritual the
 -- screen calls its location check, then its cast check, then draws the row, all inside the same
 -- frame, so the row's wrap (Note 45) reads what these two observers stored just before it. Plain
@@ -471,11 +482,26 @@ local function plainNeeds(slot, row, haves)
   else
     needLine(lines, marks, "Mastery Level " .. level)
   end
+  -- Note 70: The two cast limits (Note 69). The commander's count is his unit's, so it shows only
+  -- when the row's caster is known. When he reached his castermaxcast, the game's maxcast reason is
+  -- that limit's, so the player's own maxcast line is marked by its count instead.
+  local casterMaxCast = casterMaxCastOf(slot)
+  local casterCast = (casterMaxCast > 0 and unit >= 0) and coe5.get("unitRitualCasts", unit, slot) or 0
+  local casterReached = casterMaxCast > 0 and unit >= 0 and casterCast >= casterMaxCast
   local maxcast = effectValue(slot, EFFECT_MAXCAST)
   if maxcast and maxcast > 0 then
     local cast = player >= 0 and coe5.get("slotRitualCasts", player, slot) or 0
-    needLine(lines, marks, "Cast at most " .. maxcast .. (maxcast == 1 and " time" or " times") .. ", cast " .. cast .. " so far",
-      checkCast ~= reasons.reasonMaxcast)
+    local met = checkCast ~= reasons.reasonMaxcast
+    if casterReached then met = cast < maxcast end
+    needLine(lines, marks, "Cast at most " .. maxcast .. (maxcast == 1 and " time" or " times") .. ", cast " .. cast .. " so far", met)
+  end
+  if casterMaxCast > 0 then
+    local text = "Cast at most " .. casterMaxCast .. (casterMaxCast == 1 and " time" or " times") .. " per commander"
+    if unit >= 0 then
+      needLine(lines, marks, text .. ", cast " .. casterCast .. " so far", not casterReached)
+    else
+      needLine(lines, marks, text)
+    end
   end
   -- Note 41: The game passes the mirror the ritual needs as the row's last argument, already in words
   -- ("any type of empty mirror under the command of the mage"), and an empty text when it needs none.
@@ -573,6 +599,16 @@ local function rawNeeds(slot, row)
   if player >= 0 then
     table.insert(lines, string.format("cast p%d %d%s", player, coe5.get("slotRitualCasts", player, slot), maxcast and ("/" .. maxcast) or ""))
   end
+  -- Note 71: The commander's own count of a castermaxcast ritual (Note 69), by his unit.
+  local casterMaxCast = casterMaxCastOf(slot)
+  if casterMaxCast > 0 then
+    local unit = (checkSlot == slot and checkCommander >= 0) and coe5.get("commanderUnit", checkCommander) or -1
+    if unit >= 0 then
+      table.insert(lines, string.format("castermaxcast u%d %d/%d", unit, coe5.get("unitRitualCasts", unit, slot), casterMaxCast))
+    else
+      table.insert(lines, string.format("castermaxcast %d", casterMaxCast))
+    end
+  end
   -- string.sub(s, 1, 120) keeps a string's first 120 characters, so each one stays a single line.
   local strings = {}
   for i = 0, 47 do
@@ -612,10 +648,16 @@ local function lineCount(text) return select(2, string.gsub(text, "\n", "\n")) +
 local function readoutFor(slot, row, mode)
   local height = coe5.get("tooltipLineHeight")
   local haves = costsHave(slot, row)
-  -- tostring turns each entry, a number or false, into text for the key.
+  -- tostring turns each entry, a number or false, into text for the key. The casts so far go in it
+  -- too, the player's and the commander's (Note 70), since a cast that leaves the row castable
+  -- changes no reason code.
+  local player = coe5.get("activePlayer")
+  local unit = (checkSlot == slot and checkCommander >= 0) and coe5.get("commanderUnit", checkCommander) or -1
+  local playerCasts = player >= 0 and coe5.get("slotRitualCasts", player, slot) or 0
+  local commanderCasts = (unit >= 0 and casterMaxCastOf(slot) > 0) and coe5.get("unitRitualCasts", unit, slot) or 0
   local key = table.concat({coe5.get("turn"), mode, checkCommander, checkCast, checkLocation, row.apCost, row.hover or "",
     row.mirrorText or "", table.concat(row.costs, ","), tostring(haves[1]), tostring(haves[2]), tostring(haves[3]),
-    tostring(haves[4]), height, coe5.get("screenH")}, ",")
+    tostring(haves[4]), height, coe5.get("screenH"), playerCasts, commanderCasts}, ",")
   local kept = readouts[slot]
   if kept and kept.key == key then return kept.text, kept.marks end
   local needs, marks = plainNeeds(slot, row, haves)
