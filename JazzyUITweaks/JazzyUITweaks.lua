@@ -707,6 +707,117 @@ local ritualRow = coe5.wrap("RITUAL_SCREEN_ROW", function(next, id, a, b, name, 
   return next(id, a, b, name, t1, c1, t2, c2, t3, c3, t4, c4, hover, apCost, castable, mirrorMonster, mirrorText)
 end)
 
+-- Note 73: The Voice of El's Ceremonies screen gets the same readout. A priest of El opens it where
+-- other commanders open the ritual screen, and the game draws its rows with the ritual screen's own
+-- row code, so CEREMONY_SCREEN_ROW (Note 76) hands the same 17 inputs. The two "Rituals" settings
+-- cover both screens. A row's id names its ceremony: the ceremony's number plus coe5.ceremony.rowUsable
+-- when the priest may perform it, or plus rowGreyed when it is greyed out. Its hover text is the
+-- game's reason for a greyed row. The screen itself checks the rules below before it offers a row,
+-- so a row it offers meets them; only the cost is checked when the ceremony is performed, and a
+-- ceremony the player can't pay for does nothing at all. No action point line, as the ritual readout
+-- has none: a priest with any point left may perform, and the cost carries over.
+-- PRAYERS_ABILITY is the ability that gives a priest's rank, the Prayers level: 1 for a Bishop, 2
+-- for an Arch Bishop, 3 for a Cardinal, 4 for the Pontiff. CEREMONY_LEVELS gives the level each
+-- ceremony needs, by the game's own name for it (coe5.lua asks scripts to match ceremonies by
+-- ceremonyName, never by their numbers). Ceremony of Mastery has none: its row shows only for the
+-- rank it raises.
+local PRAYERS_ABILITY = 0x20d
+local CEREMONY_LEVELS = {["Convert Settlement"] = 1, ["Break Seal"] = 2, ["Bolster Devotion"] = 2,
+  ["Increase Divine Favor"] = 2, ["Start Crusade"] = 3, ["Call the Inquisition"] = 3}
+local SEALS, FAVOR_MAX = 7, 4   -- the Seven Seals, and the highest Divine Favor
+local ceremonies = coe5.ceremony   -- the row id bases, from coe5.lua; nil under a CoE5SE without the site
+
+-- Note 74: The line a ceremony's own rule gives. Ceremony of Mastery's depends on the priest's rank,
+-- which the game reads from his monster's name, as here: an Arch Bishop becomes a Cardinal while
+-- fewer than three live, a Cardinal the Pontiff while none lives. Each line is met exactly when the
+-- screen offers the row (castable 1): the game's reason above the readout says which rule a greyed
+-- row broke.
+local function ceremonyRuleLine(ceremonyName, priestName, player)
+  if ceremonyName == "Convert Settlement" then return "Settlement like a farm or village here, not yet worshipping El" end
+  if ceremonyName == "Break Seal" then
+    return "A seal still unbroken (" .. coe5.get("sealsBroken") .. " of " .. SEALS .. " broken)"
+  end
+  if ceremonyName == "Increase Divine Favor" then
+    return "Divine favor below " .. FAVOR_MAX .. " (" .. coe5.get("slotDivineFavor", player) .. " now)"
+  end
+  if ceremonyName == "Start Crusade" then return "No crusade active" end
+  if ceremonyName == "Call the Inquisition" then return "No inquisition active" end
+  if ceremonyName == "Ceremony of Mastery" and priestName == "Arch Bishop" then return "Fewer than three Cardinals in Elysium" end
+  if ceremonyName == "Ceremony of Mastery" and priestName == "Cardinal" then return "No Pontiff in Elysium" end
+  return nil
+end
+
+-- Note 75: The ceremony row's whole hover text, built as readoutFor builds a ritual's (Note 44): the
+-- game's reason, a blank line, the plain list, and for Advanced one raw line. The priest is the
+-- commander selected on the map, who opened the screen. The readout is kept under its key while
+-- nothing in it changes, in readouts under the row's id, apart from the ritual slots' numbers.
+local ceremonyReadouts = {}
+local function ceremonyReadoutFor(id, ceremony, cost, costType, hover, castable, mode)
+  local height = coe5.get("tooltipLineHeight")
+  local player = coe5.get("activePlayer")
+  local commander = coe5.get("selectedCommander")
+  local unit = commander >= 0 and coe5.get("commanderUnit", commander) or -1
+  local rank = unit >= 0 and coe5.get("unitAbility", unit, PRAYERS_ABILITY) or 0
+  local apLeft = commander >= 0 and coe5.commanderApLeft(commander) or nil
+  local have = (player >= 0 and costType >= 0 and costType <= 13) and coe5.get("slotResource", player, costType) or nil
+  local name = coe5.get("ceremonyName", ceremony) or ("Ceremony " .. ceremony)
+  local priestName = unit >= 0 and coe5.get("monsterName", coe5.get("unitMonster", unit)) or nil
+  local rule = ceremonyRuleLine(name, priestName, player)
+  local key = table.concat({coe5.get("turn"), mode, id, castable, cost, costType, tostring(have), tostring(apLeft), rank,
+    rule or "", hover or "", height, coe5.get("screenH")}, ",")
+  local kept = ceremonyReadouts[id]
+  if kept and kept.key == key then return kept.text, kept.marks end
+  local lines, marks = {}, {}
+  if cost > 0 then
+    -- `have and have >= cost` is nil when the stock can't be read, which leaves the line unmarked.
+    needLine(lines, marks, resourceName(costType) .. " " .. cost, have and have >= cost)
+  end
+  local level = CEREMONY_LEVELS[name]
+  if level then needLine(lines, marks, "Prayers Level " .. level .. "(" .. rank .. ")", rank >= level) end
+  if rule then needLine(lines, marks, rule, castable == 1) end
+  -- A row the priest may perform mostly has no hover of its own: the list then starts the box.
+  local reason = (hover and hover ~= "") and (hover .. "\n\n") or ""
+  local text = reason .. "Needs to perform:\n" .. table.concat(lines, "\n")
+  if mode == NEEDS_ADVANCED then
+    text = text .. "\n\n" .. string.format("ceremony %d  id %d  castable %d  cost %d/%s %d  have %s  ap %s  rank %d", ceremony, id,
+      castable, costType, resourceName(costType), cost, tostring(have), tostring(apLeft), rank)
+  end
+  text = text .. string.rep("\n", boxPad(lineCount(text), height))
+  ceremonyReadouts[id] = {key = key, text = text, marks = marks}
+  return text, marks
+end
+
+-- Note 76: CEREMONY_SCREEN_ROW, the Ceremonies screen's rows, wrapped as Note 45 wraps the ritual
+-- screen's. A CoE5SE older than the site stops the script at a coe5.wrap that names it, so the wrap
+-- goes through pcall (Note 55): there ceremonyRow ends up false, and the rest of the mod works.
+local wrappedRow, ceremonyRow = pcall(coe5.wrap, "CEREMONY_SCREEN_ROW", function(next, id, a, b, name, t1, c1, t2, c2, t3, c3,
+                                                                            t4, c4, hover, apCost, castable, mirrorMonster,
+                                                                            mirrorText)
+  local mode = coe5.setting("ritual_needs")
+  if ceremonies and mode ~= nil and mode ~= NEEDS_OFF and id ~= 0 and coe5.get("hoveredId") == id
+      and (castable == 0 or coe5.setting("ritual_needs_rows") == ROWS_ALL) and heldOn(id) then
+    local ceremony = castable == 0 and id - ceremonies.rowGreyed or id - ceremonies.rowUsable
+    hover, shownMarks = ceremonyReadoutFor(id, ceremony, c1, t1, hover, castable, mode)
+    shownRow = id
+  elseif shownRow == id then
+    shownMarks, shownRow = nil, nil
+  end
+  return next(id, a, b, name, t1, c1, t2, c2, t3, c3, t4, c4, hover, apCost, castable, mirrorMonster, mirrorText)
+end)
+ceremonyRow = wrappedRow and ceremonyRow
+
+-- Note 77: The ritual screen lays out its rows again on every frame, so the row wrap (Note 45) sees
+-- the pointer rest. The Ceremonies screen lays them out once and then waits for a click: its wait's
+-- first input, block, is 1. Passing 0 makes the wait hand back 0 at the end of each frame with no
+-- click, which the screen takes as "nothing clicked" and lays its rows out again, so the row wrap
+-- above runs every frame and the 2 seconds can pass. With the readout Off, the game's 1 goes on.
+local wrappedWait, ceremonyWait = pcall(coe5.wrap, "CEREMONY_SCREEN_WAIT", function(next, block, mode)
+  local needs = coe5.setting("ritual_needs")
+  if needs ~= nil and needs ~= NEEDS_OFF then block = 0 end
+  return next(block, mode)
+end)
+ceremonyWait = wrappedWait and ceremonyWait
+
 -- Note 50: The marks show as colour, like the ritual screen's own rows: a castable row's name is in
 -- the game's text colour and a greyed one's in the same colour at half opacity. The hover box draws
 -- in white, so a line that is met stays the game's white and a line that is not met gets the box's
@@ -935,11 +1046,13 @@ deleteReady = browser and rowDate and wait
 -- Note 49: coe5.log writes a line to coe5mod.log, which shows what the script did, while CoE5SE's
 -- "Enable copious logs" setting is on (off by default); otherwise it writes nothing. string.format
 -- fills each %d with a whole number, in order. ritual_needs counts the ritual readout's row wrap,
--- its two observers, and the hover box's line wrap (Notes 31, 45, and 50). editor_grid counts the
+-- its two observers, and the hover box's line wrap (Notes 31, 45, and 50); ceremony_needs is the
+-- Ceremonies screen's row and wait wraps (Notes 76 and 77). editor_grid counts the
 -- grid's four toolbox lines and three wraps (Notes 59 to 67). square_wrap is the resource row's wrap
 -- (Note 72).
-coe5.log(string.format("ui_tweaks_installed save_delete=%d of 3 banners=%d read_tip=%d keep_banners=%d ritual_needs=%d of 4 editor_grid=%d of 7 square_wrap=%d",
+coe5.log(string.format("ui_tweaks_installed save_delete=%d of 3 banners=%d read_tip=%d keep_banners=%d ritual_needs=%d of 4 ceremony_needs=%d of 2 editor_grid=%d of 7 square_wrap=%d",
   flag(browser) + flag(rowDate) + flag(wait), flag(banners), flag(readTip), flag(keep),
   flag(ritualRow) + flag(locationObserved) + flag(castObserved) + flag(lineColour),
+  flag(ceremonyRow) + flag(ceremonyWait),
   flag(showGrid) + flag(hideGrid) + flag(linesUp) + flag(linesDown) + flag(editorOpen) + flag(editorKey) + flag(editorDraw),
   flag(squareWrap)))

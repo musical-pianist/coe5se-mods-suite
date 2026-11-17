@@ -44,20 +44,20 @@ choice
 default 1
 label "Rituals"
 option 0 "Off"
-optiontip 0 "The ritual screen shows only the game's own hover text."
+optiontip 0 "The ritual and Ceremonies screens show only the game's own hover text."
 option 1 "Plain needs"
-optiontip 1 "Ritual hover, 2 seconds: cast requirements under the game's text. White met, grey not met."
+optiontip 1 "Ritual or ceremony hover, 2 seconds: its requirements under the game's text. White met, grey not met."
 option 2 "Advanced"
-optiontip 2 "The plain list, then the ritual's raw data for modders: reason codes, slot, school, level, flags, terrain code, base and charged costs, effects by their mod command, casts, and its strings."
+optiontip 2 "The plain list, then raw data for modders. A ritual: reason codes, slot, school, level, flags, terrain, costs, effects by mod command, casts, strings. A ceremony: its number, row id, cost, stock, action points, Prayers level."
 
 newsetting ritual_needs_rows
 choice
 default 0
 label "Needs readout on"
 option 0 "Greyed rows"
-optiontip 0 "Only the rituals the caster can't cast now."
+optiontip 0 "Only the rituals and ceremonies greyed out now."
 option 1 "All rows"
-optiontip 1 "Every ritual on the ritual screen."
+optiontip 1 "Every row of the ritual and Ceremonies screens."
 
 newsettingheader "Map editor"
 
