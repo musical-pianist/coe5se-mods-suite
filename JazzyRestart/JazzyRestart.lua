@@ -8,7 +8,7 @@
 -- once per game launch, on the first main menu frame, and runs the lines that sit outside any
 -- function from top to bottom. Most of those lines don't act yet: they hand CoE5SE a function to
 -- run later, when the game reaches a certain step (coe5.wrap, Note 28) or when the player opens
--- the Game Menu (coe5.addGameMenuLine, Note 43). After you edit this file, restart the game.
+-- the Game Menu (coe5.addGameMenuLine, Note 44). After you edit this file, restart the game.
 --
 -- Note 3: A line or line end that starts with two dashes (--) is a comment. Lua skips it, so you
 -- can change or delete any comment without changing what the mod does. Three dashes (---) mark a
@@ -18,13 +18,14 @@
 --   1. The player sets up a new game from the main menu. When Ok is clicked on Random Map
 --      Settings, the script notes the society picked (Note 33). At "Creating World" it copies
 --      every setting into `captured` (Notes 15 and 40).
---   2. During play the player opens the Game Menu and clicks Restart (Note 46). CoE5SE ends the
---      game the way Resign does, the Game Over screen shows on plain black (Note 41), and CoE5SE
---      then starts a new game's setup instead of going back to the main menu.
+--   2. During play the player opens the Game Menu and clicks Restart (Note 47). CoE5SE ends the
+--      game the way Resign does, without the other players' last turns (Note 43), the Game Over
+--      screen shows on plain black (Note 41), and CoE5SE then starts a new game's setup instead
+--      of going back to the main menu.
 --   3. In that new setup the script skips both setup screens and puts the captured settings back
 --      (Notes 31, 35 and 40). The game then rolls Random classes as it always does.
---   Load Game (Note 44) needs none of this: CoE5SE shows the list, ends the game, and loads the
---   save. A loaded game has no captured settings (Note 29), so it shows no Restart.
+--   Load Game (Note 45) needs none of this: CoE5SE shows the list, ends the game (Note 43), and
+--   loads the save. A loaded game has no captured settings (Note 29), so it shows no Restart.
 
 -- Note 5: `local` makes a name that only this file can see. Each mod's script runs on its own, so
 -- another mod's script can't read or change these. Writing a name in CAPITALS is a common habit
@@ -264,7 +265,23 @@ local function humanPlayers()
   return humans
 end
 
--- Note 43: coe5.addGameMenuLine puts a line at the end of the Game Menu's Saving & Exiting section,
+-- Note 43: Ends the game in progress at once. With "Battle reports" ticked in the game's
+-- Advanced Options, a resign makes the human an eliminated player who gets one last turn to read
+-- the news, so every other player first plays out the month: a minute or more in a big game,
+-- spent on a game that is about to be thrown away. Two coe5.set calls skip it: battle reports
+-- off, and the human's seat taken out (coe5.controller.removed). The game then ends as soon as
+-- the human's turn does. Neither change outlives this game: a loaded save brings its own battle
+-- reports setting, and Restart puts the captured one back (Notes 36 and 37).
+local function endWithoutLastRound()
+  coe5.set("battleReports", 0)
+  for i = 0, 31 do
+    if coe5.get("slotController", i) == coe5.controller.human then
+      coe5.set("slotController", i, coe5.controller.removed)
+    end
+  end
+end
+
+-- Note 44: coe5.addGameMenuLine puts a line at the end of the Game Menu's Saving & Exiting section,
 -- in the order the calls run, so Load Game comes first and Restart under it. Its one input is a
 -- table in curly braces (Note 7), and when a call's only input is a table, Lua lets you leave out
 -- the round brackets. Inside, each `name = value` sets one part of the line, with a comma after
@@ -273,7 +290,7 @@ end
 coe5.addGameMenuLine{
   label = "Load Game",
   tooltip = "Ends this game and loads a save from the list.",
-  -- Note 44: `coe5.loadGame ~= nil` hides the line under a CoE5SE older than coe5.loadGame, where
+  -- Note 45: `coe5.loadGame ~= nil` hides the line under a CoE5SE older than coe5.loadGame, where
   -- calling it would stop the script with an error.
   visible = function() return coe5.loadGame ~= nil and not coe5.get("networkGame") and humanPlayers() == 1 end,
   onClick = function()
@@ -281,7 +298,10 @@ coe5.addGameMenuLine{
     -- (Jazzy UI Tweaks' <del>). Cancel returns false and the game goes on. A picked save returns
     -- true; CoE5SE then ends this game once this function returns and loads the save, as the main
     -- menu's Load Game does.
-    if coe5.loadGame() then coe5.log("load game clicked on turn " .. coe5.turn()) end
+    if coe5.loadGame() then
+      coe5.log("load game clicked on turn " .. coe5.turn())
+      endWithoutLastRound()   -- Note 43
+    end
     return coe5.gameMenu.stay
   end,
 }
@@ -289,17 +309,20 @@ coe5.addGameMenuLine{
 coe5.addGameMenuLine{
   label = "Restart",
   tooltip = "Ends this game and starts a new world with the same settings.",
-  -- Note 45: visible runs on every frame the menu is drawn, and shows the line while it returns
+  -- Note 46: visible runs on every frame the menu is drawn, and shows the line while it returns
   -- true: settings are captured (`captured ~= nil`), the game isn't a network game, and exactly one
   -- human plays. Each test gives true or false. Return true or false here, never a number, since in
   -- Lua 0 counts as true (Note 27).
   visible = function() return captured ~= nil and not coe5.get("networkGame") and humanPlayers() == 1 end,
   onClick = function()
-    -- Note 46: Runs when the player clicks Restart. coe5.restartGame() returns true when CoE5SE
+    -- Note 47: Runs when the player clicks Restart. coe5.restartGame() returns true when CoE5SE
     -- agrees; CoE5SE then ends the game once this function returns, and the menu stays open if it
     -- refused. `..` joins two pieces of text, here the message and the turn number. The line
     -- returns coe5.gameMenu.stay rather than resigning, because CoE5SE ends the game itself.
-    if coe5.restartGame() then coe5.log("restart clicked on turn " .. coe5.turn()) end
+    if coe5.restartGame() then
+      coe5.log("restart clicked on turn " .. coe5.turn())
+      endWithoutLastRound()   -- Note 43
+    end
     return coe5.gameMenu.stay
   end,
 }
