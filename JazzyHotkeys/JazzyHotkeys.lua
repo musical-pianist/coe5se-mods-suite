@@ -27,7 +27,8 @@
 --   2. The player opens Mod Settings from the main menu and changes keys.
 --   3. Back on the main menu, that function runs sendPicks (Note 16), which hands CoE5SE only the
 --      keys that changed, so a change counts from the next game screen.
--- In network games no script runs, so the game's own keys hold there.
+-- Because JazzyHotkeys.c5se declares personalmod, this script also runs in LAN games;
+-- only official lobby games use vanilla keys.
 
 -- Note 6: `local` makes a name that only this file can see. Each mod's script runs on its own, so
 -- another mod's script can't read or change these. `local function name(...)` makes a function: a
@@ -35,7 +36,7 @@
 -- belongs to it.
 --
 -- Note 7: settingName turns a key action's Lua name into its setting's name: mapEndTurn becomes
--- map_end_turn, and a digit after a letter gets its own _ (mapEditorPencil1 becomes
+-- map_end_turn, and a digit after a letter gets an _ before it (mapEditorPencil1 becomes
 -- map_editor_pencil_1). s:gsub(pattern, replacement) replaces every match of the pattern in s. In a
 -- pattern, %u matches one capital letter, %a any letter, and %d any digit; %0 in the replacement is
 -- the whole match, and %1 and %2 are the parts in the first and second ( ). So the first gsub puts
@@ -61,7 +62,7 @@ for name, action in pairs(coe5.keyAction) do
 end
 -- Note 10: pairs visits the names in no fixed order. table.sort puts the rows in the order of the
 -- function's answer: it returns true when row a goes before row b, here by action number, the
--- Keyboard Shortcuts list's own order.
+-- Keyboard Shortcuts list's order.
 table.sort(hotkeys, function(a, b) return a.action < b.action end)
 
 -- Note 11: coe5.setting gives a key setting's key value, and nil (Lua's "nothing") when the mod
@@ -115,7 +116,7 @@ local function sendPicks()
       if h.action == GAME_MENU then
         coe5.addActionKey(h.action, key)
         changed = changed + 1
-      -- Note 23: A fixed Esc line keeps the game's own Esc: neither part runs for it, so nothing is
+      -- Note 23: A fixed Esc line keeps the game's Esc: neither part runs for it, so nothing is
       -- sent, and the line doesn't count as sent.
       elseif key ~= ESC then
         -- Note 24: rebindKey sets the action's key. CoE5SE writes it into the game's shortcuts on
@@ -138,7 +139,7 @@ end
 sendPicks()
 
 -- Note 28: coe5.wrap asks CoE5SE to run the function given on each frame of the main menu
--- (MAIN_MENU_WAIT), around the game's own call there, which draws one frame and returns what was
+-- (MAIN_MENU_WAIT), around the game's call there, which draws one frame and returns what was
 -- clicked. The function gets `next` first, then the call's two numbers. It hands over any changed
 -- picks, then calls next with the same numbers so the game's frame goes on, and returns the game's
 -- result unchanged. `function(...) ... end` with no name makes a function right inside the call, a
