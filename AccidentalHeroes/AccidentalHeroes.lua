@@ -151,6 +151,7 @@ local LAST_ATTACK_ROW = 15
 local LAST_ITEM_PLACE = 19
 
 local SHIP_ABILITY = 0x1d2
+local WANDER_ABILITY = 0x4b9
 local LEADERSHIP_ABILITY = 0x8
 
 local SPELL_ATTACK_TYPES = {[3] = true, [6] = true, [14] = true, [15] = true, [19] = true}
@@ -159,7 +160,6 @@ local DAMAGE_TYPES_NEVER_DOUBLED = {
   [13] = "special benefit", [18] = "summon", [21] = "mirror image", [25] = "animate", [26] = "heal",
 }
 
-local MOVE_BIT = {stupid = 25, loner = 29}
 local STATE_BIT = {battleSummon = 17, removedAfterBattle = 42}
 local AFFLICTION_STATE_BITS = {
   {nameList = "blind", bits = {26}},
@@ -588,6 +588,14 @@ local function commandersByUnit()
   return commanderOf
 end
 
+local function leaderOf(unit)
+  local commander = coe5.get("unitCommander", unit) or -1
+  if commander < 0 then return nil end
+  local leader = coe5.get("commanderUnit", commander) or -1
+  if leader < 0 or leader == unit or (coe5.get("unitHp", leader) or 0) <= 0 then return nil end
+  return {moveFlags = coe5.get("unitMoveFlags", leader), wanders = (coe5.get("unitAbility", leader, WANDER_ABILITY) or 0) > 0}
+end
+
 local function unitMayRise(unit)
   local isAlive = (coe5.get("unitHp", unit) or 0) > 0
   if not isAlive then return false end
@@ -596,7 +604,7 @@ local function unitMayRise(unit)
   if not hasEnoughExperience or not isOnTheMap or coe5.get("unitStationary", unit) then return false end
 
   local moveFlags, stateFlags = coe5.get("unitMoveFlags", unit), coe5.get("unitStateFlags", unit)
-  local cannotLead = hasBit(moveFlags, MOVE_BIT.stupid) or hasBit(moveFlags, MOVE_BIT.loner)
+  local cannotLead = Rules.isHeldBack(moveFlags, leaderOf(unit))
   local leavesAfterBattle = hasBit(stateFlags, STATE_BIT.battleSummon) or hasBit(stateFlags, STATE_BIT.removedAfterBattle)
   if cannotLead or leavesAfterBattle or coe5.hasAffliction(unit, HERO_AFFLICTION) then return false end
 

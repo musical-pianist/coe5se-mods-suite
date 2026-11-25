@@ -165,6 +165,23 @@ function R.dropForFirstHero(schedule)
 end
 
 -- Who rises
+R.HELD_BACK_UNIT_BITS = {25, 29, 47, 55, 62}
+R.HOLDING_LEADER_BITS = {25, 29, 47, 62}
+
+local function hasAnyBit(moveFlags, bits)
+  if not moveFlags then return false end
+  for _, bit in ipairs(bits) do
+    if moveFlags & (1 << bit) ~= 0 then return true end
+  end
+  return false
+end
+
+-- leader: nil for none, else {moveFlags =, wanders =}.
+function R.isHeldBack(moveFlags, leader)
+  if hasAnyBit(moveFlags, R.HELD_BACK_UNIT_BITS) then return true end
+  return leader ~= nil and (leader.wanders or hasAnyBit(leader.moveFlags, R.HOLDING_LEADER_BITS))
+end
+
 function R.bar(livingHeroes, monthsOwed)
   local killsNeeded = math.min(R.MOST_KILLS_NEEDED, livingHeroes + R.KILLS_NEEDED_ABOVE_LIVING_HEROES)
   return math.max(0, killsNeeded - monthsOwed)
