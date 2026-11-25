@@ -1,0 +1,38 @@
+icon "banner.tga"
+description "Regular troops that stick around long enough rise from the ranks as named commanders with better stats, a unique trait, and fantastic titles. That Witch's Familiar you kept alive now has a chance of greatness!"
+needs_script_extender
+
+#!@newaffliction "Accidental Hero"
+#!@descr "Risen from the ranks."
+#!@icon 32
+#!@end
+
+# Notification settings
+#!@newsetting heroes_shown
+#!@choice
+#!@default 0
+#!@label "Hero proclamations shown"
+#!@option 0 "Owned player"
+#!@optiontip 0 "Only the player's own heroes in the Heroes list and the Messages window"
+#!@option 1 "All players"
+#!@optiontip 1 "Every player's heroes in the Heroes list, and their rise and death in the Messages window"
+
+#!@newsetting heroes_a_year
+#!@choice
+#!@default 4
+#!@label "Heroes a year"
+#!@option 0 "1/2"
+#!@optiontip 0 "One hero every two years: years 1 and 2, then 3 and 4, and on"
+#!@option 1 "1"
+#!@optiontip 1 "One hero a year"
+#!@option 2 "2"
+#!@optiontip 2 "2 heroes a year in years 1 to 5, then one"
+#!@option 3 "3"
+#!@optiontip 3 "3 heroes a year in years 1 to 5, then 2"
+#!@option 4 "4"
+#!@optiontip 4 "4 heroes a year in years 1 to 5, 3 in year 6, then 2"
+
+#!@newsetting ai_heroes
+#!@onoff
+#!@default 1
+#!@label "AI players get heroes"
